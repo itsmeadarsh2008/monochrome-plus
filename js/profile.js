@@ -69,7 +69,7 @@ function setupImageUploadControl(idPrefix) {
     const toggleBtn = document.getElementById(idPrefix + '-toggle-btn');
     const statusEl = document.getElementById(idPrefix + '-upload-status');
 
-    if (!urlInput || !fileInput || !uploadBtn || !toggleBtn || !statusEl) return () => { };
+    if (!urlInput || !fileInput || !uploadBtn || !toggleBtn || !statusEl) return () => {};
 
     let useUrl = false;
 
@@ -182,7 +182,8 @@ export async function loadProfile(username) {
     const usernameEl = document.getElementById('profile-username');
 
     if (document.getElementById('profile-banner')) document.getElementById('profile-banner').style.backgroundImage = '';
-    if (document.getElementById('profile-avatar')) document.getElementById('profile-avatar').src = '/assets/appicon.png';
+    if (document.getElementById('profile-avatar'))
+        document.getElementById('profile-avatar').src = '/assets/appicon.png';
     if (displayNameEl) displayNameEl.textContent = 'Loading...';
     if (usernameEl) usernameEl.textContent = '@' + username;
 
@@ -244,7 +245,7 @@ export async function loadProfile(username) {
     profileSubscription = client.subscribe(
         `databases.${DATABASE_ID}.collections.${USERS_COLLECTION}.documents.${profile.$id}`,
         (response) => {
-            if (response.events.some(e => e.includes('.update'))) {
+            if (response.events.some((e) => e.includes('.update'))) {
                 renderProfileStatus(response.payload);
             }
         }
@@ -562,8 +563,7 @@ export async function loadProfile(username) {
         });
 
         if (container.children.length === 0) {
-            container.innerHTML =
-                '<div class="placeholder-msg">No public playlists yet.</div>';
+            container.innerHTML = '<div class="placeholder-msg">No public playlists yet.</div>';
         }
     }
 }
@@ -1013,7 +1013,7 @@ async function fetchFallbackArtistImage(artistName, imgId) {
                 if (imgEl) imgEl.src = newUrl;
             }
         }
-    } catch (e) { }
+    } catch (e) {}
 }
 
 async function fetchLastFmRecentTracks(username) {

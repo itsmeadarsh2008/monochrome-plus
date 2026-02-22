@@ -171,12 +171,12 @@ export function initializeUIInteractions(player, api, ui) {
                         <h3>Add Queue to Playlist</h3>
                         <div class="modal-list">
                             ${playlists
-                        .map(
-                            (p) => `
+                                .map(
+                                    (p) => `
                                 <div class="modal-option" data-id="${p.id}">${escapeHtml(p.name)}</div>
                             `
-                        )
-                        .join('')}
+                                )
+                                .join('')}
                         </div>
                         <div class="modal-actions">
                             <button class="btn-secondary cancel-btn">Cancel</button>

@@ -226,8 +226,8 @@ export class QobuzAPI {
             artists: album.artists
                 ? album.artists.map((a) => this.transformArtist(a))
                 : mainArtist
-                    ? [this.transformArtist(mainArtist)]
-                    : [],
+                  ? [this.transformArtist(mainArtist)]
+                  : [],
             numberOfTracks: album.tracks_count || 0,
             releaseDate: album.release_date_original || album.release_date,
             cover: album.image?.large || album.image?.medium || album.image?.small,

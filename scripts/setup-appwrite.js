@@ -45,7 +45,7 @@ const collections = [
         indexes: [
             { key: 'idx_firebase_id', attributes: ['firebase_id'], type: 'key' },
             { key: 'idx_username', attributes: ['username'], type: 'unique' },
-        ]
+        ],
     },
     {
         id: 'DB_public_playlists',
@@ -69,8 +69,8 @@ const collections = [
         indexes: [
             { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
             { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
-        ]
-    }
+        ],
+    },
 ];
 
 async function setup() {
@@ -99,24 +99,31 @@ async function setup() {
 
             // 3. Create Attributes
             const existingAttrRes = await databases.listAttributes(DATABASE_ID, col.id);
-            const existingKeys = existingAttrRes.attributes.map(a => a.key);
+            const existingKeys = existingAttrRes.attributes.map((a) => a.key);
 
             for (const attr of col.attributes) {
                 if (existingKeys.includes(attr.key)) continue;
 
                 console.log(`   Adding attribute "${attr.key}" to "${col.id}"...`);
                 if (attr.type === 'string') {
-                    await databases.createStringAttribute(DATABASE_ID, col.id, attr.key, attr.size, attr.required, attr.default);
+                    await databases.createStringAttribute(
+                        DATABASE_ID,
+                        col.id,
+                        attr.key,
+                        attr.size,
+                        attr.required,
+                        attr.default
+                    );
                 } else if (attr.type === 'boolean') {
                     await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, attr.required, attr.default);
                 }
                 // Add sleep to avoid rate limits on cloud
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise((r) => setTimeout(r, 1000));
             }
 
             // 4. Create Indexes
             const existingIdxRes = await databases.listIndexes(DATABASE_ID, col.id);
-            const existingIdxKeys = existingIdxRes.indexes.map(i => i.key);
+            const existingIdxKeys = existingIdxRes.indexes.map((i) => i.key);
 
             for (const idx of col.indexes) {
                 if (existingIdxKeys.includes(idx.key)) continue;

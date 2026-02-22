@@ -14,7 +14,10 @@ export class AuthManager {
             // Check for existing session (persistent auth)
             const user = await account.get();
             this.user = user;
-            console.log('[Appwrite] ✓ Authentication successful. Session restored:', user.email || user.name || user.$id);
+            console.log(
+                '[Appwrite] ✓ Authentication successful. Session restored:',
+                user.email || user.name || user.$id
+            );
             this.updateUI(user);
             this.authListeners.forEach((listener) => listener(user));
         } catch (error) {
@@ -35,11 +38,7 @@ export class AuthManager {
         try {
             // Use current URL as redirect
             const redirectUrl = window.location.origin;
-            await account.createOAuth2Session(
-                'discord',
-                redirectUrl,
-                redirectUrl
-            );
+            await account.createOAuth2Session('discord', redirectUrl, redirectUrl);
             console.log('[Appwrite] Discord login initiated...');
         } catch (error) {
             console.error('[Appwrite] ✗ Discord login failed:', error);

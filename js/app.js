@@ -296,7 +296,10 @@ async function uploadCoverImage(file) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Ping Appwrite to verify setup
-    client.ping().then(() => console.log('[Appwrite] Connected')).catch(err => console.error('[Appwrite] Connection failed', err));
+    client
+        .ping()
+        .then(() => console.log('[Appwrite] Connected'))
+        .catch((err) => console.error('[Appwrite] Connection failed', err));
 
     // Initialize analytics
     initAnalytics();
@@ -304,7 +307,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Wait for Auth initialization
     console.log('[Appwrite] Waiting for Auth initialization...');
     await authManager.initialized;
-    console.log('[Appwrite] Auth initialized. User:', authManager.user ? (authManager.user.email || authManager.user.name) : 'Guest');
+    console.log(
+        '[Appwrite] Auth initialized. User:',
+        authManager.user ? authManager.user.email || authManager.user.name : 'Guest'
+    );
 
     // Ensure Auth UI is updated
     authManager.updateUI(authManager.user);

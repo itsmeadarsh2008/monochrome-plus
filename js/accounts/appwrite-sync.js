@@ -22,11 +22,9 @@ const syncManager = {
         }
 
         try {
-            const response = await databases.listDocuments(
-                DATABASE_ID,
-                USERS_COLLECTION,
-                [Query.equal('firebase_id', user.$id)]
-            );
+            const response = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
+                Query.equal('firebase_id', user.$id),
+            ]);
 
             if (response.documents.length > 0) {
                 this._userRecordCache = response.documents[0];
@@ -39,26 +37,23 @@ const syncManager = {
 
             console.log('[Appwrite Sync] Creating new user record for:', user.$id, { username, displayName });
 
-            const newRecord = await databases.createDocument(
-                DATABASE_ID,
-                USERS_COLLECTION,
-                ID.unique(),
-                {
-                    firebase_id: user.$id,
-                    library: '{}',
-                    history: '[]',
-                    user_playlists: '{}',
-                    user_folders: '{}',
-                    username: username,
-                    display_name: displayName,
-                    avatar_url: user.prefs?.avatar || '',
-                }
-            );
+            const newRecord = await databases.createDocument(DATABASE_ID, USERS_COLLECTION, ID.unique(), {
+                firebase_id: user.$id,
+                library: '{}',
+                history: '[]',
+                user_playlists: '{}',
+                user_folders: '{}',
+                username: username,
+                display_name: displayName,
+                avatar_url: user.prefs?.avatar || '',
+            });
             this._userRecordCache = newRecord;
             return newRecord;
         } catch (error) {
             if (error.code === 404) {
-                console.error('[Appwrite Sync] ❌ Database or Collection NOT FOUND. Please run "node scripts/setup-appwrite.js" with your API Key to initialize the infrastructure.');
+                console.error(
+                    '[Appwrite Sync] ❌ Database or Collection NOT FOUND. Please run "node scripts/setup-appwrite.js" with your API Key to initialize the infrastructure.'
+                );
             } else {
                 console.error('[Appwrite Sync] Failed to get/create user:', error);
             }
@@ -78,7 +73,11 @@ const syncManager = {
         const parseSet = (val, fallback) => {
             if (!val) return fallback;
             if (typeof val !== 'string') return val;
-            try { return JSON.parse(val); } catch { return fallback; }
+            try {
+                return JSON.parse(val);
+            } catch {
+                return fallback;
+            }
         };
 
         const library = parseSet(record.library, {});
@@ -109,12 +108,9 @@ const syncManager = {
 
         try {
             const stringified = typeof data === 'string' ? data : JSON.stringify(data);
-            const updated = await databases.updateDocument(
-                DATABASE_ID,
-                USERS_COLLECTION,
-                record.$id,
-                { [field]: stringified }
-            );
+            const updated = await databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, {
+                [field]: stringified,
+            });
             this._userRecordCache = updated;
         } catch (error) {
             console.error(`[Appwrite Sync] Failed to update ${field}:`, error);
@@ -163,13 +159,17 @@ const syncManager = {
         const parseSet = (val, fallback) => {
             if (!val) return fallback;
             if (typeof val !== 'string') return val;
-            try { return JSON.parse(val); } catch { return fallback; }
+            try {
+                return JSON.parse(val);
+            } catch {
+                return fallback;
+            }
         };
 
         let library = parseSet(record.library, {});
 
         const pluralType = type === 'mix' ? 'mixes' : `${type}s`;
-        const key = type === 'playlist' ? (item.uuid || item.id) : item.id;
+        const key = type === 'playlist' ? item.uuid || item.id : item.id;
 
         if (!library[pluralType]) {
             library[pluralType] = {};
@@ -200,7 +200,9 @@ const syncManager = {
                 explicit: item.explicit || false,
                 artist: item.artist || (item.artists && item.artists.length > 0 ? item.artists[0] : null) || null,
                 artists: item.artists?.map((a) => ({ id: a.id, name: a.name || null })) || [],
-                album: item.album ? { id: item.album.id, title: item.album.title || null, cover: item.album.cover || null } : null,
+                album: item.album
+                    ? { id: item.album.id, title: item.album.title || null, cover: item.album.cover || null }
+                    : null,
             };
         }
 
@@ -216,7 +218,9 @@ const syncManager = {
 
         console.log('[Appwrite Sync] Fetching profile for:', username);
         try {
-            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.equal('username', username)]);
+            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
+                Query.equal('username', username),
+            ]);
             if (res.documents.length === 0) {
                 console.warn('[Appwrite Sync] No profile found for username:', username);
                 return null;
@@ -226,7 +230,11 @@ const syncManager = {
             const parseSet = (val, fallback) => {
                 if (!val) return fallback;
                 if (typeof val !== 'string') return val;
-                try { return JSON.parse(val); } catch { return fallback; }
+                try {
+                    return JSON.parse(val);
+                } catch {
+                    return fallback;
+                }
             };
 
             return {
@@ -256,12 +264,7 @@ const syncManager = {
         }
 
         try {
-            const updated = await databases.updateDocument(
-                DATABASE_ID,
-                USERS_COLLECTION,
-                record.$id,
-                updateData
-            );
+            const updated = await databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, updateData);
 
             // Update cache with the new record
             this._userRecordCache = updated;
@@ -278,7 +281,9 @@ const syncManager = {
 
     async isUsernameTaken(username) {
         try {
-            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.equal('username', username)]);
+            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
+                Query.equal('username', username),
+            ]);
             return res.total > 0;
         } catch (e) {
             return false;
@@ -289,11 +294,8 @@ const syncManager = {
         console.log('[Appwrite Sync] Searching users for:', query);
         try {
             const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
-                Query.or([
-                    Query.contains('username', query),
-                    Query.contains('display_name', query)
-                ]),
-                Query.limit(10)
+                Query.or([Query.contains('username', query), Query.contains('display_name', query)]),
+                Query.limit(10),
             ]);
             return res.documents;
         } catch (error) {
@@ -309,7 +311,7 @@ const syncManager = {
         const statusData = {
             text: `${track.title} - ${getTrackArtists(track)}`,
             image: track.album?.cover || 'assets/appicon.png',
-            link: getShareUrl(`/track/${track.id}`)
+            link: getShareUrl(`/track/${track.id}`),
         };
 
         try {
