@@ -1,10 +1,10 @@
 <p align="center">
   <a href="https://monochrome.tf">
-    <img src="https://github.com/monochrome-music/monochrome/blob/main/public/assets/512.png?raw=true" alt="Monochrome Logo" width="150px">
+    <img src="https://github.com/monochrome-music/monochrome/blob/main/public/assets/512.png?raw=true" alt="Monochrome+ Logo" width="150px">
   </a>
 </p>
 
-<h1 align="center">Monochrome</h1>
+<h1 align="center">Monochrome+</h1>
 
 <p align="center">
   <strong>An open-source, privacy-respecting, ad-free music app.</strong>
@@ -34,9 +34,9 @@
 
 ---
 
-## What is Monochrome?
+## What is Monochrome+?
 
-**Monochrome** is an open-source, privacy-respecting, ad-free [TIDAL](https://tidal.com) web UI, built on top of [Hi-Fi](https://github.com/binimum/hifi-api). It provides a beautiful, minimalist interface for streaming high-quality music without the clutter of traditional streaming platforms.
+**Monochrome+** is an open-source, privacy-respecting, ad-free [TIDAL](https://tidal.com) web UI, built on top of [Hi-Fi](https://github.com/binimum/hifi-api). It provides a beautiful, minimalist interface for streaming high-quality music without the clutter of traditional streaming platforms.
 
 <p align="center">
   <a href="https://monochrome.tf/#album/90502209">
@@ -56,7 +56,7 @@
 
 ### Interface
 
-- Dark, minimalist interface optimized for focus
+- Modern, minimalist interface with glassmorphism
 - Customizable themes
 - Accurate and unique audio visualizer
 - Offline-capable Progressive Web App (PWA)
@@ -75,11 +75,10 @@
 
 - Lyrics support with karaoke mode
 - Genius integration for lyrics
-- Track downloads with automatic metadata embedding
 
 ### Integrations
 
-- Account system for cross-device syncing
+- Account system for cross-device syncing (Powered by Appwrite)
 - Last.fm and ListenBrainz integration for scrobbling
 - Unreleased music from [ArtistGrid](https://artistgrid.cx)
 - Dynamic Discord Embeds
@@ -95,7 +94,7 @@
 
 ### Live Instance
 
-Our Recommended way to use monochrome is through our official instance:
+Our Recommended way to use Monochrome+ is through our official instance:
 
 **[monochrome.tf](https://monochrome.tf)**
 
@@ -110,8 +109,8 @@ NOTE: Accounts wont work on self-hosted instances.
 ### Option 1: Docker (Recommended)
 
 ```bash
-git clone https://github.com/monochrome-music/monochrome.git
-cd monochrome
+git clone https://github.com/adarsh-shishir/monochrome-plus.git
+cd monochrome-plus
 docker compose up -d
 ```
 
@@ -128,14 +127,14 @@ For PocketBase, development mode, and advanced setups, see [DOCKER.md](DOCKER.md
 
 #### Local Development
 
-1. **Clone the repository:**
+1.  **Clone the repository:**
 
     ```bash
     git clone https://github.com/monochrome-music/monochrome.git
     cd monochrome
     ```
 
-2. **Install dependencies:**
+2.  **Install dependencies:**
 
     ```bash
     bun install
@@ -143,7 +142,7 @@ For PocketBase, development mode, and advanced setups, see [DOCKER.md](DOCKER.md
     npm install
     ```
 
-3. **Start the development server:**
+3.  **Start the development server:**
 
     ```bash
     bun run dev
@@ -151,8 +150,8 @@ For PocketBase, development mode, and advanced setups, see [DOCKER.md](DOCKER.md
     npm run dev
     ```
 
-4. **Open your browser:**
-   Navigate to `http://localhost:5173/`
+4.  **Open your browser:**
+    Navigate to `http://localhost:5173/`
 
 #### Building for Production
 
@@ -168,10 +167,10 @@ npm run build
 
 ### Basic Usage
 
-1. Visit the [Website](https://monochrome.tf) or your local development server
-2. Search for your favorite artists, albums, or tracks
-3. Click play to start streaming
-4. Use the media controls to manage playback, queue, and volume
+1.  Visit the [Website](https://monochrome.tf) or your local development server
+2.  Search for your favorite artists, albums, or tracks
+3.  Click play to start streaming
+4.  Use the media controls to manage playback, queue, and volume
 
 ### Keyboard Shortcuts
 
@@ -191,21 +190,15 @@ npm run build
 
 To sync your library, history, and playlists across devices:
 
-1. Click the "Accounts" Section
-2. Sign in with Google or Email
-3. Your data will automatically sync across all devices
+1.  Click the "Profile" Section
+2.  Sign in with Discord or Email
+3.  Your data will automatically sync across all devices
 
 ---
 
 ## Contributing
 
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTE.md) for:
-
-- Setting up your development environment
-- Code style and linting
-- Project structure
-- Commit message conventions
-- Deployment information
+We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTE.md).
 
 ---
 
@@ -216,5 +209,5 @@ We welcome contributions from the community! Please see our [Contributing Guide]
 </p>
 
 <p align="center">
-  Made with ❤️ by the Monochrome team
+  Made with ❤️ by the Monochrome+ team
 </p>

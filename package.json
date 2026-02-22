@@ -48,11 +48,14 @@
     },
     "dependencies": {
         "@neutralinojs/lib": "^6.5.0",
+        "appwrite": "^22.4.0",
         "butterchurn": "^2.6.7",
         "butterchurn-presets": "^2.4.7",
         "cookie-session": "^2.1.0",
         "dashjs": "^5.1.1",
+        "dotenv": "^16.4.5",
         "jose": "^6.0.11",
+        "node-appwrite": "^14.1.0",
         "pocketbase": "^0.26.5"
     }
 }

@@ -42,8 +42,6 @@ import { audioContextManager, EQ_PRESETS } from './audio-context.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
 import { db } from './db.js';
 import { authManager } from './accounts/auth.js';
-import { syncManager } from './accounts/pocketbase.js';
-import { saveFirebaseConfig, clearFirebaseConfig } from './accounts/config.js';
 import { performanceMode } from './performance-mode.js';
 import { animationManager } from './animation-utils.js';
 import { responsiveManager } from './responsive-utils.js';

@@ -156,6 +156,12 @@ export class MusicAPI {
         const provider = this.getProviderFromId(artistId) || this.getCurrentProvider();
         const api = this.getAPI(provider);
         const cleanId = this.stripProviderPrefix(artistId);
+
+        if (typeof api.getSimilarArtists !== 'function') {
+            console.warn(`[MusicAPI] Provider ${provider} does not support getSimilarArtists`);
+            return [];
+        }
+
         return api.getSimilarArtists(cleanId);
     }
 

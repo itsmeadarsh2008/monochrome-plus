@@ -18,10 +18,13 @@ import { createRouter, updateTabTitle, navigate } from './router.js';
 import { initializePlayerEvents, initializeTrackInteractions, handleTrackAction } from './events.js';
 import { initializeUIInteractions } from './ui-interactions.js';
 import { debounce, SVG_PLAY, getShareUrl } from './utils.js';
+import { storage } from './lib/appwrite.js';
+import { ID } from 'appwrite';
 import { sidePanelManager } from './side-panel.js';
 import { db } from './db.js';
-import { syncManager } from './accounts/pocketbase.js';
 import { authManager } from './accounts/auth.js';
+import { syncManager } from './accounts/appwrite-sync.js';
+import { client } from './lib/appwrite.js';
 import { registerSW } from 'virtual:pwa-register';
 import './smooth-scrolling.js';
 import { openEditProfile } from './profile.js';
@@ -272,30 +275,39 @@ async function disablePwaForAuthGate() {
 
 async function uploadCoverImage(file) {
     try {
-        const formData = new FormData();
-        formData.append('file', file);
+        const BUCKET_ID = 'profile-images';
+        const fileId = ID.unique();
 
-        const response = await fetch('/upload', {
-            method: 'POST',
-            body: formData,
-        });
+        console.log('[App] Uploading playlist cover to Appwrite Storage...');
+        const result = await storage.createFile(BUCKET_ID, fileId, file);
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `Upload failed: ${response.status}`);
-        }
+        // Construct the view URL
+        const endpoint = 'https://sgp.cloud.appwrite.io/v1';
+        const projectId = 'monochrome-plus';
+        const publicUrl = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${result.$id}/view?project=${projectId}`;
 
-        const data = await response.json();
-        return data.url;
+        console.log('[App] Upload successful! URL:', publicUrl);
+        return publicUrl;
     } catch (error) {
-        console.error('Cover upload error:', error);
+        console.error('[App] Upload failed:', error);
         throw error;
     }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Ping Appwrite to verify setup
+    client.ping().then(() => console.log('[Appwrite] Connected')).catch(err => console.error('[Appwrite] Connection failed', err));
+
     // Initialize analytics
     initAnalytics();
+
+    // Wait for Auth initialization
+    console.log('[Appwrite] Waiting for Auth initialization...');
+    await authManager.initialized;
+    console.log('[Appwrite] Auth initialized. User:', authManager.user ? (authManager.user.email || authManager.user.name) : 'Guest');
+
+    // Ensure Auth UI is updated
+    authManager.updateUI(authManager.user);
 
     // Apply carousel mode on initial load
     const { responsiveSettings } = await import('./storage.js');
@@ -434,6 +446,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         ui,
         scrobbler
     );
+
+    // Clear status on tab close
+    window.addEventListener('beforeunload', () => {
+        syncManager.clearPlaybackStatus();
+    });
     initializeUIInteractions(player, api, ui);
     initializeKeyboardShortcuts(player, audioPlayer);
 
@@ -2195,10 +2212,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             modalSettings.closeAllModals();
         }
 
+        console.log('[Router] Handling route change to:', window.location.pathname);
         await router();
         updateTabTitle(player);
     };
 
+    console.log('[Appwrite] Performing initial route handling...');
     await handleRouteChange();
 
     window.addEventListener('popstate', handleRouteChange);
@@ -2457,10 +2476,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (!user) {
                 headerAccountDropdown.innerHTML = `
-                    <button class="btn-secondary" id="header-google-auth">Connect with Google</button>
+                    <button class="btn-secondary" id="header-discord-auth">Connect with Discord</button>
                     <button class="btn-secondary" id="header-email-auth">Connect with Email</button>
                 `;
-                document.getElementById('header-google-auth').onclick = () => authManager.signInWithGoogle();
+                document.getElementById('header-discord-auth').onclick = () => authManager.signInWithDiscord();
                 document.getElementById('header-email-auth').onclick = () => {
                     document.getElementById('email-auth-modal').classList.add('active');
                     headerAccountDropdown.classList.remove('active');
@@ -2498,21 +2517,29 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const data = await syncManager.getUserData();
                 if (sidebarAccountName) {
                     sidebarAccountName.textContent =
-                        data?.profile?.display_name || data?.profile?.username || 'Account';
+                        data?.profile?.display_name || data?.profile?.username || user.name || 'Account';
                 }
                 if (data && data.profile && data.profile.avatar_url) {
                     headerAccountImg.src = data.profile.avatar_url;
                     headerAccountImg.style.display = 'block';
                     headerAccountIcon.style.display = 'none';
-                    return;
+                }
+
+                // Re-render profile if we are on it
+                if (window.location.pathname === '/profile' || window.location.pathname.startsWith('/user/')) {
+                    ui.renderProfilePage();
                 }
             } else {
-                if (sidebarAccountName) {
-                    sidebarAccountName.textContent = 'Account';
+                if (sidebarAccountName) sidebarAccountName.textContent = 'Account';
+                headerAccountImg.style.display = 'none';
+                headerAccountIcon.style.display = 'block';
+
+                // Re-render profile to show "Not Signed In"
+                if (window.location.pathname === '/profile') {
+                    ui.renderProfilePage();
                 }
             }
-            headerAccountImg.style.display = 'none';
-            headerAccountIcon.style.display = 'block';
+            updateAccountDropdown();
         });
     }
 });
@@ -2529,7 +2556,7 @@ function showUpdateNotification(updateCallback) {
     notification.innerHTML = `
         <div>
             <strong>Update Available</strong>
-            <p>A new version of Monochrome is available.</p>
+            <p>A new version of Monochrome+ is available.</p>
         </div>
         <div class="update-notification-actions">
             <button class="btn-primary" id="update-now-btn">Update Now</button>

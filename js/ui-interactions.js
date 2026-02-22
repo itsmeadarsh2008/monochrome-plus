@@ -14,7 +14,7 @@ import {
 import { sidePanelManager } from './side-panel.js';
 import { downloadQualitySettings, contentBlockingSettings } from './storage.js';
 import { db } from './db.js';
-import { syncManager } from './accounts/pocketbase.js';
+import { syncManager } from './accounts/appwrite-sync.js';
 import { showNotification, downloadTracks } from './downloads.js';
 import { trackSearchTabChange, trackOpenQueue } from './analytics.js';
 
@@ -171,12 +171,12 @@ export function initializeUIInteractions(player, api, ui) {
                         <h3>Add Queue to Playlist</h3>
                         <div class="modal-list">
                             ${playlists
-                                .map(
-                                    (p) => `
+                        .map(
+                            (p) => `
                                 <div class="modal-option" data-id="${p.id}">${escapeHtml(p.name)}</div>
                             `
-                                )
-                                .join('')}
+                        )
+                        .join('')}
                         </div>
                         <div class="modal-actions">
                             <button class="btn-secondary cancel-btn">Cancel</button>

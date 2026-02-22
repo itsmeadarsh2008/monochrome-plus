@@ -35,7 +35,8 @@ import {
 } from './storage.js';
 import { db } from './db.js';
 import { getVibrantColorFromImage } from './vibrant-color.js';
-import { syncManager } from './accounts/pocketbase.js';
+import { syncManager } from './accounts/appwrite-sync.js';
+import { authManager } from './accounts/auth.js';
 import { Visualizer } from './visualizer.js';
 import { navigate } from './router.js';
 import {
@@ -612,6 +613,37 @@ export class UIRenderer {
             isCompact,
             extraClasses: `artist${isBlocked ? ' blocked' : ''}`,
             extraAttributes: isBlocked ? 'title="Blocked: Artist blocked"' : '',
+        });
+    }
+
+    createArtistCircularCardHTML(artist) {
+        const isBlocked = this.isArtistBlocked(artist);
+        return this.createBaseCardHTML({
+            type: 'artist',
+            id: artist.id,
+            href: `/artist/${artist.id}`,
+            title: escapeHtml(artist.name),
+            subtitle: '',
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(artist.picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
+            actionButtonsHTML: '',
+            isCompact: false,
+            extraClasses: `artist-circular${isBlocked ? ' blocked' : ''}`,
+            extraAttributes: isBlocked ? 'title="Blocked: Artist blocked"' : '',
+        });
+    }
+
+    createUserCardHTML(user) {
+        return this.createBaseCardHTML({
+            type: 'user',
+            id: user.username,
+            href: `/user/@${user.username}`,
+            title: escapeHtml(user.display_name || user.username),
+            subtitle: `@${escapeHtml(user.username)}`,
+            imageHTML: `<img src="${user.avatar_url || 'assets/appicon.png'}" alt="${escapeHtml(user.username)}" class="card-image" loading="lazy" style="border-radius: 50%;">`,
+            actionButtonsHTML: '',
+            isCompact: false,
+            extraClasses: 'user-profile-card',
+            extraAttributes: '',
         });
     }
 
@@ -1598,14 +1630,84 @@ export class UIRenderer {
         this.renderHomeRecent();
     }
 
+    async renderProfilePage() {
+        if (!authManager.user) {
+            this.showPage('profile');
+            const container = document.getElementById('page-profile');
+            if (!container) return;
+
+            // Hide the placeholder header for Guests
+            const headerContainer = container.querySelector('.profile-header-container');
+            if (headerContainer) headerContainer.style.display = 'none';
+
+            const profileContent = container.querySelector('.profile-content');
+            if (!profileContent) return;
+
+            profileContent.innerHTML = `
+                <div class="profile-card" style="margin: 4rem auto; max-width: 500px; text-align: center; border: 1px dashed color-mix(in srgb, var(--border) 40%, transparent);">
+                    <div class="profile-card-content" style="padding: 2rem;">
+                        <div style="font-size: 4rem; margin-bottom: 2rem; filter: saturate(0.5); opacity: 0.8;">👤</div>
+                        <h2 style="margin-bottom: 1rem; font-weight: 800; letter-spacing: -0.02em;">Not Signed In</h2>
+                        <p style="color: var(--muted-foreground); margin-bottom: 2.5rem; line-height: 1.6;">Join the Monochrome+ community to sync your library, follow friends, and personalize your experience.</p>
+                        <button class="btn-primary" style="width: 100%; padding: 1rem;" onclick="window.navigate('/account')">Create or Link Account</button>
+                        <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--muted-foreground); opacity: 0.7;">
+                            If you've just signed in, we're currently synchronizing your session.
+                        </p>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        // Redirect to their own profile if logged in
+        const userData = await syncManager.getUserData();
+        if (userData && userData.profile && userData.profile.username) {
+            navigate(`/user/@${userData.profile.username}`);
+        } else {
+            // Fallback: show simple loading profile if record not ready
+            this.showPage('profile');
+            const container = document.getElementById('page-profile');
+
+            const headerContainer = container.querySelector('.profile-header-container');
+            if (headerContainer) headerContainer.style.display = 'block';
+
+            const profileContent = container.querySelector('.profile-content');
+            const user = authManager.user;
+
+            profileContent.innerHTML = `
+                <div class="profile-card" style="margin: 4rem auto; max-width: 500px; text-align: center;">
+                    <div class="profile-card-content" style="padding: 2rem;">
+                        <div class="animate-spin" style="font-size: 3rem; margin-bottom: 2rem; display: inline-block;">⏳</div>
+                        <h2 style="font-weight: 800; letter-spacing: -0.02em; margin-bottom: 1rem;">Finalizing Setup</h2>
+                        <p style="color: var(--muted-foreground); line-height: 1.6; margin-bottom: 2rem;">We're preparing your profile dashboard. This usually takes just a few moments.</p>
+                        <div style="padding: 0.75rem; background: var(--secondary); border-radius: var(--radius-lg); font-size: 0.9rem; font-weight: 500; margin-bottom: 1.5rem;">
+                            ${user.email || user.name || 'User'}
+                        </div>
+                        <button class="btn-glass" style="width: 100%;" onclick="window.location.reload()">Refresh Connection</button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
     async getSeeds() {
-        const history = await db.getHistory();
-        const favorites = await db.getFavorites('track');
-        const playlists = await db.getPlaylists(true);
+        let history = [];
+        let favorites = [];
+        let playlists = [];
+
+        try {
+            [history, favorites, playlists] = await Promise.all([
+                db.getHistory().catch(() => []),
+                db.getFavorites('track').catch(() => []),
+                db.getPlaylists(true).catch(() => []),
+            ]);
+        } catch (e) {
+            console.error('[UI] Failed to fetch seeds from database:', e);
+        }
+
         const playlistTracks = playlists.flatMap((p) => p.tracks || []);
 
         // Prioritize: Playlists > Favorites > History
-        // Take random samples from each to form seeds
         const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
         const seeds = [
@@ -1892,7 +1994,7 @@ export class UIRenderer {
                     if (filteredArtists.length > 0) {
                         artistsContainer.innerHTML = filteredArtists
                             .slice(0, 12)
-                            .map((a) => this.createArtistCardHTML(a))
+                            .map((a) => this.createArtistCircularCardHTML(a))
                             .join('');
                         filteredArtists.slice(0, 12).forEach((a) => {
                             const el = artistsContainer.querySelector(`[data-artist-id="${a.id}"]`);
@@ -2041,11 +2143,13 @@ export class UIRenderer {
         const artistsContainer = document.getElementById('search-artists-container');
         const albumsContainer = document.getElementById('search-albums-container');
         const playlistsContainer = document.getElementById('search-playlists-container');
+        const usersContainer = document.getElementById('search-users-container');
 
         tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
         artistsContainer.innerHTML = this.createSkeletonCards(6, true);
         albumsContainer.innerHTML = this.createSkeletonCards(6, false);
         playlistsContainer.innerHTML = this.createSkeletonCards(6, false);
+        if (usersContainer) usersContainer.innerHTML = this.createSkeletonCards(6, false);
 
         if (this.searchAbortController) {
             this.searchAbortController.abort();
@@ -2055,11 +2159,12 @@ export class UIRenderer {
 
         try {
             const provider = this.api.getCurrentProvider();
-            const [tracksResult, artistsResult, albumsResult, playlistsResult] = await Promise.all([
+            const [tracksResult, artistsResult, albumsResult, playlistsResult, usersResult] = await Promise.all([
                 this.api.searchTracks(query, { signal, provider }),
                 this.api.searchArtists(query, { signal, provider }),
                 this.api.searchAlbums(query, { signal, provider }),
                 this.api.searchPlaylists(query, { signal, provider }),
+                syncManager.searchUsers(query),
             ]);
 
             let finalTracks = tracksResult.items;
@@ -2139,6 +2244,12 @@ export class UIRenderer {
                     this.updateLikeState(el, 'playlist', playlist.uuid);
                 }
             });
+
+            if (usersContainer) {
+                usersContainer.innerHTML = usersResult.length
+                    ? usersResult.map((u) => this.createUserCardHTML(u)).join('')
+                    : createPlaceholder('No users found.');
+            }
         } catch (error) {
             if (error.name === 'AbortError') return;
             console.error('Search failed:', error);
@@ -2207,10 +2318,10 @@ export class UIRenderer {
                     dateDisplay =
                         window.innerWidth > 768
                             ? releaseDate.toLocaleDateString('en-US', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric',
-                              })
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                            })
                             : year;
                 }
             }
@@ -2696,7 +2807,7 @@ export class UIRenderer {
                     numberOfTracks: playlistData.tracks ? playlistData.tracks.length : 0,
                     isUserPlaylist: true,
                 });
-                document.title = `${playlistData.name || playlistData.title} - Monochrome`;
+                document.title = `${playlistData.name || playlistData.title} - Monochrome+`;
 
                 // Setup playlist search
                 this.setupTracklistSearch();
@@ -3199,9 +3310,9 @@ export class UIRenderer {
                 <span>${artist.popularity}% popularity</span>
                 <div class="artist-tags">
                     ${(artist.artistRoles || [])
-                        .filter((role) => role.category)
-                        .map((role) => `<span class="artist-tag">${role.category}</span>`)
-                        .join('')}
+                    .filter((role) => role.category)
+                    .map((role) => `<span class="artist-tag">${role.category}</span>`)
+                    .join('')}
                 </div>
             `;
 

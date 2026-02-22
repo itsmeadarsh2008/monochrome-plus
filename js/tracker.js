@@ -79,7 +79,7 @@ async function loadArtistsData() {
             }
         });
     } catch (e) {
-        console.error('Failed to load Artists List:', e);
+        console.warn('[Tracker] Could not load Artists List from ArtistGrid (possibly CORS or downtime):', e.message);
     }
 }
 

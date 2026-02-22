@@ -186,6 +186,12 @@ export class QobuzAPI {
         }
     }
 
+    async getSimilarArtists(_artistId) {
+        // Qobuz doesn't have a direct similar artists endpoint
+        // Returning empty array for now to prevent crashes
+        return [];
+    }
+
     // Transform Qobuz track to Tidal-like format
     transformTrack(track, albumData = null) {
         // Qobuz uses 'performer' for the main artist, not 'artist'
@@ -220,8 +226,8 @@ export class QobuzAPI {
             artists: album.artists
                 ? album.artists.map((a) => this.transformArtist(a))
                 : mainArtist
-                  ? [this.transformArtist(mainArtist)]
-                  : [],
+                    ? [this.transformArtist(mainArtist)]
+                    : [],
             numberOfTracks: album.tracks_count || 0,
             releaseDate: album.release_date_original || album.release_date,
             cover: album.image?.large || album.image?.medium || album.image?.small,

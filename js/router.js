@@ -10,6 +10,9 @@ export function navigate(path) {
     window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+window.navigate = navigate;
+window.router = navigate;
+
 export function createRouter(ui) {
     const router = async () => {
         if (window.location.hash && window.location.hash.length > 1) {
@@ -81,6 +84,9 @@ export function createRouter(ui) {
                 }
                 break;
             }
+            case 'profile':
+                await ui.renderProfilePage();
+                break;
             case 'library':
                 await ui.renderLibraryPage();
                 break;
@@ -130,6 +136,6 @@ export function updateTabTitle(player) {
         if (path.startsWith('/album/') || path.startsWith('/playlist/') || path.startsWith('/track/')) {
             return;
         }
-        document.title = 'Monochrome Music';
+        document.title = 'Monochrome+ Music';
     }
 }

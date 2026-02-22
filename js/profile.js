@@ -1,9 +1,11 @@
-import { syncManager } from './accounts/pocketbase.js';
+import { syncManager } from './accounts/appwrite-sync.js';
 import { authManager } from './accounts/auth.js';
 import { navigate } from './router.js';
 import { MusicAPI } from './music-api.js';
 import { apiSettings } from './storage.js';
-import { debounce, escapeHtml } from './utils.js';
+import { debounce, escapeHtml, getShareUrl } from './utils.js';
+import { storage, client } from './lib/appwrite.js';
+import { ID } from 'appwrite';
 
 // objects execution february 29th 2027
 
@@ -31,6 +33,7 @@ const privacyPlaylists = document.getElementById('privacy-playlists-toggle');
 const privacyLastfm = document.getElementById('privacy-lastfm-toggle');
 const saveProfileBtn = document.getElementById('edit-profile-save');
 const cancelProfileBtn = document.getElementById('edit-profile-cancel');
+const shareProfileBtn = document.getElementById('profile-share-btn');
 const usernameError = document.getElementById('username-error');
 
 let currentProfileUsername = null;
@@ -39,14 +42,22 @@ const api = new MusicAPI(apiSettings);
 
 async function uploadImage(file) {
     try {
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await fetch('/upload', { method: 'POST', body: formData });
-        if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
-        const data = await response.json();
-        return data.url;
+        const BUCKET_ID = 'profile-images';
+        const fileId = ID.unique();
+
+        console.log('[Profile] Uploading image to Appwrite Storage...');
+        const result = await storage.createFile(BUCKET_ID, fileId, file);
+
+        // Construct the preview URL (using the project endpoint)
+        // Format: [endpoint]/storage/buckets/[bucketId]/files/[fileId]/preview?project=[projectId]
+        const endpoint = 'https://sgp.cloud.appwrite.io/v1';
+        const projectId = 'monochrome-plus';
+        const url = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${result.$id}/view?project=${projectId}`;
+
+        console.log('[Profile] Upload successful! URL:', url);
+        return url;
     } catch (error) {
-        console.error('Upload error:', error);
+        console.error('[Profile] Upload error:', error);
         throw error;
     }
 }
@@ -58,7 +69,7 @@ function setupImageUploadControl(idPrefix) {
     const toggleBtn = document.getElementById(idPrefix + '-toggle-btn');
     const statusEl = document.getElementById(idPrefix + '-upload-status');
 
-    if (!urlInput || !fileInput || !uploadBtn || !toggleBtn || !statusEl) return () => {};
+    if (!urlInput || !fileInput || !uploadBtn || !toggleBtn || !statusEl) return () => { };
 
     let useUrl = false;
 
@@ -120,22 +131,72 @@ function setupImageUploadControl(idPrefix) {
     };
 }
 
+let profileSubscription = null;
+
+function renderProfileStatus(profile) {
+    const presenceIndicator = document.getElementById('profile-presence-indicator');
+    const statusEl = document.getElementById('profile-status');
+    if (!statusEl) return;
+
+    if (profile.status) {
+        try {
+            const statusObj = JSON.parse(profile.status);
+            statusEl.innerHTML = `
+                <span style="opacity: 0.6; margin-right: 0.5rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Listening to</span>
+                <img src="${statusObj.image}" style="width: 18px; height: 18px; border-radius: 4px; object-fit: cover; margin-right: 0.5rem;">
+                <a href="${statusObj.link}" class="status-link" style="color: inherit; text-decoration: none; font-weight: 600;">${statusObj.text}</a>
+            `;
+            statusEl.querySelector('.status-link').onclick = (e) => {
+                e.preventDefault();
+                navigate(statusObj.link);
+            };
+
+            // Virtual Presence: Show LIVE badge if they have a "Listening to" status
+            if (presenceIndicator) presenceIndicator.style.display = 'flex';
+        } catch {
+            statusEl.textContent = profile.status;
+            if (presenceIndicator) presenceIndicator.style.display = 'none';
+        }
+        statusEl.style.display = 'inline-flex';
+    } else {
+        statusEl.style.display = 'none';
+        if (presenceIndicator) presenceIndicator.style.display = 'none';
+    }
+}
+
 const resetAvatarControl = setupImageUploadControl('edit-profile-avatar');
 const resetBannerControl = setupImageUploadControl('edit-profile-banner');
 
 export async function loadProfile(username) {
+    const profilePage = document.getElementById('page-profile');
     document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
-    profilePage.classList.add('active');
 
-    document.getElementById('profile-banner').style.backgroundImage = '';
-    document.getElementById('profile-avatar').src = '/assets/appicon.png';
-    document.getElementById('profile-display-name').textContent = 'Loading...';
-    document.getElementById('profile-username').textContent = '@' + username;
-    document.getElementById('profile-status').style.display = 'none';
-    document.getElementById('profile-about').textContent = '';
-    document.getElementById('profile-website').style.display = 'none';
-    document.getElementById('profile-lastfm').style.display = 'none';
-    document.getElementById('profile-playlists-container').innerHTML = '';
+    if (profilePage) {
+        profilePage.classList.add('active');
+        // Ensure header is shown for real profiles
+        const headerContainer = profilePage.querySelector('.profile-header-container');
+        if (headerContainer) headerContainer.style.display = 'block';
+    }
+
+    const displayNameEl = document.getElementById('profile-display-name');
+    const usernameEl = document.getElementById('profile-username');
+
+    if (document.getElementById('profile-banner')) document.getElementById('profile-banner').style.backgroundImage = '';
+    if (document.getElementById('profile-avatar')) document.getElementById('profile-avatar').src = '/assets/appicon.png';
+    if (displayNameEl) displayNameEl.textContent = 'Loading...';
+    if (usernameEl) usernameEl.textContent = '@' + username;
+
+    const statusEl = document.getElementById('profile-status');
+    const aboutEl = document.getElementById('profile-about');
+    const websiteEl = document.getElementById('profile-website');
+    const lastfmEl = document.getElementById('profile-lastfm');
+    const playlistsContainer = document.getElementById('profile-playlists-container');
+
+    if (statusEl) statusEl.style.display = 'none';
+    if (aboutEl) aboutEl.textContent = '';
+    if (websiteEl) websiteEl.style.display = 'none';
+    if (lastfmEl) lastfmEl.style.display = 'none';
+    if (playlistsContainer) playlistsContainer.innerHTML = '';
 
     const favAlbumsSection = document.getElementById('profile-favorite-albums-section');
     const favAlbumsContainer = document.getElementById('profile-favorite-albums-container');
@@ -166,43 +227,75 @@ export async function loadProfile(username) {
     const profile = await syncManager.getProfile(username);
 
     if (!profile) {
-        document.getElementById('profile-display-name').textContent = 'User not found';
+        console.warn('[Profile] Profile record NOT FOUND for username:', username);
+        if (displayNameEl) displayNameEl.textContent = 'User not found';
         return;
     }
 
+    console.log('[Profile] Initializing profile UI with data:', profile.display_name || username);
     currentProfileUsername = username;
 
-    document.getElementById('profile-display-name').textContent = profile.display_name || username;
-    if (profile.banner) document.getElementById('profile-banner').style.backgroundImage = `url('${profile.banner}')`;
-    if (profile.avatar_url) document.getElementById('profile-avatar').src = profile.avatar_url;
+    // Real-time status updates
+    if (profileSubscription) profileSubscription();
 
-    if (profile.status) {
-        const statusEl = document.getElementById('profile-status');
-        try {
-            const statusObj = JSON.parse(profile.status);
-            statusEl.innerHTML = `
-                <span style="opacity: 0.7; margin-right: 0.25rem;">Listening to:</span>
-                <img src="${statusObj.image}" style="width: 20px; height: 20px; border-radius: 2px; vertical-align: middle; margin-right: 0.5rem;">
-                <a href="${statusObj.link}" class="status-link" style="color: inherit; text-decoration: none; font-weight: 500;">${statusObj.text}</a>
-            `;
-            statusEl.querySelector('.status-link').onclick = (e) => {
-                e.preventDefault();
-                navigate(statusObj.link);
-            };
-        } catch {
-            statusEl.textContent = `Listening to: ${profile.status}`;
+    const DATABASE_ID = 'monochrome-plus';
+    const USERS_COLLECTION = 'DB_users';
+
+    profileSubscription = client.subscribe(
+        `databases.${DATABASE_ID}.collections.${USERS_COLLECTION}.documents.${profile.$id}`,
+        (response) => {
+            if (response.events.some(e => e.includes('.update'))) {
+                renderProfileStatus(response.payload);
+            }
         }
-        statusEl.style.display = 'inline-flex';
+    );
+
+    if (displayNameEl) displayNameEl.textContent = profile.display_name || username;
+    if (profile.banner) {
+        document.getElementById('profile-banner').style.backgroundImage = `url('${profile.banner}')`;
+    } else {
+        document.getElementById('profile-banner').style.backgroundImage = 'none';
     }
+
+    if (profile.avatar_url) {
+        document.getElementById('profile-avatar').src = profile.avatar_url;
+    } else {
+        document.getElementById('profile-avatar').src = '/assets/appicon.png';
+    }
+
+    renderProfileStatus(profile);
 
     if (profile.about) {
         document.getElementById('profile-about').textContent = profile.about;
+        document.getElementById('profile-about').style.display = 'block';
+    } else {
+        document.getElementById('profile-about').style.display = 'none';
     }
 
-    if (profile.website) {
-        const webEl = document.getElementById('profile-website');
-        webEl.href = profile.website;
-        webEl.style.display = 'inline-block';
+    const hasWebsite = !!profile.website;
+    const hasLastfm = profile.lastfm_username && profile.privacy?.lastfm !== 'private';
+    const linksContainer = document.querySelector('.profile-links');
+
+    if (hasWebsite || hasLastfm) {
+        if (linksContainer) linksContainer.style.display = 'flex';
+
+        if (hasWebsite) {
+            const webEl = document.getElementById('profile-website');
+            webEl.href = profile.website;
+            webEl.style.display = 'inline-flex';
+        } else {
+            document.getElementById('profile-website').style.display = 'none';
+        }
+
+        if (hasLastfm) {
+            const lfmEl = document.getElementById('profile-lastfm');
+            lfmEl.href = `https://last.fm/user/${profile.lastfm_username}`;
+            lfmEl.style.display = 'inline-flex';
+        } else {
+            document.getElementById('profile-lastfm').style.display = 'none';
+        }
+    } else {
+        if (linksContainer) linksContainer.style.display = 'none';
     }
 
     if (profile.favorite_albums && profile.favorite_albums.length > 0) {
@@ -212,19 +305,20 @@ export async function loadProfile(username) {
                 .map((album) => {
                     const image = api.getCoverUrl(album.cover);
                     return `
-                    <div class="favorite-album-item" style="display: flex; gap: 1rem; margin-bottom: 1rem; background: var(--card); padding: 1rem; border-radius: var(--radius); border: 1px solid var(--border);">
-                        <div class="card" style="width: 120px; flex-shrink: 0; padding: 0; border: none; background: transparent; cursor: pointer;" onclick="window.location.hash='/album/${album.id}'">
-                            <div class="card-image-wrapper" style="margin-bottom: 0.5rem;">
-                                <img src="${image}" class="card-image" loading="lazy" style="border-radius: var(--radius);">
-                            </div>
-                            <div class="card-info">
-                                <div class="card-title" style="font-size: 0.9rem;">${escapeHtml(album.title)}</div>
-                                <div class="card-subtitle" style="font-size: 0.8rem;">${escapeHtml(album.artist)}</div>
+                    <div class="favorite-album-item" style="display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-bottom: 4rem; text-align: center; width: 100%; max-width: 600px; margin-inline: auto;">
+                        <div class="card" style="width: 220px; aspect-ratio: 1; flex-shrink: 0; padding: 0; border: none; background: transparent; cursor: pointer; box-shadow: var(--shadow-2xl); transition: transform 0.3s var(--ease-spring);" onclick="window.navigate('/album/${album.id}')">
+                            <div class="card-image-wrapper" style="margin-bottom: 0; border-radius: var(--radius-2xl); overflow: hidden;">
+                                <img src="${image}" class="card-image" loading="lazy" style="border-radius: var(--radius-2xl);">
                             </div>
                         </div>
-                        <div class="favorite-album-description" style="flex: 1; display: flex; flex-direction: column;">
-                            <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em;">Why it's a favorite</h4>
-                            <p style="margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(album.description || '')}</p>
+                        <div class="favorite-album-description" style="width: 100%;">
+                            <div style="margin-bottom: 1.5rem;">
+                                <h3 style="margin: 0; font-size: clamp(1.25rem, 3vw, 1.75rem); font-weight: 800; letter-spacing: -0.02em;">${escapeHtml(album.title)}</h3>
+                                <div style="font-size: clamp(0.9rem, 1.5vw, 1.1rem); color: var(--muted-foreground); margin-top: 0.25rem;">${escapeHtml(album.artist)}</div>
+                            </div>
+                            <div style="opacity: 0.9; line-height: 1.8; font-size: clamp(0.9rem, 1.2vw, 1.05rem); max-width: 500px; margin: 0 auto;">
+                                ${escapeHtml(album.description || 'A timeless favorite from my library.')}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -234,12 +328,6 @@ export async function loadProfile(username) {
     }
 
     const dataSource = profile.profile_data_source || (profile.lastfm_username ? 'lastfm' : null);
-
-    if (profile.lastfm_username && profile.privacy?.lastfm !== 'private') {
-        const lfmEl = document.getElementById('profile-lastfm');
-        lfmEl.href = `https://last.fm/user/${profile.lastfm_username}`;
-        lfmEl.style.display = 'inline-block';
-    }
 
     if (profile.lastfm_username && profile.privacy?.lastfm !== 'private') {
         fetchLastFmRecentTracks(profile.lastfm_username).then(async (tracks) => {
@@ -266,15 +354,18 @@ export async function loadProfile(username) {
                         }
 
                         return `
-                        <div class="track-item lastfm-track" data-title="${escapeHtml(track.name)}" data-artist="${escapeHtml(track.artist?.['#text'] || track.artist?.name || '')}" style="grid-template-columns: 40px 1fr auto; cursor: pointer;">
-                            <img id="${track._imgId}" src="${image}" class="track-item-cover" style="width: 40px; height: 40px; border-radius: 4px;" loading="lazy" onerror="this.src='/assets/appicon.png'">
-                            <div class="track-item-info">
+                        <div class="track-item lastfm-track" data-title="${escapeHtml(track.name)}" data-artist="${escapeHtml(track.artist?.['#text'] || track.artist?.name || '')}" style="grid-template-columns: 48px 1fr auto; cursor: pointer; padding: 0.75rem; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--card) 20%, transparent); transition: all 0.2s ease;">
+                            <div style="position: relative; width: 48px; height: 48px;">
+                                <img id="${track._imgId}" src="${image}" class="track-item-cover" style="width: 48px; height: 48px; border-radius: var(--radius-md); box-shadow: var(--shadow-sm);" loading="lazy" onerror="this.src='/assets/appicon.png'">
+                                ${isNowPlaying ? '<div class="now-playing-waves" style="position: absolute; inset:0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md);"><div class="wave"></div><div class="wave"></div><div class="wave"></div></div>' : ''}
+                            </div>
+                            <div class="track-item-info" style="margin-left: 1rem;">
                                 <div class="track-item-details">
-                                    <div class="title">${track.name}</div>
-                                    <div class="artist">${track.artist?.['#text'] || track.artist?.name || track.artist || 'Unknown Artist'}</div>
+                                    <div class="title" style="font-weight: 600; font-size: 0.95rem;">${track.name}</div>
+                                    <div class="artist" style="opacity: 0.6; font-size: 0.85rem;">${track.artist?.['#text'] || track.artist?.name || track.artist || 'Unknown Artist'}</div>
                                 </div>
                             </div>
-                            <div class="track-item-duration" style="font-size: 0.8rem; min-width: auto;">${dateDisplay}</div>
+                            <div class="track-item-duration" style="font-size: 0.75rem; opacity: 0.5; font-weight: 500;">${dateDisplay}</div>
                         </div>
                     `;
                     })
@@ -472,7 +563,7 @@ export async function loadProfile(username) {
 
         if (container.children.length === 0) {
             container.innerHTML =
-                '<p style="color: var(--muted-foreground); grid-column: 1/-1; text-align: center;">No public playlists.</p>';
+                '<div class="placeholder-msg">No public playlists yet.</div>';
         }
     }
 }
@@ -527,8 +618,13 @@ async function saveProfile() {
         return;
     }
 
-    const currentUser = await syncManager.getUserData();
-    if (currentUser.profile.username !== newUsername) {
+    const currentUserData = await syncManager.getUserData();
+    if (!currentUserData) {
+        alert('You must be logged in to save your profile.');
+        return;
+    }
+
+    if (currentUserData.profile.username !== newUsername) {
         const taken = await syncManager.isUsernameTaken(newUsername);
         if (taken) {
             usernameError.textContent = 'Username is already taken';
@@ -577,6 +673,23 @@ async function saveProfile() {
 editProfileBtn.addEventListener('click', openEditProfile);
 cancelProfileBtn.addEventListener('click', () => editProfileModal.classList.remove('active'));
 saveProfileBtn.addEventListener('click', saveProfile);
+
+shareProfileBtn?.addEventListener('click', () => {
+    if (!currentProfileUsername) return;
+    const url = getShareUrl(`/user/@${currentProfileUsername}`);
+    navigator.clipboard.writeText(url).then(() => {
+        const originalContent = shareProfileBtn.innerHTML;
+        shareProfileBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Copied!
+        `;
+        setTimeout(() => {
+            shareProfileBtn.innerHTML = originalContent;
+        }, 2000);
+    });
+});
 
 viewMyProfileBtn.addEventListener('click', async () => {
     const data = await syncManager.getUserData();
@@ -900,7 +1013,7 @@ async function fetchFallbackArtistImage(artistName, imgId) {
                 if (imgEl) imgEl.src = newUrl;
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 async function fetchLastFmRecentTracks(username) {
