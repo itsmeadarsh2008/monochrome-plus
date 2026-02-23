@@ -315,6 +315,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Ensure Auth UI is updated
     authManager.updateUI(authManager.user);
 
+    // Preload profile data on app load if user is logged in
+    if (authManager.user) {
+        syncManager.getUserData().catch(() => {});
+    }
+
     // Apply carousel mode on initial load
     const { responsiveSettings } = await import('./storage.js');
     if (responsiveSettings.isCarouselMode()) {
@@ -520,8 +525,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Toggle Share Button visibility on switch change
-    document.getElementById('playlist-public-toggle')?.addEventListener('change', (e) => {
+    document.getElementById('playlist-public-toggle')?.addEventListener('change', async (e) => {
         const shareBtn = document.getElementById('playlist-share-btn');
+        if (e.target.checked) {
+            await authManager.initialized.catch(() => {});
+            if (!authManager.user) {
+                e.target.checked = false;
+                if (shareBtn) shareBtn.style.display = 'none';
+                const { showNotification } = await loadDownloadsModule();
+                showNotification('Sign in to publish playlists publicly.');
+                return;
+            }
+        }
+
         if (shareBtn) shareBtn.style.display = e.target.checked ? 'flex' : 'none';
     });
 
@@ -1041,11 +1057,45 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const handlePublicStatus = async (playlist) => {
                     playlist.isPublic = isPublic;
                     if (isPublic) {
+                        await authManager.initialized.catch(() => {});
+                        if (!authManager.user) {
+                            playlist.isPublic = false;
+                            const { showNotification } = await loadDownloadsModule();
+                            showNotification('Sign in to publish playlists publicly.');
+                            return playlist;
+                        }
+
                         try {
                             await syncManager.publishPlaylist(playlist);
                         } catch (e) {
                             console.error('Failed to publish playlist:', e);
-                            alert('Failed to publish playlist. Please ensure you are logged in.');
+                            playlist.isPublic = false;
+                            const rawMessage = String(e?.message || '').toLowerCase();
+                            let message = 'Failed to publish playlist. Please try again.';
+
+                            if (
+                                e?.code === 401 ||
+                                e?.code === 403 ||
+                                rawMessage.includes('not authorized') ||
+                                rawMessage.includes('not authenticated') ||
+                                rawMessage.includes('signed in')
+                            ) {
+                                message = 'Please sign in again to publish playlists.';
+                            } else if (
+                                rawMessage.includes('networkerror') ||
+                                rawMessage.includes('failed to fetch') ||
+                                rawMessage.includes('network')
+                            ) {
+                                message = 'Network error while publishing playlist. Check connection and retry.';
+                            } else if (
+                                rawMessage.includes('tracks') &&
+                                (rawMessage.includes('size') || rawMessage.includes('too large'))
+                            ) {
+                                message = 'Playlist is too large to publish. Reduce track count and retry.';
+                            }
+
+                            const { showNotification } = await loadDownloadsModule();
+                            showNotification(message);
                         }
                     } else {
                         try {
@@ -2328,12 +2378,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             const trackData = shareTrackModal?.dataset;
             if (trackData?.trackId) {
                 try {
-                    const track = {
-                        id: trackData.trackId,
-                        title: document.getElementById('share-track-title')?.textContent || '',
-                        sharedByName: authManager.user?.name || 'A friend',
-                    };
-                    await db.shareTrack(track, friendUid, message);
+                    const trackTitle = document.getElementById('share-track-title')?.textContent || '';
+                    const trackArtist = document.getElementById('share-track-artist')?.textContent || '';
+                    const trackCover =
+                        document.getElementById('share-track-cover')?.src?.includes('data:image') ||
+                        !document.getElementById('share-track-cover')?.src
+                            ? null
+                            : document.getElementById('share-track-cover')?.src;
+
+                    if (authManager.user) {
+                        const cloudFriends = await syncManager.listFriends();
+                        const targetFriend = cloudFriends.find((friend) => friend.uid === friendUid);
+                        await syncManager.sendChatMessage({
+                            toUserId: friendUid,
+                            toUsername: targetFriend?.username || '',
+                            toDisplayName: targetFriend?.displayName || '',
+                            toAvatarUrl: targetFriend?.avatarUrl || '',
+                            message,
+                            trackPayload: {
+                                id: trackData.trackId,
+                                title: trackTitle,
+                                artist: trackArtist,
+                                cover: trackCover,
+                                link: `/track/${trackData.trackId}`,
+                            },
+                        });
+                    } else {
+                        const track = {
+                            id: trackData.trackId,
+                            title: trackTitle,
+                            sharedByName: authManager.user?.name || 'A friend',
+                        };
+                        await db.shareTrack(track, friendUid, message);
+                    }
+
                     shareTrackModal.classList.remove('active');
                     if (messageInput) messageInput.value = '';
                     alert('Track shared!');
@@ -2411,17 +2489,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Listeners for Real-time PocketBase events
-    window.addEventListener('pb-user-updated', () => {
+    window.addEventListener('pb-user-updated', async () => {
         const path = window.location.pathname;
-        if (path === '/friends') {
-            ui.renderFriendsPage();
+        if (path.startsWith('/friends')) {
+            const friendParam = path.startsWith('/friends/') ? decodeURIComponent(path.slice('/friends/'.length)) : '';
+            ui.renderFriendsPage(friendParam);
+        }
+        if (path.startsWith('/user/@')) {
+            const username = decodeURIComponent(path.split('/user/@')[1]);
+            const { loadProfile } = await import('./profile.js');
+            loadProfile(username);
         }
     });
 
     window.addEventListener('pb-friend-updated', () => {
         const path = window.location.pathname;
-        if (path === '/friends') {
-            ui.renderFriendsPage();
+        if (path.startsWith('/friends')) {
+            const friendParam = path.startsWith('/friends/') ? decodeURIComponent(path.slice('/friends/'.length)) : '';
+            ui.renderFriendsPage(friendParam);
+        }
+    });
+
+    window.addEventListener('pb-public-playlist-updated', (event) => {
+        const path = window.location.pathname;
+        const changedPlaylistId = event?.detail?.playlistId;
+        if (!changedPlaylistId) return;
+
+        if (path.startsWith('/playlist/')) {
+            const parts = path.split('/').filter(Boolean);
+            const maybeProvider = parts[1];
+            const currentPlaylistId = maybeProvider === 't' || maybeProvider === 'q' ? parts[2] : maybeProvider;
+            if (currentPlaylistId === changedPlaylistId) {
+                ui.renderPlaylistPage(changedPlaylistId, 'user');
+            }
+            return;
+        }
+
+        if (path.startsWith('/userplaylist/')) {
+            const currentPlaylistId = path.split('/')[2];
+            if (currentPlaylistId === changedPlaylistId) {
+                ui.renderPlaylistPage(changedPlaylistId, 'user');
+            }
         }
     });
 
@@ -2462,17 +2570,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     const headerAccountImg = document.getElementById('header-account-img');
     const headerAccountIcon = document.getElementById('header-account-icon');
     const sidebarAccountName = document.getElementById('sidebar-account-name');
+    const sidebarAccountSubtitle = document.getElementById('sidebar-account-subtitle');
+    const sidebarProfileNav = document.getElementById('sidebar-nav-profile');
+    const sidebarEl = document.querySelector('.sidebar');
 
     if (headerAccountBtn && headerAccountDropdown) {
+        const closeAccountDropdown = () => {
+            headerAccountDropdown.classList.remove('active');
+            headerAccountBtn.classList.remove('is-open');
+            headerAccountBtn.setAttribute('aria-expanded', 'false');
+            if (sidebarEl) sidebarEl.classList.remove('sidebar-account-open');
+        };
+
         headerAccountBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            headerAccountDropdown.classList.toggle('active');
-            updateAccountDropdown();
+            const willOpen = !headerAccountDropdown.classList.contains('active');
+            headerAccountDropdown.classList.toggle('active', willOpen);
+            headerAccountBtn.classList.toggle('is-open', willOpen);
+            headerAccountBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            if (sidebarEl) sidebarEl.classList.toggle('sidebar-account-open', willOpen);
+            if (willOpen) {
+                updateAccountDropdown();
+            }
         });
 
         document.addEventListener('click', (e) => {
             if (!headerAccountBtn.contains(e.target) && !headerAccountDropdown.contains(e.target)) {
-                headerAccountDropdown.classList.remove('active');
+                closeAccountDropdown();
             }
         });
 
@@ -2482,53 +2606,115 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (!user) {
                 headerAccountDropdown.innerHTML = `
-                    <button class="btn-secondary" id="header-discord-auth">Connect with Discord</button>
-                    <button class="btn-secondary" id="header-email-auth">Connect with Email</button>
+                    <div class="account-dropdown-section">
+                        <button class="btn-primary" id="header-email-auth">Sign in with Email</button>
+                        <button class="btn-secondary" id="header-discord-auth">Continue with Discord</button>
+                    </div>
+                    <div class="account-dropdown-section">
+                        <button class="btn-secondary" id="header-open-account">Open Account Page</button>
+                    </div>
                 `;
-                document.getElementById('header-discord-auth').onclick = () => authManager.signInWithDiscord();
+
                 document.getElementById('header-email-auth').onclick = () => {
-                    document.getElementById('email-auth-modal').classList.add('active');
-                    headerAccountDropdown.classList.remove('active');
+                    const authModal = document.getElementById('email-auth-modal');
+                    if (authModal) authModal.classList.add('active');
+                    document.getElementById('auth-email')?.focus();
+                    closeAccountDropdown();
+                };
+                document.getElementById('header-discord-auth').onclick = () => {
+                    closeAccountDropdown();
+                    authManager.signInWithDiscord();
+                };
+                document.getElementById('header-open-account').onclick = () => {
+                    navigate('/account');
+                    closeAccountDropdown();
                 };
             } else {
-                const data = await syncManager.getUserData();
+                let data = null;
+                try {
+                    data = await syncManager.getUserData();
+                } catch {
+                    data = null;
+                }
                 const hasProfile = data && data.profile && data.profile.username;
 
                 if (hasProfile) {
                     headerAccountDropdown.innerHTML = `
-                        <button class="btn-secondary" id="header-view-profile">My Profile</button>
-                        <button class="btn-secondary danger" id="header-sign-out">Sign Out</button>
+                        <div class="account-dropdown-section">
+                            <button class="btn-secondary" id="header-view-profile">My Profile</button>
+                            <button class="btn-secondary" id="header-open-account">Account Settings</button>
+                        </div>
+                        <div class="account-dropdown-section">
+                            <button class="btn-secondary danger" id="header-sign-out">Sign Out</button>
+                        </div>
                     `;
                     document.getElementById('header-view-profile').onclick = () => {
                         navigate(`/user/@${data.profile.username}`);
-                        headerAccountDropdown.classList.remove('active');
+                        closeAccountDropdown();
                     };
                 } else {
                     headerAccountDropdown.innerHTML = `
-                        <button class="btn-primary" id="header-create-profile">Create Profile</button>
-                        <button class="btn-secondary danger" id="header-sign-out">Sign Out</button>
+                        <div class="account-dropdown-section">
+                            <button class="btn-primary" id="header-create-profile">Create Profile</button>
+                            <button class="btn-secondary" id="header-open-account">Account Settings</button>
+                        </div>
+                        <div class="account-dropdown-section">
+                            <button class="btn-secondary danger" id="header-sign-out">Sign Out</button>
+                        </div>
                     `;
                     document.getElementById('header-create-profile').onclick = () => {
                         openEditProfile();
-                        headerAccountDropdown.classList.remove('active');
+                        closeAccountDropdown();
                     };
                 }
 
-                document.getElementById('header-sign-out').onclick = () => authManager.signOut();
+                const accountSettingsBtn = document.getElementById('header-open-account');
+                if (accountSettingsBtn) {
+                    accountSettingsBtn.onclick = () => {
+                        navigate('/account');
+                        closeAccountDropdown();
+                    };
+                }
+
+                document.getElementById('header-sign-out').onclick = () => {
+                    closeAccountDropdown();
+                    authManager.signOut();
+                };
             }
         }
 
         authManager.onAuthStateChanged(async (user) => {
+            const friendsNav = document.getElementById('sidebar-nav-friends');
             if (user) {
-                const data = await syncManager.getUserData();
+                if (friendsNav) friendsNav.style.display = '';
+                if (sidebarProfileNav) sidebarProfileNav.style.display = '';
+                headerAccountBtn.classList.add('is-authenticated');
+                let data = null;
+                try {
+                    data = await syncManager.getUserData();
+                } catch {
+                    data = null;
+                }
                 if (sidebarAccountName) {
                     sidebarAccountName.textContent =
-                        data?.profile?.display_name || data?.profile?.username || user.name || 'Account';
+                        data?.profile?.display_name ||
+                        data?.profile?.username ||
+                        user.name ||
+                        user.email ||
+                        'Account';
+                }
+                if (sidebarAccountSubtitle) {
+                    sidebarAccountSubtitle.textContent = data?.profile?.username
+                        ? `@${data.profile.username}`
+                        : user.email || 'Signed in';
                 }
                 if (data && data.profile && data.profile.avatar_url) {
                     headerAccountImg.src = data.profile.avatar_url;
                     headerAccountImg.style.display = 'block';
                     headerAccountIcon.style.display = 'none';
+                } else {
+                    headerAccountImg.style.display = 'none';
+                    headerAccountIcon.style.display = 'block';
                 }
 
                 // Re-render profile if we are on it
@@ -2536,7 +2722,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ui.renderProfilePage();
                 }
             } else {
-                if (sidebarAccountName) sidebarAccountName.textContent = 'Account';
+                if (friendsNav) friendsNav.style.display = 'none';
+                if (sidebarProfileNav) sidebarProfileNav.style.display = 'none';
+                headerAccountBtn.classList.remove('is-authenticated');
+                if (sidebarAccountName) sidebarAccountName.textContent = 'Sign in';
+                if (sidebarAccountSubtitle) sidebarAccountSubtitle.textContent = 'Email or Discord';
                 headerAccountImg.style.display = 'none';
                 headerAccountIcon.style.display = 'block';
 

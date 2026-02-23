@@ -94,7 +94,7 @@ export function createRouter(ui) {
                 await ui.renderRecentPage();
                 break;
             case 'friends':
-                await ui.renderFriendsPage();
+                await ui.renderFriendsPage(param);
                 break;
             case 'unreleased':
                 if (param) {

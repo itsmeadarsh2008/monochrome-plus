@@ -85,6 +85,19 @@ function sortTracks(tracks, sortType) {
     }
 }
 
+const FALLBACK_RECOMMENDED_ARTISTS = Object.freeze([
+    { id: 1003, name: 'Nas' },
+    { id: 3654061, name: 'Waka Flocka Flame' },
+    { id: 3972883, name: 'Pusha T' },
+    { id: 4839917, name: 'Boldy James' },
+    { id: 27836827, name: 'OsamaSon' },
+    { id: 5755811, name: 'ZelooperZ' },
+    { id: 46882510, name: 'PRODYSGROUP' },
+    { id: 50418386, name: 'Che' },
+    { id: 439890147, name: 'JPEGMAFIA' },
+    { id: 51427239, name: 'Westside Cowboy' },
+]);
+
 export class UIRenderer {
     constructor(api, player) {
         this.api = api;
@@ -93,10 +106,23 @@ export class UIRenderer {
         this.searchAbortController = null;
         this.vibrantColorCache = new Map();
         this.visualizer = null;
+        this._homeArtistsRetryTimer = null;
+        this._homeArtistsRetryCount = 0;
+        this._homeArtistsMaxRetries = 4;
+        this._recentTrackProfileCache = null;
+        this._recentTrackProfileCacheAt = 0;
+        this._recentTrackProfileCacheTtlMs = 15000;
+        this._friendsSuggestionQuery = '';
+        this._friendsSuggestionTimer = null;
+        this._friendsSuggestionRequestToken = 0;
 
         // Listen for dynamic color reset events
         window.addEventListener('reset-dynamic-color', () => {
             this.resetVibrantColor();
+        });
+
+        window.addEventListener('history-changed', () => {
+            this._clearRecentTrackProfileCache();
         });
     }
 
@@ -597,6 +623,7 @@ export class UIRenderer {
     createArtistCardHTML(artist) {
         const isCompact = cardSettings.isCompactArtist();
         const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
+        const picture = artist?.picture || 'assets/appicon.png';
 
         return this.createBaseCardHTML({
             type: 'artist',
@@ -604,7 +631,7 @@ export class UIRenderer {
             href: `/artist/${artist.id}`,
             title: escapeHtml(artist.name),
             subtitle: '',
-            imageHTML: `<img src="${this.api.getArtistPictureUrl(artist.picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
             actionButtonsHTML: `
                 <button class="like-btn card-like-btn" data-action="toggle-like" data-type="artist" title="Add to Liked">
                     ${this.createHeartIcon(false)}
@@ -617,14 +644,15 @@ export class UIRenderer {
     }
 
     createArtistCircularCardHTML(artist) {
-        const isBlocked = this.isArtistBlocked(artist);
+        const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
+        const picture = artist?.picture || 'assets/appicon.png';
         return this.createBaseCardHTML({
             type: 'artist',
             id: artist.id,
             href: `/artist/${artist.id}`,
             title: escapeHtml(artist.name),
             subtitle: '',
-            imageHTML: `<img src="${this.api.getArtistPictureUrl(artist.picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
             actionButtonsHTML: '',
             isCompact: false,
             extraClasses: `artist-circular${isBlocked ? ' blocked' : ''}`,
@@ -1355,11 +1383,13 @@ export class UIRenderer {
             page.classList.toggle('active', page.id === `page-${pageId}`);
         });
 
+        const currentPath = window.location.pathname;
         document.querySelectorAll('.sidebar-nav a').forEach((link) => {
-            link.classList.toggle(
-                'active',
-                link.pathname === `/${pageId}` || (pageId === 'home' && link.pathname === '/')
-            );
+            const targetPath = link.pathname;
+            const isHome = targetPath === '/' && (currentPath === '/' || currentPath === '/home');
+            const isProfile = targetPath === '/profile' && (currentPath === '/profile' || currentPath.startsWith('/user/@'));
+            const isMatch = targetPath !== '/' && (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`));
+            link.classList.toggle('active', isHome || isProfile || isMatch);
         });
 
         document.querySelector('.main-content').scrollTop = 0;
@@ -1581,7 +1611,7 @@ export class UIRenderer {
 
         const hasActivity = history.length > 0 || favorites.length > 0 || playlists.length > 0;
 
-        // Handle Editor's Picks visibility based on settings
+        // Handle Random Picks visibility based on settings
         if (!homePageSettings.shouldShowEditorsPicks()) {
             if (editorsPicksSectionEmpty) editorsPicksSectionEmpty.style.display = 'none';
             if (editorsPicksSection) editorsPicksSection.style.display = 'none';
@@ -1592,7 +1622,7 @@ export class UIRenderer {
             if (editorsPicksSection) editorsPicksSection.style.display = hasActivity ? '' : 'none';
         }
 
-        // Render editor's picks in the visible container
+        // Render random picks in the visible container
         if (hasActivity) {
             this.renderHomeEditorsPicks(false, 'home-editors-picks');
         } else {
@@ -1690,33 +1720,341 @@ export class UIRenderer {
         }
     }
 
-    async getSeeds() {
-        let history = [];
-        let favorites = [];
-        let playlists = [];
+    _clearRecentTrackProfileCache() {
+        this._recentTrackProfileCache = null;
+        this._recentTrackProfileCacheAt = 0;
+    }
 
-        try {
-            [history, favorites, playlists] = await Promise.all([
-                db.getHistory().catch(() => []),
-                db.getFavorites('track').catch(() => []),
-                db.getPlaylists(true).catch(() => []),
-            ]);
-        } catch (e) {
-            console.error('[UI] Failed to fetch seeds from database:', e);
+    _buildRecentTrackProfile(historyTracks = []) {
+        const recentTracks = historyTracks
+            .filter((track) => track && typeof track === 'object' && (track.id || track.title))
+            .slice(0, 80);
+
+        const playCountByTrackId = new Map();
+        recentTracks.forEach((track) => {
+            if (!track.id) return;
+            playCountByTrackId.set(track.id, (playCountByTrackId.get(track.id) || 0) + 1);
+        });
+
+        const dedupedRecentTracks = [];
+        const seenTrackIds = new Set();
+        const artistWeights = new Map();
+        const albumWeights = new Map();
+
+        recentTracks.forEach((track, index) => {
+            const recencyWeight = Math.max(0.12, 1 - index / Math.max(recentTracks.length, 16));
+            const repeatCount = track.id ? playCountByTrackId.get(track.id) || 1 : 1;
+            const repeatBoost = 1 + Math.min(1, (repeatCount - 1) * 0.25);
+            const weight = recencyWeight * repeatBoost;
+
+            if (track.id && !seenTrackIds.has(track.id)) {
+                seenTrackIds.add(track.id);
+                dedupedRecentTracks.push(track);
+            }
+
+            const primaryArtist = track.artist || track.artists?.[0];
+            if (primaryArtist?.id || primaryArtist?.name) {
+                const artistId = primaryArtist.id ?? null;
+                const artistName = String(primaryArtist.name || '').trim();
+                const key = artistId ? `id:${artistId}` : `name:${artistName.toLowerCase()}`;
+                if (artistName || artistId) {
+                    const existing = artistWeights.get(key) || {
+                        id: artistId,
+                        name: artistName || 'Unknown Artist',
+                        picture: primaryArtist.picture || primaryArtist.image || null,
+                        score: 0,
+                    };
+                    existing.score += weight;
+                    if (!existing.picture && (primaryArtist.picture || primaryArtist.image)) {
+                        existing.picture = primaryArtist.picture || primaryArtist.image;
+                    }
+                    artistWeights.set(key, existing);
+                }
+            }
+
+            if (track.album?.id) {
+                const albumKey = `id:${track.album.id}`;
+                const existing = albumWeights.get(albumKey) || {
+                    id: track.album.id,
+                    title: track.album.title || 'Unknown Album',
+                    cover: track.album.cover || null,
+                    artist: track.album.artist || primaryArtist || null,
+                    score: 0,
+                };
+                existing.score += weight;
+                if (!existing.cover && track.album.cover) existing.cover = track.album.cover;
+                albumWeights.set(albumKey, existing);
+            }
+        });
+
+        return {
+            recentTracks: dedupedRecentTracks,
+            artistSeeds: Array.from(artistWeights.values()).sort((a, b) => b.score - a.score),
+            albumSeeds: Array.from(albumWeights.values()).sort((a, b) => b.score - a.score),
+        };
+    }
+
+    async getRecentTrackProfile(forceRefresh = false) {
+        const now = Date.now();
+        if (
+            !forceRefresh &&
+            this._recentTrackProfileCache &&
+            now - this._recentTrackProfileCacheAt < this._recentTrackProfileCacheTtlMs
+        ) {
+            return this._recentTrackProfileCache;
         }
 
-        const playlistTracks = playlists.flatMap((p) => p.tracks || []);
+        let history = [];
+        try {
+            history = await db.getHistory().catch(() => []);
+        } catch (error) {
+            console.error('[UI] Failed to load recent track history:', error);
+        }
 
-        // Prioritize: Playlists > Favorites > History
-        const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+        const profile = this._buildRecentTrackProfile(history);
+        this._recentTrackProfileCache = profile;
+        this._recentTrackProfileCacheAt = now;
+        return profile;
+    }
 
-        const seeds = [
-            ...shuffle(playlistTracks).slice(0, 20),
-            ...shuffle(favorites).slice(0, 20),
-            ...shuffle(history).slice(0, 10),
-        ];
+    async getSeeds(forceRefresh = false) {
+        const profile = await this.getRecentTrackProfile(forceRefresh);
+        return profile.recentTracks;
+    }
 
-        return shuffle(seeds);
+    _extractSeedArtists(seeds = []) {
+        const byKey = new Map();
+        const addArtist = (artist) => {
+            if (!artist || typeof artist !== 'object') return;
+            const id = artist.id ?? null;
+            const name = String(artist.name || '').trim();
+            if (!id && !name) return;
+
+            const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+            if (byKey.has(key)) return;
+            byKey.set(key, {
+                id,
+                name: name || 'Unknown Artist',
+                picture: artist.picture || artist.image || null,
+            });
+        };
+
+        seeds.forEach((seed) => {
+            if (!seed || typeof seed !== 'object') return;
+            addArtist(seed.artist);
+            if (Array.isArray(seed.artists)) {
+                seed.artists.forEach((artist) => addArtist(artist));
+            }
+        });
+
+        return Array.from(byKey.values());
+    }
+
+    _normalizeArtistList(payload) {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.artists)) return payload.artists;
+        return [];
+    }
+
+    _normalizeAlbumList(payload) {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.albums)) return payload.albums;
+        return [];
+    }
+
+    _normalizeTrackList(payload) {
+        if (Array.isArray(payload)) return payload;
+        if (Array.isArray(payload?.items)) return payload.items;
+        if (Array.isArray(payload?.tracks)) return payload.tracks;
+        return [];
+    }
+
+    _dedupeArtists(artists = []) {
+        const byKey = new Map();
+        artists.forEach((artist) => {
+            if (!artist || typeof artist !== 'object') return;
+            const id = artist.id ?? null;
+            const name = String(artist.name || '').trim();
+            if (!id && !name) return;
+            const key = id ? `id:${id}` : `name:${name.toLowerCase()}`;
+            if (byKey.has(key)) return;
+            byKey.set(key, {
+                ...artist,
+                id,
+                name: name || 'Unknown Artist',
+                picture: artist.picture || artist.image || null,
+            });
+        });
+        return Array.from(byKey.values());
+    }
+
+    _dedupeAlbums(albums = []) {
+        const byKey = new Map();
+        albums.forEach((album) => {
+            if (!album || typeof album !== 'object') return;
+            const id = album.id ?? null;
+            const title = String(album.title || '').trim();
+            const artistName = String(album.artist?.name || album.artists?.[0]?.name || '').trim();
+            if (!id && !title) return;
+
+            const key = id ? `id:${id}` : `title:${title.toLowerCase()}::artist:${artistName.toLowerCase()}`;
+            if (byKey.has(key)) return;
+            byKey.set(key, {
+                ...album,
+                id,
+                title: title || 'Unknown Album',
+            });
+        });
+        return Array.from(byKey.values());
+    }
+
+    _dedupeTracks(tracks = []) {
+        const byKey = new Map();
+        tracks.forEach((track) => {
+            if (!track || typeof track !== 'object') return;
+            const id = track.id ?? null;
+            const title = String(track.title || '').trim();
+            const artistName = String(track.artist?.name || track.artists?.[0]?.name || '').trim();
+            const key = id ? `id:${id}` : `title:${title.toLowerCase()}::artist:${artistName.toLowerCase()}`;
+            if (!title && !id) return;
+            if (byKey.has(key)) return;
+            byKey.set(key, track);
+        });
+        return Array.from(byKey.values());
+    }
+
+    _isArtistIdCompatibleWithProvider(artistId, provider = null) {
+        if (artistId === null || typeof artistId === 'undefined' || artistId === '') return false;
+        if (!provider) return true;
+        const id = String(artistId);
+        if (provider === 'qobuz') return id.startsWith('q:');
+        return true;
+    }
+
+    async _hydrateArtistsForProvider(artists = [], provider = null, limit = 24) {
+        const deduped = this._dedupeArtists(artists);
+        const hydrated = [];
+        const seenIds = new Set();
+        const searchCache = new Map();
+
+        for (const artist of deduped) {
+            if (hydrated.length >= limit) break;
+            if (!artist || !artist.name) continue;
+
+            const currentId = artist.id;
+            if (this._isArtistIdCompatibleWithProvider(currentId, provider)) {
+                const key = String(currentId);
+                if (currentId && !seenIds.has(key)) {
+                    seenIds.add(key);
+                    hydrated.push(artist);
+                    continue;
+                }
+            }
+
+            const lookupName = String(artist.name).trim();
+            if (!lookupName) continue;
+
+            let resolved = searchCache.get(lookupName);
+            if (!resolved) {
+                try {
+                    const result = await this.api.searchArtists(lookupName, { limit: 8, provider });
+                    const candidates = this._dedupeArtists(this._normalizeArtistList(result));
+                    resolved =
+                        candidates.find((candidate) =>
+                            this._isArtistIdCompatibleWithProvider(candidate?.id, provider)
+                        ) || candidates.find((candidate) => candidate?.id);
+                } catch (error) {
+                    resolved = null;
+                }
+                searchCache.set(lookupName, resolved || null);
+            }
+
+            if (resolved?.id) {
+                const resolvedKey = String(resolved.id);
+                if (!seenIds.has(resolvedKey)) {
+                    seenIds.add(resolvedKey);
+                    hydrated.push({
+                        ...resolved,
+                        // Prefer the incoming name casing when available.
+                        name: artist.name || resolved.name,
+                        picture: artist.picture || resolved.picture || resolved.image || null,
+                    });
+                }
+            }
+        }
+
+        return hydrated;
+    }
+
+    _isHomeRouteActive() {
+        return window.location.pathname === '/' || window.location.pathname === '/home';
+    }
+
+    _clearHomeArtistsRetryTimer() {
+        if (this._homeArtistsRetryTimer) {
+            clearTimeout(this._homeArtistsRetryTimer);
+            this._homeArtistsRetryTimer = null;
+        }
+    }
+
+    _resetHomeArtistsRetryState() {
+        this._homeArtistsRetryCount = 0;
+        this._clearHomeArtistsRetryTimer();
+    }
+
+    _scheduleHomeArtistsAutoload(delayMs = 2500) {
+        if (this._homeArtistsRetryCount >= this._homeArtistsMaxRetries) return;
+
+        this._clearHomeArtistsRetryTimer();
+        this._homeArtistsRetryTimer = setTimeout(() => {
+            this._homeArtistsRetryTimer = null;
+            if (!this._isHomeRouteActive()) return;
+            this._homeArtistsRetryCount += 1;
+            this.renderHomeArtists(true);
+        }, delayMs);
+    }
+
+    async _loadFallbackRecommendedArtists() {
+        let fallbackArtists = [];
+
+        try {
+            const fallbackResponse = await fetch('/recommended-artists.json', { cache: 'no-store' });
+            if (fallbackResponse.ok) {
+                const payload = await fallbackResponse.json();
+                fallbackArtists = this._normalizeArtistList(payload);
+            }
+        } catch (error) {
+            console.warn('[Home] recommended-artists.json fallback unavailable', error);
+        }
+
+        if (fallbackArtists.length === 0) {
+            try {
+                const picksResponse = await fetch('/editors-picks.json', { cache: 'no-store' });
+                if (picksResponse.ok) {
+                    const payload = await picksResponse.json();
+                    const picksArtists = Array.isArray(payload)
+                        ? payload
+                            .filter((item) => item?.artist?.id && item?.artist?.name)
+                            .map((item) => ({
+                                id: item.artist.id,
+                                name: item.artist.name,
+                                picture: item.artist.picture || null,
+                            }))
+                        : [];
+                    fallbackArtists = picksArtists;
+                }
+            } catch (error) {
+                console.warn("[Home] Couldn't derive artist fallback from random picks", error);
+            }
+        }
+
+        if (fallbackArtists.length === 0) {
+            fallbackArtists = FALLBACK_RECOMMENDED_ARTISTS;
+        }
+
+        return this._dedupeArtists(this._normalizeArtistList(fallbackArtists));
     }
 
     async renderHomeSongs(forceRefresh = false) {
@@ -1738,18 +2076,53 @@ export class UIRenderer {
             }
 
             try {
-                const seeds = await this.getSeeds();
-                const trackSeeds = seeds.slice(0, 5);
-                const recommendedTracks = await this.api.getRecommendedTracksForPlaylist(trackSeeds, 20, {
-                    skipCache: forceRefresh,
-                });
+                const profile = await this.getRecentTrackProfile(forceRefresh);
+                const trackSeeds = profile.recentTracks.slice(0, 8);
 
-                const filteredTracks = await this.filterUserContent(recommendedTracks, 'track');
+                if (trackSeeds.length === 0) {
+                    songsContainer.innerHTML = createPlaceholder(
+                        'Play more tracks to unlock recommendations based on your recent listens.'
+                    );
+                    return;
+                }
+
+                let candidateTracks = [];
+                try {
+                    const recommendedTracks = await this.api.getRecommendedTracksForPlaylist(trackSeeds, 30, {
+                        skipCache: forceRefresh,
+                    });
+                    candidateTracks = this._normalizeTrackList(recommendedTracks);
+                } catch (error) {
+                    console.warn('[Home] Recent-track recommendation API failed, using search fallback.', error);
+                }
+
+                if (candidateTracks.length === 0) {
+                    const provider =
+                        typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
+                    for (const artistSeed of profile.artistSeeds.slice(0, 5)) {
+                        if (!artistSeed.name) continue;
+                        try {
+                            const result = await this.api.searchTracks(artistSeed.name, { limit: 10, provider });
+                            candidateTracks.push(...this._normalizeTrackList(result));
+                        } catch (error) {
+                            console.warn('[Home] searchTracks fallback failed for', artistSeed.name, error);
+                        }
+                        if (candidateTracks.length >= 40) break;
+                    }
+                }
+
+                const recentTrackIds = new Set(profile.recentTracks.map((track) => track.id).filter(Boolean));
+                const dedupedTracks = this._dedupeTracks(candidateTracks).filter(
+                    (track) => !track?.id || !recentTrackIds.has(track.id)
+                );
+                const filteredTracks = await this.filterUserContent(dedupedTracks, 'track');
 
                 if (filteredTracks.length > 0) {
-                    this.renderListWithTracks(songsContainer, filteredTracks, true);
+                    this.renderListWithTracks(songsContainer, filteredTracks.slice(0, 20), true);
                 } else {
-                    songsContainer.innerHTML = createPlaceholder('No song recommendations found.');
+                    songsContainer.innerHTML = createPlaceholder(
+                        'No new track recommendations found from your recent listening yet.'
+                    );
                 }
             } catch (e) {
                 console.error(e);
@@ -1777,29 +2150,73 @@ export class UIRenderer {
             }
 
             try {
-                const seeds = await this.getSeeds();
-                const albumSeed = seeds.find((t) => t.album && t.album.id);
-                if (albumSeed) {
-                    const similarAlbums = await this.api.getSimilarAlbums(albumSeed.album.id);
-                    const filteredAlbums = await this.filterUserContent(similarAlbums, 'album');
+                const profile = await this.getRecentTrackProfile(forceRefresh);
+                const albumCandidates = new Map();
 
-                    if (filteredAlbums.length > 0) {
-                        albumsContainer.innerHTML = filteredAlbums
-                            .slice(0, 12)
-                            .map((a) => this.createAlbumCardHTML(a))
-                            .join('');
-                        filteredAlbums.slice(0, 12).forEach((a) => {
-                            const el = albumsContainer.querySelector(`[data-album-id="${a.id}"]`);
-                            if (el) {
-                                trackDataStore.set(el, a);
-                                this.updateLikeState(el, 'album', a.id);
-                            }
-                        });
-                    } else {
-                        albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('Tell us more about what you like so we can recommend albums!')}</div>`;
+                const pushAlbums = (albums, seedScore = 1) => {
+                    const normalized = this._dedupeAlbums(this._normalizeAlbumList(albums));
+                    normalized.forEach((album, index) => {
+                        if (!album?.id) return;
+                        const key = `id:${album.id}`;
+                        const rankWeight = Math.max(0.25, 1 - index / Math.max(normalized.length, 12));
+                        const score = seedScore * rankWeight;
+                        const existing = albumCandidates.get(key);
+                        if (existing) {
+                            existing.score += score;
+                            if (!existing.album.cover && album.cover) existing.album.cover = album.cover;
+                        } else {
+                            albumCandidates.set(key, { album, score });
+                        }
+                    });
+                };
+
+                for (const albumSeed of profile.albumSeeds.slice(0, 8)) {
+                    if (!albumSeed.id) continue;
+                    try {
+                        const similarAlbums = await this.api.getSimilarAlbums(albumSeed.id);
+                        pushAlbums(similarAlbums, albumSeed.score || 1);
+                    } catch (err) {
+                        console.warn('[Home] getSimilarAlbums failed for', albumSeed.id, err);
                     }
+                }
+
+                if (albumCandidates.size === 0) {
+                    const provider =
+                        typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
+                    for (const artistSeed of profile.artistSeeds.slice(0, 5)) {
+                        if (!artistSeed.name) continue;
+                        try {
+                            const result = await this.api.searchAlbums(artistSeed.name, { limit: 10, provider });
+                            pushAlbums(result, artistSeed.score || 1);
+                        } catch (error) {
+                            console.warn('[Home] searchAlbums fallback failed for', artistSeed.name, error);
+                        }
+                        if (albumCandidates.size >= 32) break;
+                    }
+                }
+
+                const recentAlbumIds = new Set(profile.albumSeeds.map((seed) => seed.id).filter(Boolean));
+                const rankedAlbums = Array.from(albumCandidates.values())
+                    .sort((a, b) => b.score - a.score)
+                    .map((entry) => entry.album)
+                    .filter((album) => !album?.id || !recentAlbumIds.has(album.id));
+
+                const filteredAlbums = await this.filterUserContent(rankedAlbums, 'album');
+
+                if (filteredAlbums.length > 0) {
+                    albumsContainer.innerHTML = filteredAlbums
+                        .slice(0, 12)
+                        .map((album) => this.createAlbumCardHTML(album))
+                        .join('');
+                    filteredAlbums.slice(0, 12).forEach((album) => {
+                        const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
+                        if (el) {
+                            trackDataStore.set(el, album);
+                            this.updateLikeState(el, 'album', album.id);
+                        }
+                    });
                 } else {
-                    albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('Tell us more about what you like so we can recommend albums!')}</div>`;
+                    albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('No album recommendations found from your recent tracks yet.')}</div>`;
                 }
             } catch (e) {
                 console.error(e);
@@ -1838,12 +2255,12 @@ export class UIRenderer {
 
             try {
                 const response = await fetch('/editors-picks.json');
-                if (!response.ok) throw new Error("Failed to load editor's picks");
+                if (!response.ok) throw new Error("Failed to load random picks");
 
                 let items = await response.json();
 
                 if (!Array.isArray(items) || items.length === 0) {
-                    picksContainer.innerHTML = createPlaceholder("No editor's picks available.");
+                    picksContainer.innerHTML = createPlaceholder('No random picks available.');
                     return;
                 }
 
@@ -1955,11 +2372,11 @@ export class UIRenderer {
                         }
                     });
                 } else {
-                    picksContainer.innerHTML = createPlaceholder("No editor's picks available.");
+                    picksContainer.innerHTML = createPlaceholder('No random picks available.');
                 }
             } catch (e) {
-                console.error("Failed to load editor's picks:", e);
-                picksContainer.innerHTML = createPlaceholder("Failed to load editor's picks.");
+                console.error('Failed to load random picks:', e);
+                picksContainer.innerHTML = createPlaceholder('Failed to load random picks.');
             }
         }
     }
@@ -1970,6 +2387,7 @@ export class UIRenderer {
 
         if (!homePageSettings.shouldShowRecommendedArtists()) {
             if (section) section.style.display = 'none';
+            this._resetHomeArtistsRetryState();
             return;
         }
 
@@ -1983,37 +2401,152 @@ export class UIRenderer {
             }
 
             try {
-                const seeds = await this.getSeeds();
-                const artistSeed = seeds.find((t) => (t.artist && t.artist.id) || (t.artists && t.artists.length > 0));
-                const artistId = artistSeed ? artistSeed.artist?.id || artistSeed.artists?.[0]?.id : null;
+                const provider =
+                    typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
+                const profile = await this.getRecentTrackProfile(forceRefresh);
+                const seedArtists = profile.artistSeeds.map((artist) => ({
+                    id: artist.id,
+                    name: artist.name,
+                    picture: artist.picture || null,
+                    score: artist.score || 1,
+                }));
 
-                if (artistId) {
-                    const similarArtists = await this.api.getSimilarArtists(artistId);
-                    const filteredArtists = await this.filterUserContent(similarArtists, 'artist');
-
-                    if (filteredArtists.length > 0) {
-                        artistsContainer.innerHTML = filteredArtists
-                            .slice(0, 12)
-                            .map((a) => this.createArtistCircularCardHTML(a))
-                            .join('');
-                        filteredArtists.slice(0, 12).forEach((a) => {
-                            const el = artistsContainer.querySelector(`[data-artist-id="${a.id}"]`);
-                            if (el) {
-                                trackDataStore.set(el, a);
-                                this.updateLikeState(el, 'artist', a.id);
-                            }
-                        });
+                if (seedArtists.length === 0) {
+                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
+                    if (fallbackArtists.length > 0) {
+                        fallbackArtists.forEach((artist) =>
+                            seedArtists.push({ ...artist, score: 1 })
+                        );
                     } else {
-                        artistsContainer.innerHTML = createPlaceholder('No artist recommendations found.');
+                        artistsContainer.innerHTML = createPlaceholder(
+                            'Play more tracks to get artist recommendations from your recent history.'
+                        );
+                        this._scheduleHomeArtistsAutoload(3200);
+                        return;
                     }
+                }
+
+                const artistCandidates = new Map();
+                const pushArtists = (artists, seedScore = 1) => {
+                    const normalized = this._dedupeArtists(this._normalizeArtistList(artists));
+                    normalized.forEach((artist, index) => {
+                        if (!artist?.name) return;
+                        const key = artist.id ? `id:${artist.id}` : `name:${artist.name.toLowerCase()}`;
+                        const rankWeight = Math.max(0.25, 1 - index / Math.max(normalized.length, 12));
+                        const score = seedScore * rankWeight;
+                        const existing = artistCandidates.get(key);
+                        if (existing) {
+                            existing.score += score;
+                            if (!existing.artist.picture && artist.picture) existing.artist.picture = artist.picture;
+                        } else {
+                            artistCandidates.set(key, { artist, score });
+                        }
+                    });
+                };
+
+                for (const seedArtist of seedArtists.slice(0, 10)) {
+                    if (!seedArtist.id) continue;
+                    try {
+                        const similarArtists = await this.api.getSimilarArtists(seedArtist.id);
+                        pushArtists(similarArtists, seedArtist.score || 1);
+                    } catch (error) {
+                        console.warn('[Home] getSimilarArtists failed for', seedArtist.id, error);
+                    }
+                }
+
+                if (artistCandidates.size === 0) {
+                    for (const seedArtist of seedArtists.slice(0, 8)) {
+                        if (!seedArtist.name) continue;
+                        try {
+                            const result = await this.api.searchArtists(seedArtist.name, { limit: 8, provider });
+                            pushArtists(result, seedArtist.score || 1);
+                        } catch (error) {
+                            console.warn('[Home] Artist search fallback failed for', seedArtist.name, error);
+                        }
+                        if (artistCandidates.size >= 32) break;
+                    }
+                }
+
+                if (artistCandidates.size === 0) {
+                    pushArtists(seedArtists, 1);
+                }
+
+                if (artistCandidates.size === 0) {
+                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
+                    pushArtists(fallbackArtists, 1);
+                }
+
+                const recentArtistIds = new Set(seedArtists.map((artist) => artist.id).filter(Boolean));
+                let rankedArtists = Array.from(artistCandidates.values())
+                    .sort((a, b) => b.score - a.score)
+                    .map((entry) => entry.artist);
+
+                const novelArtists = rankedArtists.filter((artist) => !recentArtistIds.has(artist.id));
+                if (novelArtists.length >= 8) {
+                    rankedArtists = novelArtists;
+                }
+
+                const hydratedArtists = await this._hydrateArtistsForProvider(rankedArtists, provider, 30);
+                const filteredArtists = await this.filterUserContent(hydratedArtists, 'artist');
+                const renderableArtists = (
+                    filteredArtists.length > 0 ? filteredArtists : hydratedArtists
+                ).filter((artist) => artist && artist.id);
+
+                if (renderableArtists.length > 0) {
+                    const displayArtists = renderableArtists.slice(0, 12);
+                    artistsContainer.innerHTML = displayArtists
+                        .map((artist) => this.createArtistCircularCardHTML(artist))
+                        .join('');
+                    displayArtists.forEach((artist) => {
+                        const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
+                        if (el) {
+                            trackDataStore.set(el, artist);
+                            this.updateLikeState(el, 'artist', artist.id);
+                        }
+                    });
+                    this._resetHomeArtistsRetryState();
                 } else {
                     artistsContainer.innerHTML = createPlaceholder(
-                        'Listen to more music to get artist recommendations.'
+                        'No artist recommendations found from your recent tracks yet.'
                     );
+                    this._scheduleHomeArtistsAutoload(3200);
                 }
             } catch (e) {
                 console.error(e);
-                artistsContainer.innerHTML = createPlaceholder('Failed to load artist recommendations.');
+                try {
+                    const provider =
+                        typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
+                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
+                    const hydratedFallback = await this._hydrateArtistsForProvider(fallbackArtists, provider, 18);
+                    const filteredFallback = await this.filterUserContent(hydratedFallback, 'artist').catch(() => {
+                        return hydratedFallback;
+                    });
+                    const renderableFallback = (filteredFallback.length > 0 ? filteredFallback : hydratedFallback)
+                        .filter((artist) => artist && artist.id)
+                        .slice(0, 12);
+
+                    if (renderableFallback.length > 0) {
+                        artistsContainer.innerHTML = renderableFallback
+                            .map((artist) => this.createArtistCircularCardHTML(artist))
+                            .join('');
+                        renderableFallback.forEach((artist) => {
+                            const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
+                            if (el) {
+                                trackDataStore.set(el, artist);
+                                this.updateLikeState(el, 'artist', artist.id);
+                            }
+                        });
+                        this._scheduleHomeArtistsAutoload(forceRefresh ? 5000 : 3200);
+                        return;
+                    }
+                } catch (fallbackError) {
+                    console.warn('[Home] Fallback artist recommendations failed:', fallbackError);
+                }
+
+                artistsContainer.innerHTML = createPlaceholder(
+                    'No artist recommendations available right now. Try refresh.'
+                );
+                this._scheduleHomeArtistsAutoload(forceRefresh ? 5000 : 3200);
             }
         }
     }
@@ -2093,11 +2626,11 @@ export class UIRenderer {
             items = contentBlockingSettings.filterArtists(items);
         }
 
-        const favorites = await db.getFavorites(type);
+        const favorites = await db.getFavorites(type).catch(() => []);
         const favoriteIds = new Set(favorites.map((i) => i.id));
 
-        const likedTracks = await db.getFavorites('track');
-        const playlists = await db.getPlaylists(true);
+        const likedTracks = await db.getFavorites('track').catch(() => []);
+        const playlists = await db.getPlaylists(true).catch(() => []);
 
         const userTracksMap = new Map();
         likedTracks.forEach((t) => userTracksMap.set(t.id, t));
@@ -3550,7 +4083,406 @@ export class UIRenderer {
         }
     }
 
-    async renderFriendsPage() {
+    _getFriendsRouteParam() {
+        if (!window.location.pathname.startsWith('/friends/')) return '';
+        return decodeURIComponent(window.location.pathname.slice('/friends/'.length));
+    }
+
+    _getFriendsChatUsername(routeParam = '') {
+        if (routeParam && routeParam.startsWith('chat/@')) {
+            return decodeURIComponent(routeParam.slice('chat/@'.length));
+        }
+        const match = window.location.pathname.match(/^\/friends\/chat\/@([^/]+)/);
+        return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    _normalizeFriendUsername(username) {
+        return String(username || '')
+            .trim()
+            .replace(/^@/, '')
+            .toLowerCase();
+    }
+
+    async renderFriendSuggestionsSection({
+        friends = [],
+        incomingRequests = [],
+        outgoingRequests = [],
+        useCloudSocial = !!authManager.user,
+    } = {}) {
+        const section = document.getElementById('friends-discover-section');
+        const searchInput = document.getElementById('friends-discover-input');
+        const statusEl = document.getElementById('friends-suggestions-status');
+        const suggestionsList = document.getElementById('friends-suggestions-list');
+
+        if (!section || !searchInput || !statusEl || !suggestionsList) return;
+
+        if (!useCloudSocial || !authManager.user) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        const myProfileData = await syncManager.getUserData().catch(() => null);
+        const selfUid = String(authManager.user.$id || '');
+        const selfUsername = this._normalizeFriendUsername(myProfileData?.profile?.username);
+        const blockedUids = new Set(selfUid ? [selfUid] : []);
+        const blockedUsernames = new Set();
+
+        const addBlockedTarget = (uid, username) => {
+            if (uid) blockedUids.add(String(uid));
+            const normalized = this._normalizeFriendUsername(username);
+            if (normalized) blockedUsernames.add(normalized);
+        };
+
+        friends.forEach((friend) => addBlockedTarget(friend.uid, friend.username));
+        incomingRequests.forEach((request) => addBlockedTarget(request.uid, request.username));
+        outgoingRequests.forEach((request) => addBlockedTarget(request.uid, request.username));
+
+        addBlockedTarget(selfUid, myProfileData?.profile?.username);
+
+        const runSearch = async (query, requestToken) => {
+            const cleanQuery = String(query || '').trim();
+
+            if (cleanQuery.length < 2) {
+                statusEl.textContent = 'Type at least 2 characters to find people.';
+                suggestionsList.innerHTML = '';
+                return;
+            }
+
+            statusEl.textContent = 'Searching...';
+            suggestionsList.innerHTML = '';
+
+            try {
+                const users = await syncManager.searchUsers(cleanQuery);
+                if (requestToken !== this._friendsSuggestionRequestToken) return;
+
+                let selfMatchCount = 0;
+                let connectedMatchCount = 0;
+                const filtered = (Array.isArray(users) ? users : [])
+                    .filter((user) => user && typeof user === 'object')
+                    .filter((user) => {
+                        const uid = String(user.firebase_id || '');
+                        const username = this._normalizeFriendUsername(user.username);
+                        if (!uid || !username) return false;
+                        if (uid === selfUid || (selfUsername && username === selfUsername)) {
+                            selfMatchCount += 1;
+                            return false;
+                        }
+                        if (blockedUids.has(uid) || blockedUsernames.has(username)) {
+                            connectedMatchCount += 1;
+                            return false;
+                        }
+                        return true;
+                    })
+                    .slice(0, 12);
+
+                if (filtered.length === 0) {
+                    if (selfMatchCount > 0 && connectedMatchCount === 0) {
+                        statusEl.textContent = 'That search matches your account.';
+                        const meUsername = this._normalizeFriendUsername(myProfileData?.profile?.username);
+                        const meDisplayName = myProfileData?.profile?.display_name || meUsername || 'You';
+                        const meAvatar = myProfileData?.profile?.avatar_url || '/assets/appicon.png';
+                        suggestionsList.innerHTML = meUsername
+                            ? `
+                                <div class="friend-suggestion-item self">
+                                    <img class="friend-suggestion-avatar" src="${meAvatar}" alt="${escapeHtml(meDisplayName)}" />
+                                    <div class="friend-suggestion-meta">
+                                        <div class="friend-suggestion-name">${escapeHtml(meDisplayName)} <span style="opacity: 0.75">(You)</span></div>
+                                        <div class="friend-suggestion-username">@${escapeHtml(meUsername)}</div>
+                                    </div>
+                                    <div class="friend-suggestion-actions">
+                                        <button class="btn-secondary friend-suggestion-profile-btn" data-username="${encodeURIComponent(meUsername)}">Profile</button>
+                                    </div>
+                                </div>
+                            `
+                            : '';
+                    } else if (connectedMatchCount > 0) {
+                        statusEl.textContent = 'Matched users are already friends or pending requests.';
+                        suggestionsList.innerHTML = '';
+                    } else {
+                        statusEl.textContent = 'No matching people found.';
+                        suggestionsList.innerHTML = '';
+                    }
+                    return;
+                }
+
+                statusEl.textContent = `Found ${filtered.length} ${filtered.length === 1 ? 'person' : 'people'}.`;
+                suggestionsList.innerHTML = filtered
+                    .map((user) => {
+                        const username = this._normalizeFriendUsername(user.username);
+                        const encodedUsername = encodeURIComponent(username);
+                        const uid = String(user.firebase_id || '');
+                        return `
+                            <div class="friend-suggestion-item" data-uid="${uid}">
+                                <img class="friend-suggestion-avatar" src="${user.avatar_url || '/assets/appicon.png'}" alt="${escapeHtml(user.display_name || username || 'User')}" />
+                                <div class="friend-suggestion-meta">
+                                    <div class="friend-suggestion-name">${escapeHtml(user.display_name || username || 'User')}</div>
+                                    <div class="friend-suggestion-username">@${escapeHtml(username)}</div>
+                                </div>
+                                <div class="friend-suggestion-actions">
+                                    <button class="btn-secondary friend-suggestion-profile-btn" data-username="${encodedUsername}">Profile</button>
+                                    <button class="btn-primary friend-suggestion-add-btn" data-username="${encodedUsername}">Add Friend</button>
+                                </div>
+                            </div>
+                        `;
+                    })
+                    .join('');
+            } catch (error) {
+                if (requestToken !== this._friendsSuggestionRequestToken) return;
+                console.error('Failed to search users for friend suggestions:', error);
+                statusEl.textContent = 'Search failed. Try again.';
+                suggestionsList.innerHTML = '';
+            }
+        };
+
+        if (searchInput.value !== this._friendsSuggestionQuery) {
+            searchInput.value = this._friendsSuggestionQuery;
+        }
+
+        searchInput.oninput = () => {
+            this._friendsSuggestionQuery = searchInput.value.trim();
+            if (this._friendsSuggestionTimer) {
+                clearTimeout(this._friendsSuggestionTimer);
+            }
+            const requestToken = ++this._friendsSuggestionRequestToken;
+            this._friendsSuggestionTimer = setTimeout(() => {
+                runSearch(this._friendsSuggestionQuery, requestToken);
+            }, 250);
+        };
+
+        searchInput.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (this._friendsSuggestionTimer) {
+                    clearTimeout(this._friendsSuggestionTimer);
+                }
+                const requestToken = ++this._friendsSuggestionRequestToken;
+                runSearch(searchInput.value.trim(), requestToken);
+            }
+        };
+
+        suggestionsList.onclick = async (event) => {
+            const profileBtn = event.target.closest('.friend-suggestion-profile-btn');
+            if (profileBtn) {
+                const username = decodeURIComponent(profileBtn.dataset.username || '');
+                if (username) navigate(`/user/@${encodeURIComponent(username)}`);
+                return;
+            }
+
+            const addBtn = event.target.closest('.friend-suggestion-add-btn');
+            if (!addBtn) return;
+
+            const username = decodeURIComponent(addBtn.dataset.username || '');
+            if (!username) return;
+
+            const row = addBtn.closest('.friend-suggestion-item');
+            const rowUid = row?.dataset.uid || '';
+            addBtn.disabled = true;
+            const originalLabel = addBtn.textContent;
+            addBtn.textContent = 'Sending...';
+
+            try {
+                await syncManager.sendFriendRequestToUser(username);
+                addBlockedTarget(rowUid, username);
+                addBtn.classList.remove('btn-primary');
+                addBtn.classList.add('btn-secondary');
+                addBtn.textContent = 'Requested';
+                addBtn.disabled = true;
+                statusEl.textContent = `Request sent to @${username}.`;
+            } catch (error) {
+                console.error('Failed to send friend suggestion request:', error);
+                addBtn.textContent = originalLabel || 'Add Friend';
+                addBtn.disabled = false;
+                statusEl.textContent = error?.message || 'Failed to send request.';
+            }
+        };
+
+        if (this._friendsSuggestionQuery.trim().length >= 2) {
+            const requestToken = ++this._friendsSuggestionRequestToken;
+            await runSearch(this._friendsSuggestionQuery, requestToken);
+        } else {
+            statusEl.textContent = 'Type at least 2 characters to find people.';
+            suggestionsList.innerHTML = '';
+        }
+    }
+
+    _renderChatMessageHTML(message, currentUserId) {
+        const isMine = message.senderId === currentUserId;
+        const timeLabel = new Date(message.createdAt || Date.now()).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+        const body = message.message ? `<div class="social-chat-text">${escapeHtml(message.message)}</div>` : '';
+
+        let trackHtml = '';
+        const track = message.trackPayload;
+        if (track && typeof track === 'object') {
+            const trackTitle = escapeHtml(track.title || 'Shared Track');
+            const trackArtist = escapeHtml(track.artist || 'Unknown Artist');
+            const trackHref = track.link || (track.id ? `/track/${track.id}` : null);
+            const trackCover = track.cover ? this.api.getCoverUrl(track.cover, '160') : '/assets/appicon.png';
+            trackHtml = `
+                <a class="social-chat-track" href="${trackHref || '#'}" ${trackHref ? '' : 'data-disabled="true"'}>
+                    <img src="${trackCover}" alt="${trackTitle}" loading="lazy" />
+                    <div class="social-chat-track-meta">
+                        <div class="social-chat-track-title">${trackTitle}</div>
+                        <div class="social-chat-track-subtitle">${trackArtist}</div>
+                    </div>
+                </a>
+            `;
+        }
+
+        return `
+            <div class="social-chat-message ${isMine ? 'mine' : 'theirs'}">
+                <div class="social-chat-bubble">
+                    ${body}
+                    ${trackHtml}
+                    <div class="social-chat-time">${timeLabel}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    async renderFriendsChatSection(friends, routeParam = '') {
+        const section = document.getElementById('friends-chat-section');
+        const chatList = document.getElementById('friends-chat-list');
+        const chatEmpty = document.getElementById('friends-chat-empty');
+        const threadTitle = document.getElementById('friends-chat-thread-title');
+        const threadMessages = document.getElementById('friends-chat-messages');
+        const threadEmpty = document.getElementById('friends-chat-thread-empty');
+        const chatForm = document.getElementById('friends-chat-form');
+        const chatInput = document.getElementById('friends-chat-input');
+        const chatSend = document.getElementById('friends-chat-send');
+        const threadShare = document.getElementById('friends-chat-thread-share');
+
+        if (
+            !section ||
+            !chatList ||
+            !chatEmpty ||
+            !threadTitle ||
+            !threadMessages ||
+            !threadEmpty ||
+            !chatForm ||
+            !chatInput ||
+            !chatSend ||
+            !threadShare
+        ) {
+            return;
+        }
+
+        if (!authManager.user) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        const friendsList = Array.isArray(friends) ? friends : [];
+
+        if (friendsList.length === 0) {
+            chatList.innerHTML = '';
+            chatEmpty.style.display = 'block';
+            threadTitle.textContent = 'Select a friend';
+            threadMessages.innerHTML = '';
+            threadEmpty.style.display = 'block';
+            threadEmpty.textContent = 'Add a friend to start chatting.';
+            chatForm.dataset.friendUid = '';
+            chatForm.dataset.friendUsername = '';
+            chatInput.value = '';
+            chatInput.disabled = true;
+            chatSend.disabled = true;
+            threadShare.style.display = 'none';
+            return;
+        }
+
+        chatEmpty.style.display = 'none';
+        const summaries = await syncManager.listChatSummaries();
+        const summaryByPeer = new Map(summaries.map((summary) => [summary.peerId, summary]));
+
+        const routeUsername = this._getFriendsChatUsername(routeParam);
+        const routeRequested = !!routeUsername;
+        let activeFriend =
+            friendsList.find((friend) => friend.username && friend.username.toLowerCase() === routeUsername?.toLowerCase()) ||
+            null;
+
+        if (!activeFriend && !routeRequested && this._friendsActiveChatUid) {
+            activeFriend = friendsList.find((friend) => friend.uid === this._friendsActiveChatUid) || null;
+        }
+        if (!activeFriend && !routeRequested) {
+            activeFriend = friendsList[0] || null;
+        }
+
+        this._friendsActiveChatUid = activeFriend?.uid || null;
+
+        chatList.innerHTML = friendsList
+            .map((friend) => {
+                const summary = summaryByPeer.get(friend.uid);
+                const isActive = activeFriend && friend.uid === activeFriend.uid;
+                const preview = summary?.lastMessage ? escapeHtml(summary.lastMessage) : 'No messages yet';
+                const unreadBadge =
+                    summary?.unreadCount > 0
+                        ? `<span class="social-chat-unread">${summary.unreadCount > 99 ? '99+' : summary.unreadCount}</span>`
+                        : '';
+
+                return `
+                    <button class="social-chat-user ${isActive ? 'active' : ''}" data-uid="${friend.uid}" data-username="${escapeHtml(friend.username || '')}">
+                        <img class="social-chat-user-avatar" src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(friend.displayName || friend.username || 'Friend')}" />
+                        <div class="social-chat-user-meta">
+                            <div class="social-chat-user-name">${escapeHtml(friend.displayName || friend.username || 'Friend')}</div>
+                            <div class="social-chat-user-preview">${preview}</div>
+                        </div>
+                        ${unreadBadge}
+                    </button>
+                `;
+            })
+            .join('');
+
+        if (!activeFriend) {
+            threadTitle.textContent = routeRequested ? `@${routeUsername}` : 'Select a friend';
+            threadMessages.innerHTML = '';
+            threadEmpty.style.display = 'block';
+            threadEmpty.textContent = routeRequested
+                ? 'This chat URL is valid, but that user is not in your friends list.'
+                : 'Select a friend to open a conversation.';
+            chatForm.dataset.friendUid = '';
+            chatForm.dataset.friendUsername = '';
+            chatInput.value = '';
+            chatInput.disabled = true;
+            chatSend.disabled = true;
+            threadShare.style.display = 'none';
+            return;
+        }
+
+        const messages = await syncManager.listChatMessages(activeFriend.uid, { markRead: true });
+        threadTitle.textContent = activeFriend.displayName || activeFriend.username || 'Conversation';
+        threadShare.style.display = 'inline-flex';
+        threadShare.dataset.username = activeFriend.username || '';
+
+        threadMessages.innerHTML = messages
+            .map((message) => this._renderChatMessageHTML(message, authManager.user.$id))
+            .join('');
+
+        threadMessages.querySelectorAll('.social-chat-track').forEach((trackLink) => {
+            if (trackLink.dataset.disabled === 'true') return;
+            trackLink.addEventListener('click', (event) => {
+                event.preventDefault();
+                const href = trackLink.getAttribute('href');
+                if (href) navigate(href);
+            });
+        });
+
+        threadEmpty.style.display = messages.length > 0 ? 'none' : 'block';
+        threadEmpty.textContent = messages.length === 0 ? 'No messages yet. Say hi.' : '';
+        threadMessages.scrollTop = threadMessages.scrollHeight;
+
+        chatForm.dataset.friendUid = activeFriend.uid || '';
+        chatForm.dataset.friendUsername = activeFriend.username || '';
+        chatForm.dataset.friendDisplayName = activeFriend.displayName || activeFriend.username || 'Friend';
+        chatInput.disabled = false;
+        chatSend.disabled = false;
+    }
+
+    async renderFriendsPage(routeParam = '') {
         this.showPage('friends');
 
         const greetingText = document.getElementById('friends-greeting-text');
@@ -3565,7 +4497,6 @@ export class UIRenderer {
         const collabPlaylistsGrid = document.getElementById('collab-playlists-grid');
         const noCollabPlaylistsMessage = document.getElementById('no-collab-playlists-message');
 
-        // Set greeting based on time of day
         const hour = new Date().getHours();
         let greeting = 'Welcome';
         if (hour >= 5 && hour < 12) greeting = 'Good morning';
@@ -3577,24 +4508,47 @@ export class UIRenderer {
             greetingText.textContent = `${greeting}!`;
         }
 
-        try {
-            // Get friends list
-            const friends = await db.getFriends();
+        const useCloudSocial = !!authManager.user;
 
-            // Render friends grid
+        try {
+            const [friends, incomingRequests, outgoingRequests, sharedTracks, collabPlaylists] = useCloudSocial
+                ? await Promise.all([
+                      syncManager.listFriends(),
+                      syncManager.listIncomingFriendRequests(),
+                      syncManager.listOutgoingFriendRequests(),
+                      db.getSharedTracks(),
+                      db.getCollaborativePlaylists(),
+                  ])
+                : await Promise.all([
+                      db.getFriends(),
+                      db.getIncomingFriendRequests(),
+                      db
+                          .getFriendRequests()
+                          .then((requests) => requests.filter((request) => request.outgoing && request.status === 'pending')),
+                      db.getSharedTracks(),
+                      db.getCollaborativePlaylists(),
+                  ]);
+
             if (friends && friends.length > 0) {
                 friendsGrid.innerHTML = friends
-                    .map(
-                        (friend) => `
-                    <div class="friend-card" data-uid="${friend.uid}">
-                        <div class="friend-avatar">
-                            <img src="${friend.avatarUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}" alt="${friend.displayName}">
-                        </div>
-                        <div class="friend-name">${friend.displayName}</div>
-                        <div class="friend-username">@${friend.username}</div>
-                    </div>
-                `
-                    )
+                    .map((friend) => {
+                        const username = friend.username || '';
+                        const safeDisplayName = escapeHtml(friend.displayName || username || 'Friend');
+                        const safeUsername = escapeHtml(username);
+                        return `
+                            <div class="friend-card" data-uid="${friend.uid}" data-username="${safeUsername}">
+                                <div class="friend-avatar">
+                                    <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}">
+                                </div>
+                                <div class="friend-name">${safeDisplayName}</div>
+                                <div class="friend-username">@${safeUsername}</div>
+                                <div class="friend-card-actions">
+                                    <button class="btn-secondary friend-open-profile-btn" data-username="${safeUsername}">Profile</button>
+                                    <button class="btn-primary friend-open-chat-btn" data-username="${safeUsername}">Chat</button>
+                                </div>
+                            </div>
+                        `;
+                    })
                     .join('');
                 if (noFriendsMessage) noFriendsMessage.style.display = 'none';
             } else {
@@ -3602,44 +4556,80 @@ export class UIRenderer {
                 if (noFriendsMessage) noFriendsMessage.style.display = 'block';
             }
 
-            // Get friend requests
-            const requests = await db.getIncomingFriendRequests();
-            if (requests && requests.length > 0) {
+            const hasIncoming = incomingRequests && incomingRequests.length > 0;
+            const hasOutgoing = outgoingRequests && outgoingRequests.length > 0;
+            if (hasIncoming || hasOutgoing) {
                 friendRequestsSection.style.display = 'block';
-                friendRequestsCount.style.display = 'inline';
-                friendRequestsCount.textContent = requests.length;
-                friendRequestsList.innerHTML = requests
-                    .map(
-                        (request) => `
-                    <div class="friend-request-item" data-uid="${request.uid}">
-                        <div class="friend-request-avatar">
-                            <img src="${request.avatarUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}" alt="${request.displayName}">
-                        </div>
-                        <div class="friend-request-info">
-                            <div class="friend-request-name">${request.displayName}</div>
-                            <div class="friend-request-username">@${request.username}</div>
-                        </div>
-                        <div class="friend-request-actions">
-                            <button class="btn-primary accept-friend-btn" data-uid="${request.uid}">Accept</button>
-                            <button class="btn-secondary reject-friend-btn" data-uid="${request.uid}">Reject</button>
-                        </div>
-                    </div>
-                `
-                    )
-                    .join('');
+                friendRequestsCount.style.display = hasIncoming ? 'inline' : 'none';
+                friendRequestsCount.textContent = hasIncoming ? incomingRequests.length : '0';
+
+                const incomingHTML = hasIncoming
+                    ? incomingRequests
+                          .map(
+                              (request) => `
+                            <div class="friend-request-item" data-uid="${request.uid}">
+                                <div class="friend-request-avatar">
+                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}">
+                                </div>
+                                <div class="friend-request-info">
+                                    <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
+                                    <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
+                                </div>
+                                <div class="friend-request-actions">
+                                    <button class="btn-primary accept-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Accept</button>
+                                    <button class="btn-secondary reject-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Reject</button>
+                                </div>
+                            </div>
+                        `
+                          )
+                          .join('')
+                    : '';
+
+                const outgoingHTML = hasOutgoing
+                    ? `
+                        <div class="friend-requests-subtitle">Outgoing Requests</div>
+                        ${outgoingRequests
+                            .map(
+                                (request) => `
+                            <div class="friend-request-item pending" data-uid="${request.uid}">
+                                <div class="friend-request-avatar">
+                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}">
+                                </div>
+                                <div class="friend-request-info">
+                                    <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
+                                    <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
+                                </div>
+                                <div class="friend-request-actions">
+                                    <button class="btn-secondary cancel-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Cancel</button>
+                                </div>
+                            </div>
+                        `
+                            )
+                            .join('')}
+                    `
+                    : '';
+
+                friendRequestsList.innerHTML = incomingHTML + outgoingHTML;
             } else {
                 friendRequestsSection.style.display = 'none';
+                friendRequestsList.innerHTML = '';
             }
 
-            // Get shared tracks
-            const sharedTracks = await db.getSharedTracks();
+            await this.renderFriendSuggestionsSection({
+                friends,
+                incomingRequests,
+                outgoingRequests,
+                useCloudSocial,
+            });
+
             if (sharedTracks && sharedTracks.length > 0) {
                 sharedTracksSection.style.display = 'block';
-                // Render shared tracks
                 const tempContainer = document.createElement('div');
                 this.renderListWithTracks(
                     tempContainer,
-                    sharedTracks.map((s) => s.track),
+                    sharedTracks
+                        .map((shared) => shared.track)
+                        .filter((track) => track && typeof track === 'object'),
                     true
                 );
                 sharedTracksList.innerHTML = tempContainer.innerHTML;
@@ -3647,22 +4637,21 @@ export class UIRenderer {
                 sharedTracksSection.style.display = 'none';
             }
 
-            // Get collaborative playlists
-            const collabPlaylists = await db.getCollaborativePlaylists();
             if (collabPlaylists && collabPlaylists.length > 0) {
+                collabPlaylistsSection.style.display = 'block';
                 collabPlaylistsGrid.innerHTML = collabPlaylists
                     .map(
                         (playlist) => `
-                    <div class="card collab-playlist-card" data-id="${playlist.id}">
-                        <div class="card-image">
-                            <img src="${playlist.cover || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}" alt="${playlist.name}">
-                        </div>
-                        <div class="card-info">
-                            <div class="card-title">${playlist.name}</div>
-                            <div class="card-meta">${playlist.members?.length || 0} members</div>
-                        </div>
-                    </div>
-                `
+                            <div class="card collab-playlist-card" data-id="${playlist.id}">
+                                <div class="card-image">
+                                    <img src="${playlist.cover || '/assets/appicon.png'}" alt="${escapeHtml(playlist.name)}">
+                                </div>
+                                <div class="card-info">
+                                    <div class="card-title">${escapeHtml(playlist.name)}</div>
+                                    <div class="card-meta">${playlist.members?.length || 0} members</div>
+                                </div>
+                            </div>
+                        `
                     )
                     .join('');
                 if (noCollabPlaylistsMessage) noCollabPlaylistsMessage.style.display = 'none';
@@ -3671,15 +4660,27 @@ export class UIRenderer {
                 if (noCollabPlaylistsMessage) noCollabPlaylistsMessage.style.display = 'block';
             }
 
-            // Setup event listeners
-            this.setupFriendsPageEventListeners();
+            await this.renderFriendsChatSection(friends, routeParam);
+            this.setupFriendsPageEventListeners({ useCloudSocial });
+
+            if (!this._friendsRealtimeBound) {
+                this._friendsRealtimeBound = true;
+                this._friendsRealtimeHandler = () => {
+                    if (window.location.pathname.startsWith('/friends')) {
+                        this.renderFriendsPage(this._getFriendsRouteParam());
+                    }
+                };
+                window.addEventListener('pb-friend-request-updated', this._friendsRealtimeHandler);
+                window.addEventListener('pb-chat-message', this._friendsRealtimeHandler);
+            }
         } catch (error) {
             console.error('Failed to load friends page:', error);
         }
     }
 
-    setupFriendsPageEventListeners() {
-        // Add friend button
+    setupFriendsPageEventListeners({ useCloudSocial = !!authManager.user } = {}) {
+        const rerender = () => this.renderFriendsPage(this._getFriendsRouteParam());
+
         const addFriendBtn = document.getElementById('add-friend-btn');
         const addFriendModal = document.getElementById('add-friend-modal');
         const cancelAddFriendBtn = document.getElementById('cancel-add-friend-btn');
@@ -3687,22 +4688,17 @@ export class UIRenderer {
         const addFriendUsername = document.getElementById('add-friend-username');
 
         if (addFriendBtn && addFriendModal) {
-            addFriendBtn.addEventListener('click', () => {
-                addFriendModal.classList.add('active');
-            });
-
+            addFriendBtn.onclick = () => addFriendModal.classList.add('active');
             if (cancelAddFriendBtn) {
-                cancelAddFriendBtn.addEventListener('click', () => {
-                    addFriendModal.classList.remove('active');
-                });
+                cancelAddFriendBtn.onclick = () => addFriendModal.classList.remove('active');
+            }
+            const modalOverlay = addFriendModal.querySelector('.modal-overlay');
+            if (modalOverlay) {
+                modalOverlay.onclick = () => addFriendModal.classList.remove('active');
             }
 
-            addFriendModal.querySelector('.modal-overlay')?.addEventListener('click', () => {
-                addFriendModal.classList.remove('active');
-            });
-
             if (confirmAddFriendBtn) {
-                confirmAddFriendBtn.addEventListener('click', async () => {
+                confirmAddFriendBtn.onclick = async () => {
                     const username = addFriendUsername?.value?.trim();
                     if (!username) {
                         alert('Please enter a username');
@@ -3710,54 +4706,162 @@ export class UIRenderer {
                     }
 
                     try {
-                        if (window.syncManager && window.syncManager.sendFriendRequestToUser) {
-                            await window.syncManager.sendFriendRequestToUser(username);
+                        if (useCloudSocial) {
+                            await syncManager.sendFriendRequestToUser(username);
                         } else {
-                            // Local-only: store friend request directly
                             await db.sendFriendRequest({
                                 uid: crypto.randomUUID(),
-                                username: username,
+                                username,
                                 displayName: username,
                             });
                         }
-                        alert('Friend request sent!');
                         addFriendModal.classList.remove('active');
                         if (addFriendUsername) addFriendUsername.value = '';
-                        this.renderFriendsPage();
+                        rerender();
                     } catch (error) {
                         console.error('Failed to send friend request:', error);
-                        alert('Failed to send friend request. Please try again.');
+                        alert(error?.message || 'Failed to send friend request.');
                     }
-                });
+                };
             }
         }
 
-        // Accept/Reject friend requests
         document.querySelectorAll('.accept-friend-btn').forEach((btn) => {
-            btn.addEventListener('click', async (e) => {
-                const uid = e.target.dataset.uid;
+            btn.onclick = async () => {
                 try {
-                    await db.acceptFriendRequest(uid);
-                    this.renderFriendsPage(); // Refresh
+                    if (useCloudSocial && btn.dataset.requestId) {
+                        await syncManager.acceptFriendRequest(btn.dataset.requestId);
+                    } else {
+                        await db.acceptFriendRequest(btn.dataset.uid);
+                    }
+                    rerender();
                 } catch (error) {
                     console.error('Failed to accept friend request:', error);
                 }
-            });
+            };
         });
 
         document.querySelectorAll('.reject-friend-btn').forEach((btn) => {
-            btn.addEventListener('click', async (e) => {
-                const uid = e.target.dataset.uid;
+            btn.onclick = async () => {
                 try {
-                    await db.rejectFriendRequest(uid);
-                    this.renderFriendsPage(); // Refresh
+                    if (useCloudSocial && btn.dataset.requestId) {
+                        await syncManager.rejectFriendRequest(btn.dataset.requestId);
+                    } else {
+                        await db.rejectFriendRequest(btn.dataset.uid);
+                    }
+                    rerender();
                 } catch (error) {
                     console.error('Failed to reject friend request:', error);
                 }
-            });
+            };
         });
 
-        // Create collaborative playlist button
+        document.querySelectorAll('.cancel-friend-btn').forEach((btn) => {
+            btn.onclick = async () => {
+                try {
+                    if (useCloudSocial && btn.dataset.requestId) {
+                        await syncManager.cancelFriendRequest(btn.dataset.requestId);
+                    } else {
+                        await db.cancelFriendRequest(btn.dataset.uid);
+                    }
+                    rerender();
+                } catch (error) {
+                    console.error('Failed to cancel friend request:', error);
+                }
+            };
+        });
+
+        document.querySelectorAll('.friend-open-profile-btn').forEach((btn) => {
+            btn.onclick = (event) => {
+                event.stopPropagation();
+                const username = btn.dataset.username;
+                if (username) {
+                    navigate(`/user/@${encodeURIComponent(username)}`);
+                }
+            };
+        });
+
+        document.querySelectorAll('.friend-open-chat-btn').forEach((btn) => {
+            btn.onclick = (event) => {
+                event.stopPropagation();
+                const username = btn.dataset.username;
+                if (username) {
+                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
+                }
+            };
+        });
+
+        document.querySelectorAll('.friend-card').forEach((card) => {
+            card.onclick = () => {
+                const username = card.dataset.username;
+                if (username) {
+                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
+                }
+            };
+        });
+
+        const chatList = document.getElementById('friends-chat-list');
+        if (chatList) {
+            chatList.onclick = (event) => {
+                const target = event.target.closest('.social-chat-user');
+                if (!target) return;
+                const username = target.dataset.username;
+                if (username) {
+                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
+                }
+            };
+        }
+
+        const chatShareBtn = document.getElementById('friends-chat-thread-share');
+        if (chatShareBtn) {
+            chatShareBtn.onclick = () => {
+                const username = chatShareBtn.dataset.username;
+                if (!username) return;
+                const url = getShareUrl(`/friends/chat/@${encodeURIComponent(username)}`);
+                navigator.clipboard.writeText(url).then(() => {
+                    const original = chatShareBtn.textContent;
+                    chatShareBtn.textContent = 'Copied';
+                    setTimeout(() => {
+                        chatShareBtn.textContent = original || 'Share URL';
+                    }, 1400);
+                });
+            };
+        }
+
+        const chatForm = document.getElementById('friends-chat-form');
+        const chatInput = document.getElementById('friends-chat-input');
+        const chatSend = document.getElementById('friends-chat-send');
+        if (chatForm && chatInput && chatSend) {
+            chatForm.onsubmit = async (event) => {
+                event.preventDefault();
+                if (!useCloudSocial) return;
+
+                const friendUid = chatForm.dataset.friendUid;
+                const friendUsername = chatForm.dataset.friendUsername;
+                const friendDisplayName = chatForm.dataset.friendDisplayName;
+                const message = chatInput.value.trim();
+
+                if (!friendUid || !friendUsername || !message) return;
+
+                chatSend.disabled = true;
+                try {
+                    await syncManager.sendChatMessage({
+                        toUserId: friendUid,
+                        toUsername: friendUsername,
+                        toDisplayName: friendDisplayName,
+                        message,
+                    });
+                    chatInput.value = '';
+                    await this.renderFriendsPage(`chat/@${encodeURIComponent(friendUsername)}`);
+                } catch (error) {
+                    console.error('Failed to send chat message:', error);
+                    alert(error?.message || 'Failed to send message.');
+                } finally {
+                    chatSend.disabled = false;
+                }
+            };
+        }
+
         const createCollabBtn = document.getElementById('create-collab-playlist-btn');
         const createCollabModal = document.getElementById('create-collab-playlist-modal');
         const cancelCollabBtn = document.getElementById('cancel-collab-playlist-btn');
@@ -3765,40 +4869,43 @@ export class UIRenderer {
         const collabPlaylistName = document.getElementById('collab-playlist-name');
 
         if (createCollabBtn && createCollabModal) {
-            createCollabBtn.addEventListener('click', async () => {
-                // Populate friends list in modal
+            createCollabBtn.onclick = async () => {
                 const friendsSelect = document.getElementById('collab-friends-select');
-                const friends = await db.getFriends();
+                const friends = useCloudSocial ? await syncManager.listFriends() : await db.getFriends();
 
-                if (friends && friends.length > 0) {
-                    friendsSelect.innerHTML = friends
-                        .map(
-                            (friend) => `
-                        <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" value="${friend.uid}" name="collab-friends">
-                            <img src="${friend.avatarUrl || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}" style="width: 24px; height: 24px; border-radius: 50%;">
-                            <span>${friend.displayName}</span>
-                        </label>
-                    `
-                        )
-                        .join('');
+                if (friendsSelect) {
+                    if (friends && friends.length > 0) {
+                        friendsSelect.innerHTML = friends
+                            .map(
+                                (friend) => `
+                                <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; cursor: pointer;">
+                                    <input type="checkbox" value="${friend.uid}" name="collab-friends">
+                                    <img src="${friend.avatarUrl || '/assets/appicon.png'}" style="width: 24px; height: 24px; border-radius: 50%;">
+                                    <span>${escapeHtml(friend.displayName || friend.username || 'Friend')}</span>
+                                </label>
+                            `
+                            )
+                            .join('');
+                    } else {
+                        friendsSelect.innerHTML =
+                            '<p style="color: var(--muted-foreground); text-align: center; padding: 1rem">Add friends first to invite them</p>';
+                    }
                 }
 
                 createCollabModal.classList.add('active');
-            });
+            };
 
             if (cancelCollabBtn) {
-                cancelCollabBtn.addEventListener('click', () => {
-                    createCollabModal.classList.remove('active');
-                });
+                cancelCollabBtn.onclick = () => createCollabModal.classList.remove('active');
             }
 
-            createCollabModal.querySelector('.modal-overlay')?.addEventListener('click', () => {
-                createCollabModal.classList.remove('active');
-            });
+            const collabOverlay = createCollabModal.querySelector('.modal-overlay');
+            if (collabOverlay) {
+                collabOverlay.onclick = () => createCollabModal.classList.remove('active');
+            }
 
             if (confirmCollabBtn) {
-                confirmCollabBtn.addEventListener('click', async () => {
+                confirmCollabBtn.onclick = async () => {
                     const name = collabPlaylistName?.value?.trim();
                     if (!name) {
                         alert('Please enter a playlist name');
@@ -3807,28 +4914,27 @@ export class UIRenderer {
 
                     const selectedFriends = Array.from(
                         document.querySelectorAll('input[name="collab-friends"]:checked')
-                    ).map((cb) => cb.value);
+                    ).map((checkbox) => checkbox.value);
 
                     try {
                         await db.createCollaborativePlaylist(name, selectedFriends);
                         createCollabModal.classList.remove('active');
                         if (collabPlaylistName) collabPlaylistName.value = '';
-                        this.renderFriendsPage(); // Refresh
+                        rerender();
                     } catch (error) {
                         console.error('Failed to create collaborative playlist:', error);
                     }
-                });
+                };
             }
         }
 
-        // Click on collaborative playlist card
         document.querySelectorAll('.collab-playlist-card').forEach((card) => {
-            card.addEventListener('click', () => {
+            card.onclick = () => {
                 const playlistId = card.dataset.id;
                 if (playlistId) {
                     navigate(`/collabplaylist/${playlistId}`);
                 }
-            });
+            };
         });
     }
 

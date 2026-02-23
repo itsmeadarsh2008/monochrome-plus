@@ -19,6 +19,7 @@ import { downloadQualitySettings } from './storage.js';
 import { updateTabTitle, navigate } from './router.js';
 import { db } from './db.js';
 import { syncManager } from './accounts/appwrite-sync.js';
+import { authManager } from './accounts/auth.js';
 import { waveformGenerator } from './waveform.js';
 import { audioContextManager } from './audio-context.js';
 import {
@@ -1192,7 +1193,7 @@ export async function handleTrackAction(
             // Populate friends dropdown
             const friendSelect = document.getElementById('share-track-friend-select');
             if (friendSelect) {
-                const friends = await db.getFriends();
+                const friends = authManager.user ? await syncManager.listFriends() : await db.getFriends();
                 friendSelect.innerHTML = '<option value="">Select a friend</option>';
                 if (friends && friends.length > 0) {
                     friends.forEach((f) => {

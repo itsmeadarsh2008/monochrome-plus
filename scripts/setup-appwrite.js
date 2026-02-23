@@ -66,12 +66,84 @@ const collections = [
             { key: 'tracks', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'is_public', type: 'boolean', required: false, default: true },
         ],
+<<<<<<< HEAD
         indexes: [
             { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
             { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
         ],
     },
 ];
+=======
+        indexes: [
+            { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
+            { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
+        ]
+    },
+    {
+        id: 'DB_friend_requests',
+        name: 'Friend Requests',
+        permissions: [
+            Permission.read(Role.users()),
+            Permission.create(Role.users()),
+            Permission.update(Role.users()),
+            Permission.delete(Role.users()),
+        ],
+        documentSecurity: true,
+        attributes: [
+            { key: 'sender_id', type: 'string', size: 255, required: true },
+            { key: 'sender_username', type: 'string', size: 255, required: true },
+            { key: 'sender_display_name', type: 'string', size: 255, required: false },
+            { key: 'sender_avatar', type: 'string', size: 1000, required: false },
+            { key: 'receiver_id', type: 'string', size: 255, required: true },
+            { key: 'receiver_username', type: 'string', size: 255, required: true },
+            { key: 'receiver_display_name', type: 'string', size: 255, required: false },
+            { key: 'receiver_avatar', type: 'string', size: 1000, required: false },
+            { key: 'status', type: 'string', size: 32, required: true },
+            { key: 'created_at', type: 'integer', required: true },
+            { key: 'updated_at', type: 'integer', required: true },
+        ],
+        indexes: [
+            { key: 'idx_friend_sender', attributes: ['sender_id'], type: 'key' },
+            { key: 'idx_friend_receiver', attributes: ['receiver_id'], type: 'key' },
+            { key: 'idx_friend_status', attributes: ['status'], type: 'key' },
+            { key: 'idx_friend_created', attributes: ['created_at'], type: 'key' },
+        ],
+    },
+    {
+        id: 'DB_chat_messages',
+        name: 'Chat Messages',
+        permissions: [
+            Permission.read(Role.users()),
+            Permission.create(Role.users()),
+            Permission.update(Role.users()),
+            Permission.delete(Role.users()),
+        ],
+        documentSecurity: true,
+        attributes: [
+            { key: 'conversation_id', type: 'string', size: 512, required: true },
+            { key: 'sender_id', type: 'string', size: 255, required: true },
+            { key: 'sender_username', type: 'string', size: 255, required: true },
+            { key: 'sender_display_name', type: 'string', size: 255, required: false },
+            { key: 'sender_avatar', type: 'string', size: 1000, required: false },
+            { key: 'receiver_id', type: 'string', size: 255, required: true },
+            { key: 'receiver_username', type: 'string', size: 255, required: true },
+            { key: 'receiver_display_name', type: 'string', size: 255, required: false },
+            { key: 'receiver_avatar', type: 'string', size: 1000, required: false },
+            { key: 'message', type: 'string', size: 5000, required: false },
+            { key: 'track_payload', type: 'string', size: 65535, required: false, x_large: true },
+            { key: 'created_at', type: 'integer', required: true },
+            { key: 'read', type: 'boolean', required: false, default: false },
+        ],
+        indexes: [
+            { key: 'idx_chat_conversation', attributes: ['conversation_id'], type: 'key' },
+            { key: 'idx_chat_sender', attributes: ['sender_id'], type: 'key' },
+            { key: 'idx_chat_receiver', attributes: ['receiver_id'], type: 'key' },
+            { key: 'idx_chat_created', attributes: ['created_at'], type: 'key' },
+            { key: 'idx_chat_read', attributes: ['read'], type: 'key' },
+        ],
+    }
+];
+>>>>>>> 1e33a40 (major update)
 
 async function setup() {
     try {
@@ -101,6 +173,7 @@ async function setup() {
             const existingAttrRes = await databases.listAttributes(DATABASE_ID, col.id);
             const existingKeys = existingAttrRes.attributes.map((a) => a.key);
 
+<<<<<<< HEAD
             for (const attr of col.attributes) {
                 if (existingKeys.includes(attr.key)) continue;
 
@@ -117,6 +190,53 @@ async function setup() {
                 } else if (attr.type === 'boolean') {
                     await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, attr.required, attr.default);
                 }
+=======
+            for (const attr of col.attributes) {
+                if (existingKeys.includes(attr.key)) continue;
+
+                console.log(`   Adding attribute "${attr.key}" to "${col.id}"...`);
+                const canUseDefault = Object.prototype.hasOwnProperty.call(attr, 'default') && !attr.required;
+                if (attr.type === 'string') {
+                    if (canUseDefault) {
+                        await databases.createStringAttribute(
+                            DATABASE_ID,
+                            col.id,
+                            attr.key,
+                            attr.size,
+                            attr.required,
+                            attr.default
+                        );
+                    } else {
+                        await databases.createStringAttribute(DATABASE_ID, col.id, attr.key, attr.size, attr.required);
+                    }
+                } else if (attr.type === 'boolean') {
+                    if (canUseDefault) {
+                        await databases.createBooleanAttribute(
+                            DATABASE_ID,
+                            col.id,
+                            attr.key,
+                            attr.required,
+                            attr.default
+                        );
+                    } else {
+                        await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, attr.required);
+                    }
+                } else if (attr.type === 'integer') {
+                    if (canUseDefault) {
+                        await databases.createIntegerAttribute(
+                            DATABASE_ID,
+                            col.id,
+                            attr.key,
+                            attr.required,
+                            null,
+                            null,
+                            attr.default
+                        );
+                    } else {
+                        await databases.createIntegerAttribute(DATABASE_ID, col.id, attr.key, attr.required, null, null);
+                    }
+                }
+>>>>>>> 1e33a40 (major update)
                 // Add sleep to avoid rate limits on cloud
                 await new Promise((r) => setTimeout(r, 1000));
             }

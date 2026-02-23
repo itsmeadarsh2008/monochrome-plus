@@ -1,7 +1,7 @@
 //storage.js
 export const apiSettings = {
     STORAGE_KEY: 'monochrome-api-instances-v7',
-    INSTANCES_URL: 'instances.json',
+    INSTANCES_URL: '/instances.json',
     defaultInstances: { api: [], streaming: [] },
     instancesLoaded: false,
 

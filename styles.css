@@ -1146,31 +1146,47 @@ kbd {
     height: 100dvh;
     grid-template:
         'sidebar main' 1fr
-        'player player' auto / 210px 1fr;
+        'player player' auto / 228px 1fr;
 }
 
 .sidebar {
     grid-area: sidebar;
-    background-color: color-mix(in srgb, var(--background) 75%, transparent);
-    backdrop-filter: blur(30px);
-    border-right: 1px solid var(--border);
-    padding: 1.5rem 1rem;
+    background:
+        linear-gradient(165deg, color-mix(in srgb, var(--card) 78%, transparent) 0%, color-mix(in srgb, var(--background) 92%, transparent) 100%);
+    backdrop-filter: blur(26px);
+    border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    box-shadow:
+        inset -1px 0 0 color-mix(in srgb, var(--foreground) 6%, transparent),
+        10px 0 30px rgb(0, 0, 0, 0.24);
+    padding: 1.1rem 0.85rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.85rem;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 100;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+}
+
+.sidebar.sidebar-account-open {
+    overflow: visible;
 }
 
 .sidebar-content {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    gap: 0.75rem;
 }
 
 .sidebar-nav.main {
-    flex: 1;
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.125rem;
+    scrollbar-width: thin;
 }
 
 .sidebar-bottom-container {
@@ -1183,10 +1199,10 @@ kbd {
 
 .sidebar-nav-bottom {
     margin-top: auto;
-    padding-top: 1rem;
+    padding-top: 0.85rem;
     flex: 0 0 auto;
-    border-top: 1px solid var(--border);
-    background: var(--background);
+    border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: transparent;
     position: relative;
 }
 
@@ -1203,9 +1219,9 @@ kbd {
 }
 
 .sidebar-nav.bottom .nav-item a {
-    padding: 0.5rem 0.75rem;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
+    padding: 0.55rem 0.72rem;
+    gap: 0.6rem;
+    font-size: 0.8rem;
     font-weight: 500;
 }
 
@@ -1266,8 +1282,8 @@ kbd {
     z-index: 2100;
 
     /* Floating bar overrides */
-    width: calc(96% - 190px) !important;
-    left: calc(190px + 2%);
+    width: calc(96% - 212px) !important;
+    left: calc(212px + 2%);
     bottom: 15px !important;
     border-radius: var(--radius);
 
@@ -1292,11 +1308,11 @@ kbd {
 .sidebar-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0.6rem;
     font-size: 1.25rem;
     font-weight: 700;
-    margin-bottom: 2rem;
-    padding: 0 0.75rem;
+    margin-bottom: 0.55rem;
+    padding: 0 0.5rem;
     letter-spacing: -0.02em;
 }
 
@@ -1306,6 +1322,7 @@ kbd {
     gap: 10px;
     color: var(--foreground);
     text-decoration: none;
+    min-width: 0;
 }
 
 .sidebar-logo .app-logo {
@@ -1320,11 +1337,24 @@ kbd {
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
 }
 
 #sidebar-toggle {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-full);
     padding: 0;
     flex-shrink: 0;
+    color: var(--muted-foreground);
+    background: color-mix(in srgb, var(--card) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+#sidebar-toggle:hover {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--secondary) 80%, transparent);
 }
 
 .sidebar-nav ul {
@@ -1333,20 +1363,28 @@ kbd {
 
 .sidebar-nav .nav-item {
     position: relative;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .sidebar-nav .nav-item a {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.75rem;
+    gap: 0.82rem;
+    padding: 0.6rem 0.78rem;
+    border-radius: 0.88rem;
     color: var(--muted-foreground);
-    font-weight: 500;
-    transition: all 0.2s ease;
+    font-weight: 550;
+    line-height: 1.2;
+    transition:
+        color var(--transition-fast),
+        transform var(--transition-fast),
+        background-color var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast);
     cursor: pointer;
     position: relative;
+    border: 1px solid transparent;
+    text-shadow: 0 0 0 transparent;
 }
 
 .search-bar svg.search-icon {
@@ -1355,31 +1393,162 @@ kbd {
 }
 
 .sidebar-nav .nav-item a:hover {
-    background-color: var(--secondary);
     color: var(--foreground);
+    background-color: color-mix(in srgb, var(--secondary) 72%, transparent);
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+    transform: translateX(2px);
 }
 
 .sidebar-nav .nav-item a.active {
+<<<<<<< HEAD
     background-color: var(--primary-muted, rgb(var(--primary-rgb), 0.15));
+=======
+    background:
+        linear-gradient(135deg,
+            color-mix(in srgb, var(--primary) 18%, transparent) 0%,
+            color-mix(in srgb, var(--primary) 9%, transparent) 100%);
+>>>>>>> 1e33a40 (major update)
     color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--primary) 15%, transparent),
+        inset 0 0 0 0.5px color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
 .sidebar-nav .nav-item a.active::before {
-    content: '';
-    position: absolute;
-    left: -1rem;
-    top: 20%;
-    bottom: 20%;
-    width: 4px;
-    background-color: var(--primary);
-    border-radius: 0 4px 4px 0;
-    box-shadow: 0 0 10px var(--primary);
+    display: none;
 }
 
 .sidebar-nav .nav-item a svg {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     flex-shrink: 0;
+    opacity: 0.9;
+}
+
+.sidebar-account-item {
+    margin-top: 0.5rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    padding-top: 0.55rem;
+}
+
+.header-account-control {
+    position: relative;
+    width: 100%;
+}
+
+.nav-btn-account {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.68rem;
+    padding: 0.56rem 0.66rem;
+    border-radius: 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    background:
+        linear-gradient(145deg,
+            color-mix(in srgb, var(--card) 92%, transparent) 0%,
+            color-mix(in srgb, var(--background) 96%, transparent) 100%);
+    color: var(--foreground);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform var(--transition-fast),
+        border-color var(--transition-fast),
+        background-color var(--transition-fast),
+        box-shadow var(--transition-fast);
+}
+
+.nav-btn-account:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+    background:
+        linear-gradient(145deg,
+            color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
+            color-mix(in srgb, var(--card) 96%, transparent) 100%);
+    box-shadow:
+        0 8px 18px rgb(0, 0, 0, 0.16),
+        inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.nav-btn-account:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent),
+        0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.nav-account-avatar {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    flex-shrink: 0;
+    color: var(--muted-foreground);
+}
+
+#header-account-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+}
+
+.nav-account-status-dot {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid var(--card);
+    background: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.nav-btn-account.is-authenticated .nav-account-status-dot {
+    background: #22c55e;
+}
+
+.nav-account-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+    flex: 1;
+}
+
+#sidebar-account-name {
+    font-size: 0.87rem;
+    font-weight: 620;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#sidebar-account-subtitle {
+    font-size: 0.72rem;
+    color: color-mix(in srgb, var(--muted-foreground) 90%, transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nav-account-chevron {
+    width: 14px;
+    height: 14px;
+    color: var(--muted-foreground);
+    transition: transform var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.nav-btn-account.is-open .nav-account-chevron {
+    transform: rotate(180deg);
 }
 
 .pinned-items-header {
@@ -1448,18 +1617,25 @@ kbd {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgb(0, 0, 0, 0.5);
+    background: rgb(4, 4, 8, 0.56);
     z-index: 2150;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(4px);
 }
 
 .main-header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-xl);
-    gap: var(--spacing-md);
-    position: relative;
+    gap: var(--spacing-sm);
+    position: sticky;
+    top: 0.5rem;
+    margin-bottom: var(--spacing-lg);
+    padding: 0.55rem;
+    background: color-mix(in srgb, var(--card) 75%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+    border-radius: 1.05rem;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 10px 28px rgb(0, 0, 0, 0.26);
     z-index: 1000;
 }
 
@@ -1467,16 +1643,18 @@ kbd {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    flex: 0 0 auto;
+    padding-right: 0.25rem;
+    padding-left: 0.15rem;
+    border-right: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
 }
 
 .nav-btn {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-full);
-    background-color: var(--card);
-    border: 1px solid var(--border);
-
-    /* Better definition */
+    background-color: color-mix(in srgb, var(--card) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
     color: var(--foreground);
     display: flex;
     align-items: center;
@@ -1486,13 +1664,13 @@ kbd {
         transform var(--transition-fast),
         background-color var(--transition-fast),
         box-shadow var(--transition-fast);
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 4px 14px rgb(0, 0, 0, 0.18);
 }
 
 .nav-btn:hover {
-    background-color: var(--secondary);
-    transform: scale(1.1);
-    box-shadow: var(--shadow-md);
+    background-color: color-mix(in srgb, var(--secondary) 82%, transparent);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgb(0, 0, 0, 0.2);
 }
 
 .nav-btn:disabled {
@@ -1503,22 +1681,31 @@ kbd {
 
 .hamburger-menu {
     display: none;
-    background: transparent;
-    border: none;
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
     color: var(--foreground);
     cursor: pointer;
-    padding: 0.5rem;
-    border-radius: var(--radius);
-    transition: background-color var(--transition);
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    align-items: center;
+    justify-content: center;
+    transition:
+        background-color var(--transition),
+        transform var(--transition-fast);
 }
 
 .hamburger-menu:hover {
-    background-color: var(--secondary);
+    background-color: color-mix(in srgb, var(--secondary) 82%, transparent);
+    transform: translateY(-1px);
 }
 
 .search-bar {
-    width: 80%;
-    max-width: 100%;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
 }
 
 .search-bar input {
@@ -1551,9 +1738,9 @@ kbd {
 .track-list-search-input {
     width: 100%;
     padding: 0.75rem 2.5rem;
-    background-color: var(--input);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    background-color: color-mix(in srgb, var(--input) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: 0.88rem;
     color: var(--foreground);
     transition:
         box-shadow var(--transition-fast),
@@ -4495,10 +4682,11 @@ input:checked + .slider::before {
 
 /* Fullscreen rotating disc effect - vinyl record */
 #vinyl-disc-container.rotating-disc {
-    width: min(45vh, 45vw);
-    height: min(45vh, 45vw);
+    width: min(48vh, 48vw);
+    height: min(48vh, 48vw);
     border-radius: var(--radius-full);
     background:
+<<<<<<< HEAD
         /* Outer edge lip */
         radial-gradient(circle at center, transparent 98%, rgb(255, 255, 255, 0.05) 98.5%, #050505 99%, #000 100%),
         /* Inner grooves - multiple tightly packed rings */
@@ -4513,10 +4701,23 @@ input:checked + .slider::before {
                 #121212 6px
             ),
         #0a0a0a;
+=======
+        radial-gradient(circle at center,
+            transparent 0 53%,
+            rgb(255, 255, 255, 0.035) 60%,
+            rgb(0, 0, 0, 0.18) 78%,
+            rgb(0, 0, 0, 0.52) 100%),
+        repeating-radial-gradient(circle at center,
+            rgb(7, 7, 7, 0.95) 0,
+            rgb(7, 7, 7, 0.95) 1px,
+            rgb(17, 17, 17, 0.95) 2px,
+            rgb(9, 9, 9, 0.95) 3px),
+        linear-gradient(180deg, #111 0%, #060606 100%);
+>>>>>>> 1e33a40 (major update)
     box-shadow:
-        0 20px 50px rgb(0, 0, 0, 0.8),
-        inset 0 0 0 2px rgb(255, 255, 255, 0.1),
-        inset 0 0 10px rgb(0, 0, 0, 1);
+        0 24px 60px rgb(0, 0, 0, 0.74),
+        inset 0 0 0 1px rgb(255, 255, 255, 0.1),
+        inset 0 0 18px rgb(0, 0, 0, 0.86);
     animation: rotate-disc-fullscreen 4s linear infinite;
     position: relative;
     display: flex;
@@ -4530,6 +4731,7 @@ input:checked + .slider::before {
     position: absolute;
     inset: 0;
     border-radius: var(--radius-full);
+<<<<<<< HEAD
     background: conic-gradient(
         from 0deg at 50% 50%,
         rgb(255, 255, 255, 0) 0deg,
@@ -4544,11 +4746,25 @@ input:checked + .slider::before {
         rgb(255, 255, 255, 0) 240deg,
         rgb(255, 255, 255, 0) 360deg
     );
+=======
+    background:
+        conic-gradient(from 12deg at 50% 50%,
+            rgb(255, 255, 255, 0) 0deg,
+            rgb(255, 255, 255, 0.06) 18deg,
+            rgb(255, 255, 255, 0.3) 33deg,
+            rgb(255, 255, 255, 0.08) 45deg,
+            rgb(255, 255, 255, 0) 62deg,
+            rgb(255, 255, 255, 0) 185deg,
+            rgb(255, 255, 255, 0.08) 204deg,
+            rgb(255, 255, 255, 0.24) 216deg,
+            rgb(255, 255, 255, 0.05) 232deg,
+            rgb(255, 255, 255, 0) 250deg,
+            rgb(255, 255, 255, 0) 360deg),
+        radial-gradient(circle at center, transparent 0 57%, rgb(0, 0, 0, 0.24) 80%, transparent 100%);
+>>>>>>> 1e33a40 (major update)
     mix-blend-mode: screen;
     pointer-events: none;
     z-index: 2;
-
-    /* Above the base grooves and the label */
     animation: rotate-disc-fullscreen 4s linear infinite reverse;
 }
 
@@ -4560,38 +4776,37 @@ input:checked + .slider::before {
 #vinyl-disc-container.rotating-disc::after {
     content: '';
     position: absolute;
-    width: 3%;
-    height: 3%;
+    width: 1.15%;
+    height: 1.15%;
     border-radius: var(--radius-full);
-    background: #000;
+    background: radial-gradient(circle, rgb(255, 255, 255, 0.88) 0%, rgb(200, 200, 200, 0.62) 56%, rgb(120, 120, 120, 0.44) 100%);
     box-shadow:
+<<<<<<< HEAD
         inset 0 2px 5px rgb(0, 0, 0, 0.9),
         0 0 0 1px rgb(255, 255, 255, 0.2),
         /* white paper edge of the hole */ 0 0 5px rgb(0, 0, 0, 0.6);
+=======
+        0 0 0 1px rgb(255, 255, 255, 0.25),
+        0 0 4px rgb(0, 0, 0, 0.45);
+>>>>>>> 1e33a40 (major update)
     z-index: 3;
-
-    /* Top most */
     pointer-events: none;
 }
 
 /* Album art inside vinyl disc - becomes the label */
 #vinyl-disc-container.rotating-disc #fullscreen-cover-image {
-    width: 35%;
-
-    /* Realistic label size relative to the vinyl body */
-    height: 35%;
+    width: 34%;
+    height: 34%;
     max-width: none;
     max-height: none;
     border-radius: var(--radius-full);
     box-shadow:
-        0 0 0 4px #1a1a1a,
-        0 0 0 5px #0a0a0a,
+        0 0 0 5px rgb(15, 15, 15, 0.95),
+        0 0 0 6px rgb(220, 220, 220, 0.14),
         0 0 20px rgb(0, 0, 0, 0.9),
         inset 0 0 15px rgb(0, 0, 0, 0.4);
     object-fit: cover;
     z-index: 1;
-
-    /* Below the glossy reflection overlay */
     margin-bottom: 0;
     position: absolute;
 }
@@ -5140,8 +5355,8 @@ input:checked + .slider::before {
 #home-recommended-albums .skeleton-container,
 #home-recommended-artists .skeleton-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: var(--spacing-lg);
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    gap: var(--spacing-md);
 }
 
 #home-recommended-songs .skeleton-container {
@@ -5903,36 +6118,54 @@ input:checked + .slider::before {
 /* Clickable album cover indicator */
 .now-playing-bar .cover {
     cursor: pointer;
-    transition: all var(--transition);
+    transition:
+        transform var(--transition-fast),
+        box-shadow var(--transition-fast);
     position: relative;
+    border-radius: 0.5rem;
+    box-shadow: 0 6px 14px rgb(0, 0, 0, 0.3);
+    isolation: isolate;
 }
 
 .now-playing-bar .cover:hover {
-    transform: scale(1.05);
-}
-
-.now-playing-bar .cover::after {
-    content: '🎵';
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgb(0, 0, 0, 0.7);
-    opacity: 0;
-    transition: opacity var(--transition);
-    font-size: 1.5rem;
-}
-
-.now-playing-bar .cover:hover::after {
-    opacity: 1;
+    transform: translateY(-2px) scale(1.03);
+    box-shadow: 0 9px 20px rgb(0, 0, 0, 0.36);
 }
 
 /* Rotating album cover */
 .now-playing-bar .cover.rotating {
     border-radius: 50%;
     animation: rotate-disc 3s linear infinite;
-    box-shadow: 0 0 20px rgb(0, 0, 0, 0.3);
+    box-shadow:
+        0 0 0 2px rgb(255, 255, 255, 0.08),
+        0 0 24px rgb(0, 0, 0, 0.4),
+        inset 0 0 28px rgb(0, 0, 0, 0.25);
+}
+
+.now-playing-bar .cover.rotating::before,
+.now-playing-bar .cover.rotating::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-full);
+    pointer-events: none;
+}
+
+.now-playing-bar .cover.rotating::before {
+    background:
+        repeating-radial-gradient(circle at center,
+            rgb(255, 255, 255, 0.06) 0,
+            rgb(255, 255, 255, 0.06) 1px,
+            transparent 2px,
+            transparent 3.5px);
+    mix-blend-mode: soft-light;
+    opacity: 0.45;
+}
+
+.now-playing-bar .cover.rotating::after {
+    background:
+        radial-gradient(circle at 24% 22%, rgb(255, 255, 255, 0.28) 0, transparent 34%),
+        radial-gradient(circle at 50% 50%, transparent 0 47%, rgb(0, 0, 0, 0.28) 76%, rgb(0, 0, 0, 0.46) 100%);
 }
 
 .now-playing-bar .cover.rotating.paused {
@@ -5999,6 +6232,19 @@ input:checked + .slider::before {
     font-size: 0.875rem;
 }
 
+.friend-card .friend-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.friend-card .friend-card-actions .btn-primary,
+.friend-card .friend-card-actions .btn-secondary {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+}
+
 /* Friend Request Styles */
 .friend-request-item {
     display: flex;
@@ -6040,6 +6286,340 @@ input:checked + .slider::before {
 .friend-request-item .friend-request-actions {
     display: flex;
     gap: 0.5rem;
+}
+
+.friend-request-item.pending {
+    opacity: 0.85;
+}
+
+.friend-requests-subtitle {
+    margin: 1rem 0 0.5rem;
+    color: var(--muted-foreground);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.friends-discover-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--card) 84%, transparent);
+    padding: 1rem;
+}
+
+.friends-suggestions-status {
+    margin-top: 0.65rem;
+    color: var(--muted-foreground);
+    font-size: 0.85rem;
+}
+
+.friends-suggestions-list {
+    margin-top: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.friend-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+}
+
+.friend-suggestion-item.self {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--secondary) 32%, transparent);
+}
+
+.friend-suggestion-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.friend-suggestion-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.friend-suggestion-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-suggestion-username {
+    color: var(--muted-foreground);
+    font-size: 0.84rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-suggestion-actions {
+    display: flex;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.friend-suggestion-actions .btn-primary,
+.friend-suggestion-actions .btn-secondary {
+    min-width: 0;
+    padding: 0.4rem 0.7rem;
+    justify-content: center;
+}
+
+@media (max-width: 720px) {
+    .friend-suggestion-item {
+        flex-wrap: wrap;
+    }
+
+    .friend-suggestion-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+.social-chat-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    gap: 1rem;
+}
+
+.social-chat-sidebar {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    min-height: 480px;
+    overflow: hidden;
+}
+
+.social-chat-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.social-chat-user {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    text-align: left;
+}
+
+.social-chat-user:hover {
+    background: color-mix(in srgb, var(--secondary) 70%, transparent);
+}
+
+.social-chat-user.active {
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.social-chat-user:last-child {
+    border-bottom: 0;
+}
+
+.social-chat-user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.social-chat-user-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.social-chat-user-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.social-chat-user-preview {
+    color: var(--muted-foreground);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.social-chat-unread {
+    min-width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0 0.3rem;
+}
+
+.social-chat-thread {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    min-height: 480px;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto;
+}
+
+.social-chat-thread-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.social-chat-thread-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.social-chat-messages {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow-y: auto;
+    min-height: 320px;
+}
+
+.social-chat-message {
+    display: flex;
+}
+
+.social-chat-message.mine {
+    justify-content: flex-end;
+}
+
+.social-chat-bubble {
+    max-width: min(78%, 520px);
+    border-radius: 14px;
+    padding: 0.72rem 0.82rem;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--secondary) 75%, transparent);
+}
+
+.social-chat-message.mine .social-chat-bubble {
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.social-chat-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.45;
+}
+
+.social-chat-time {
+    color: var(--muted-foreground);
+    font-size: 0.72rem;
+    margin-top: 0.45rem;
+    text-align: right;
+}
+
+.social-chat-track {
+    margin-top: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.45rem;
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s ease;
+}
+
+.social-chat-track:hover {
+    border-color: var(--primary);
+}
+
+.social-chat-track[data-disabled='true'] {
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.social-chat-track img {
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.social-chat-track-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.social-chat-track-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.social-chat-track-subtitle {
+    font-size: 0.78rem;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.social-chat-thread-empty {
+    padding: 0.7rem 1rem 1rem;
+    color: var(--muted-foreground);
+}
+
+.social-chat-composer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.85rem 1rem 1rem;
+    border-top: 1px solid var(--border);
+}
+
+@media (max-width: 980px) {
+    .social-chat-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .social-chat-sidebar {
+        min-height: unset;
+    }
+
+    .social-chat-thread {
+        min-height: 440px;
+    }
 }
 
 /* Collaborative Playlist Card */
@@ -6679,20 +7259,30 @@ img[src=''] {
     }
 
     .main-content {
-        padding: var(--spacing-md);
+        padding: var(--spacing-sm);
         grid-area: main;
     }
 
     .main-header {
         grid-area: header;
-        margin-bottom: var(--spacing-md);
+        top: max(0.35rem, env(safe-area-inset-top));
+        margin-bottom: var(--spacing-sm);
+        padding: 0.4rem;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        border-radius: 0.88rem;
     }
 
     .sidebar {
         position: fixed;
-        top: 0;
+        top: 0.4rem;
         left: 0;
-        height: 100%;
+        height: calc(100% - 0.8rem);
+        width: min(86vw, 340px);
+        border-radius: 0 1rem 1rem 0;
+        border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+        border-left: none;
+        padding-top: max(0.9rem, env(safe-area-inset-top));
         transform: translateX(-100%);
         z-index: 2200;
         transition:
@@ -6702,11 +7292,11 @@ img[src=''] {
 
     .sidebar.is-open {
         transform: translateX(0);
-        box-shadow: 0 0 20px rgb(0, 0, 0, 0.5);
+        box-shadow: 0 20px 40px rgb(0, 0, 0, 0.5);
     }
 
     .hamburger-menu {
-        display: block;
+        display: flex;
     }
 
     #sidebar-overlay.is-visible {
@@ -6715,6 +7305,8 @@ img[src=''] {
 
     .search-bar {
         max-width: none;
+        order: 3;
+        flex: 1 0 100%;
     }
 
     .content-section {
@@ -6729,8 +7321,23 @@ img[src=''] {
     }
 
     .card-grid {
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: var(--spacing-md);
+        grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+        gap: var(--spacing-sm);
+    }
+
+    .recommended-artists-grid,
+    #home-recommended-artists.card-grid {
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    }
+
+    .home-recommended-artists-section {
+        padding: 0.9rem;
+        border-radius: 0.88rem;
+    }
+
+    .section-subtitle {
+        font-size: 0.82rem;
+        margin-top: 0.35rem;
     }
 
     /* Fix library page layout on mobile */
@@ -6995,7 +7602,7 @@ img[src=''] {
     }
 
     .sidebar-nav .nav-item a {
-        padding: 1rem 0.75rem;
+        padding: 0.78rem 0.72rem;
     }
 
     .offline-notification,
@@ -7514,7 +8121,7 @@ body:has(#fullscreen-cover-overlay:not([style*='display: none'])) .now-playing-b
 
 @media (min-width: 769px) {
     body.sidebar-collapsed .app-container {
-        grid-template-columns: 80px 1fr;
+        grid-template-columns: 86px 1fr;
     }
 
     body.sidebar-collapsed .sidebar-logo span {
@@ -7536,6 +8143,23 @@ body:has(#fullscreen-cover-overlay:not([style*='display: none'])) .now-playing-b
         padding: 0.75rem 0;
     }
 
+    body.sidebar-collapsed .nav-btn-account {
+        justify-content: center;
+        gap: 0;
+        padding: 0.55rem 0;
+    }
+
+    body.sidebar-collapsed .nav-account-meta,
+    body.sidebar-collapsed .nav-account-chevron {
+        display: none;
+    }
+
+    body.sidebar-collapsed .sidebar-account-dropdown {
+        left: calc(100% + 0.5rem);
+        right: auto;
+        bottom: 0;
+    }
+
     body.sidebar-collapsed .pinned-items-header {
         display: none;
     }
@@ -7549,8 +8173,8 @@ body:has(#fullscreen-cover-overlay:not([style*='display: none'])) .now-playing-b
     }
 
     body.sidebar-collapsed .now-playing-bar {
-        width: calc(96% - 80px) !important;
-        left: calc(80px + 2%);
+        width: calc(96% - 86px) !important;
+        left: calc(86px + 2%);
     }
 
     body.sidebar-collapsed #sidebar-toggle {
@@ -7990,12 +8614,65 @@ textarea:focus {
     transition: opacity var(--transition-normal);
 }
 
-/* Artist Circular Card Styles */
+/* Home section heads */
+.section-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.section-head-compact {
+    margin-bottom: 1rem;
+}
+
+.section-head-discovery {
+    margin-bottom: 1.15rem;
+}
+
+.section-eyebrow {
+    margin: 0 0 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted-foreground);
+}
+
+.section-subtitle {
+    margin: 0.55rem 0 0;
+    font-size: 0.9rem;
+    color: color-mix(in srgb, var(--muted-foreground) 86%, transparent);
+}
+
+.home-recommended-artists-section {
+    position: relative;
+    padding: 1.25rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background:
+        radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 55%),
+        linear-gradient(155deg, color-mix(in srgb, var(--card) 86%, transparent) 0%, color-mix(in srgb, var(--background) 94%, transparent) 100%);
+    box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
+}
+
+.recommended-artists-grid,
+#home-recommended-artists.card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    gap: 0.95rem;
+}
+
+/* Recommended artist cards */
 .card.artist-circular {
-    background: transparent;
-    border: none;
-    padding: 0;
+    position: relative;
+    background:
+        linear-gradient(165deg, color-mix(in srgb, var(--card) 86%, transparent) 0%, color-mix(in srgb, var(--background) 94%, transparent) 100%);
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border-radius: 1rem;
+    padding: 0.7rem;
     text-align: center;
+<<<<<<< HEAD
     box-shadow: none;
 }
 
@@ -8010,29 +8687,63 @@ textarea:focus {
     margin-bottom: var(--spacing-md) !important;
     box-shadow: var(--shadow-md);
     background: var(--surface-overlay, rgb(255, 255, 255, 0.05));
+=======
+    box-shadow: 0 8px 18px rgb(0, 0, 0, 0.16);
+>>>>>>> 1e33a40 (major update)
     overflow: hidden;
 }
 
-.card.artist-circular:hover .card-image-wrapper {
-    box-shadow: var(--shadow-lg);
+.card.artist-circular:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+    box-shadow: 0 14px 30px rgb(0, 0, 0, 0.24);
+}
+
+.card.artist-circular .card-image-wrapper {
+    position: relative;
+    border-radius: 0.88rem !important;
+    aspect-ratio: 1 / 1;
+    margin-bottom: 0.72rem !important;
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    overflow: hidden;
+}
+
+.card.artist-circular .card-image-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 22% 24%, rgb(255, 255, 255, 0.2) 0, transparent 38%),
+        linear-gradient(to top, rgb(0, 0, 0, 0.32), transparent 45%);
+    pointer-events: none;
 }
 
 .card.artist-circular .card-image {
-    border-radius: 50% !important;
+    border-radius: 0.82rem !important;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scale(1.02);
 }
 
 .card.artist-circular .card-info {
-    padding: 0;
+    padding: 0.15rem 0.2rem 0.2rem;
 }
 
 .card.artist-circular .card-title {
     font-size: 0.9rem;
+<<<<<<< HEAD
     font-weight: 500;
     margin: 0.5rem 0 0;
 }
 
 #home-recommended-artists.card-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+=======
+    font-weight: 650;
+    margin: 0.1rem 0 0;
+    line-height: 1.3;
+>>>>>>> 1e33a40 (major update)
 }
 
 .delete-preset-btn:hover {
@@ -8888,25 +9599,133 @@ textarea:focus {
 }
 
 @media (max-width: 768px) {
+    .profile-banner-wrapper {
+        height: 200px;
+    }
+
     .profile-card {
-        width: calc(100% - 2rem);
-        padding: 1.5rem;
-        margin-top: -80px;
+        width: calc(100% - 1rem);
+        padding: 1.25rem;
+        margin-top: -60px;
+        border-radius: var(--radius-xl);
+    }
+
+    .profile-avatar-wrapper {
+        margin-top: -4rem;
     }
 
     .profile-avatar {
-        width: 120px;
-        height: 120px;
+        width: 100px;
+        height: 100px;
+    }
+
+    .profile-avatar-ring {
+        inset: -6px;
+    }
+
+    .profile-display-name {
+        font-size: 1.5rem;
+    }
+
+    .profile-username {
+        font-size: 0.9rem;
+    }
+
+    .profile-bio {
+        font-size: 0.9rem;
     }
 
     .profile-meta-footer {
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 1rem;
+        padding-top: 1rem;
+        margin-top: 0.75rem;
     }
 
     .profile-links {
         width: 100%;
         justify-content: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .profile-actions {
+        width: 100%;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .profile-actions .btn-glass {
+        flex: 1;
+        text-align: center;
+        justify-content: center;
+        padding: 0.75rem;
+    }
+
+    .profile-sections-container {
+        padding: 0 1rem 4rem;
+    }
+
+    .profile-section {
+        margin-bottom: 3rem;
+    }
+
+    .section-header-flex {
+        margin-bottom: 1.5rem;
+    }
+
+    .profile-section .card-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.75rem !important;
+    }
+
+    .favorite-album-item {
+        margin-bottom: 2rem !important;
+    }
+
+    .favorite-album-item .card {
+        width: 160px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .profile-banner-wrapper {
+        height: 160px;
+    }
+
+    .profile-card {
+        width: 100%;
+        padding: 1rem;
+        margin-top: -50px;
+        border-radius: var(--radius-lg);
+        border-left: none;
+        border-right: none;
+    }
+
+    .profile-avatar-wrapper {
+        margin-top: -3.5rem;
+    }
+
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+    }
+
+    .profile-display-name {
+        font-size: 1.25rem;
+    }
+
+    .profile-status {
+        font-size: 0.75rem;
+        padding: 0.3rem 0.75rem;
+    }
+
+    .profile-section .card-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .favorite-album-item .card {
+        width: 140px !important;
     }
 }
 
@@ -9046,3 +9865,41 @@ textarea:focus {
     text-align: left;
     justify-content: flex-start;
 }
+<<<<<<< HEAD
+=======
+
+.sidebar-account-dropdown {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 0.5rem);
+    min-width: 0;
+    padding: 0.35rem;
+    gap: 0.35rem;
+}
+
+.sidebar-account-dropdown .account-dropdown-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.2rem;
+}
+
+.sidebar-account-dropdown .account-dropdown-section + .account-dropdown-section {
+    border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    padding-top: 0.5rem;
+}
+
+.sidebar-account-dropdown .btn-secondary,
+.sidebar-account-dropdown .btn-primary {
+    width: 100%;
+    justify-content: flex-start;
+    min-height: 2.25rem;
+    border-radius: 0.62rem;
+    text-align: left;
+    line-height: 1.3;
+    white-space: normal;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+}
+>>>>>>> 1e33a40 (major update)

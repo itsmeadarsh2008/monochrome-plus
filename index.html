@@ -1059,7 +1059,7 @@
                                 <span>Home</span>
                             </a>
                         </li>
-                        <li class="nav-item" id="sidebar-nav-profile">
+                        <li class="nav-item" id="sidebar-nav-profile" style="display: none">
                             <a href="/profile">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1095,7 +1095,7 @@
                                 <span>Recent</span>
                             </a>
                         </li>
-                        <li class="nav-item" id="sidebar-nav-friends" style="display: none !important">
+                        <li class="nav-item" id="sidebar-nav-friends" style="display: none">
                             <a href="/friends">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1165,39 +1165,11 @@
                                     </a>
                                 </li>
 
-                                <li class="nav-item" id="sidebar-nav-account" style="
-                                            margin-top: 0.5rem;
-                                            border-top: 1px solid var(--border);
-                                            padding-top: 0.5rem;
-                                        ">
-                                    <div class="header-account-control" style="position: relative; width: 100%">
-                                        <button id="header-account-btn" class="nav-btn-account" title="Account" style="
-                                                    width: 100%;
-                                                    display: flex;
-                                                    align-items: center;
-                                                    gap: 12px;
-                                                    padding: 8px 12px;
-                                                    border-radius: var(--radius-md);
-                                                    background: transparent;
-                                                    border: none;
-                                                    cursor: pointer;
-                                                    color: var(--foreground);
-                                                    text-align: left;
-                                                    transition: background 0.2s ease;
-                                                " onmouseover="this.style.background = 'var(--primary-hover)'"
-                                            onmouseout="this.style.background = 'transparent'">
-                                            <div style="
-                                                        width: 28px;
-                                                        height: 28px;
-                                                        border-radius: 50%;
-                                                        overflow: hidden;
-                                                        border: 1px solid var(--border);
-                                                        flex-shrink: 0;
-                                                        display: flex;
-                                                        align-items: center;
-                                                        justify-content: center;
-                                                        background: var(--secondary);
-                                                    ">
+                                <li class="nav-item sidebar-account-item" id="sidebar-nav-account">
+                                    <div class="header-account-control">
+                                        <button id="header-account-btn" class="nav-btn-account" title="Account"
+                                            aria-haspopup="menu" aria-expanded="false">
+                                            <div class="nav-account-avatar">
                                                 <svg id="header-account-icon" xmlns="http://www.w3.org/2000/svg"
                                                     width="16" height="16" viewBox="0 0 24 24" fill="none"
                                                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1205,28 +1177,23 @@
                                                     <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
                                                     <circle cx="12" cy="7" r="4"></circle>
                                                 </svg>
-                                                <img id="header-account-img" src="" style="
-                                                            width: 100%;
-                                                            height: 100%;
-                                                            object-fit: cover;
-                                                            display: none;
-                                                        " />
+                                                <img id="header-account-img" src="" alt="Profile avatar" />
+                                                <span class="nav-account-status-dot" id="sidebar-account-status-dot"
+                                                    aria-hidden="true"></span>
                                             </div>
-                                            <span id="sidebar-account-name" style="
-                                                        font-size: 0.9rem;
-                                                        font-weight: 500;
-                                                        white-space: nowrap;
-                                                        overflow: hidden;
-                                                        text-overflow: ellipsis;
-                                                    ">Account</span>
+                                            <span class="nav-account-meta">
+                                                <span id="sidebar-account-name">Sign in</span>
+                                                <span id="sidebar-account-subtitle">Email or Discord</span>
+                                            </span>
+                                            <svg id="sidebar-account-chevron" class="nav-account-chevron"
+                                                xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="m6 9 6 6 6-6"></path>
+                                            </svg>
                                         </button>
-                                        <div id="header-account-dropdown" class="dropdown-menu" style="
-                                                    bottom: 100%;
-                                                    top: auto;
-                                                    right: 0;
-                                                    margin-bottom: 0.5rem;
-                                                    min-width: 14rem;
-                                                "></div>
+                                        <div id="header-account-dropdown"
+                                            class="dropdown-menu sidebar-account-dropdown"></div>
                                     </div>
                                 </li>
                             </ul>
@@ -1261,7 +1228,7 @@
                         <line x1="3" y1="18" x2="21" y2="18"></line>
                     </svg>
                 </button>
-                <form class="search-bar" id="search-form" style="margin-left: max(1rem, auto)">
+                <form class="search-bar" id="search-form">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                         class="search-icon">
@@ -1286,13 +1253,8 @@
                 </div>
 
                 <section class="content-section" id="home-editors-picks-section-empty" style="margin-top: 0">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
-                        <h2 class="section-title" style="margin-bottom: 0">Editor's Picks</h2>
+                    <div class="section-head section-head-compact">
+                        <h2 class="section-title" style="margin-bottom: 0">Random Picks</h2>
                     </div>
                     <div class="card-grid" id="home-editors-picks-empty"></div>
                 </section>
@@ -1326,18 +1288,17 @@
                             Refresh with new tracks
                         </button>
                     </section>
-                    <section class="content-section">
-                        <div style="
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-between;
-                                    margin-bottom: 1rem;
-                                ">
-                            <h2 class="section-title" style="margin-bottom: 0">Recommended Artists</h2>
+                    <section class="content-section home-recommended-artists-section">
+                        <div class="section-head section-head-compact section-head-discovery">
+                            <div>
+                                <p class="section-eyebrow">Discover</p>
+                                <h2 class="section-title" style="margin-bottom: 0">Recommended Artists</h2>
+                                <p class="section-subtitle">Freshly tuned to your listening profile and auto-refreshed.</p>
+                            </div>
                         </div>
-                        <div class="card-grid" id="home-recommended-artists"></div>
+                        <div class="card-grid recommended-artists-grid" id="home-recommended-artists"></div>
                         <button class="btn-link" id="refresh-artists-btn" style="margin-top: var(--space-4)">
-                            Refresh with new tracks
+                            Refresh with new artists
                         </button>
                     </section>
                     <section class="content-section">
@@ -1362,13 +1323,8 @@
                         <div class="card-grid" id="home-recent-mixed"></div>
                     </section>
                     <section class="content-section" id="home-editors-picks-section">
-                        <div style="
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-between;
-                                    margin-bottom: 1rem;
-                                ">
-                            <h2 class="section-title" style="margin-bottom: 0">Editor's Picks</h2>
+                        <div class="section-head section-head-compact">
+                            <h2 class="section-title" style="margin-bottom: 0">Random Picks</h2>
                         </div>
                         <div class="card-grid" id="home-editors-picks"></div>
                     </section>
@@ -1583,6 +1539,61 @@
                     <div id="no-friends-message"
                         style="display: none; text-align: center; padding: 3rem; color: var(--muted-foreground)">
                         <p>No friends yet. Add some friends to start sharing music!</p>
+                    </div>
+                </section>
+
+                <section class="content-section" id="friends-discover-section" style="display: none">
+                    <div style="
+                                display: flex;
+                                align-items: center;
+                                justify-content: space-between;
+                                margin-bottom: 1rem;
+                            ">
+                        <h2 class="section-title" style="margin-bottom: 0">Discover People</h2>
+                    </div>
+                    <div class="friends-discover-panel">
+                        <input
+                            type="search"
+                            id="friends-discover-input"
+                            class="input"
+                            placeholder="Search username or display name"
+                            autocomplete="off"
+                            autocorrect="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                        />
+                        <div id="friends-suggestions-status" class="friends-suggestions-status">
+                            Type at least 2 characters to find people.
+                        </div>
+                        <div id="friends-suggestions-list" class="friends-suggestions-list"></div>
+                    </div>
+                </section>
+
+                <section class="content-section" id="friends-chat-section" style="display: none">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem">
+                        <h2 class="section-title" style="margin-bottom: 0">Music Chat</h2>
+                    </div>
+                    <div class="social-chat-layout">
+                        <aside class="social-chat-sidebar">
+                            <div id="friends-chat-list" class="social-chat-list"></div>
+                            <div id="friends-chat-empty" style="display: none; color: var(--muted-foreground); padding: 1rem">
+                                Add friends to start chatting.
+                            </div>
+                        </aside>
+                        <div class="social-chat-thread">
+                            <div class="social-chat-thread-header">
+                                <h3 id="friends-chat-thread-title">Select a friend</h3>
+                                <button id="friends-chat-thread-share" class="btn-secondary" style="display: none">Share URL</button>
+                            </div>
+                            <div id="friends-chat-messages" class="social-chat-messages"></div>
+                            <div id="friends-chat-thread-empty" class="social-chat-thread-empty">
+                                Select a friend to open a conversation.
+                            </div>
+                            <form id="friends-chat-form" class="social-chat-composer">
+                                <input type="text" id="friends-chat-input" class="input" placeholder="Send a message..." disabled />
+                                <button type="submit" id="friends-chat-send" class="btn-primary" disabled>Send</button>
+                            </form>
+                        </div>
                     </div>
                 </section>
 
@@ -2520,7 +2531,7 @@
                             </div>
                             <div class="setting-item">
                                 <div class="info">
-                                    <span class="label">Show Editor's Picks</span>
+                                    <span class="label">Show Random Picks</span>
                                     <span class="description">Display curated album selections on the home page</span>
                                 </div>
                                 <label class="toggle-switch">
@@ -2533,8 +2544,8 @@
                         <div class="settings-group">
                             <div class="setting-item">
                                 <div class="info">
-                                    <span class="label">Shuffle Editor's Picks</span>
-                                    <span class="description">Randomize the order of editor's picks on each load</span>
+                                    <span class="label">Shuffle Random Picks</span>
+                                    <span class="description">Randomize the order of random picks on each load</span>
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="shuffle-editors-picks-toggle" checked />
