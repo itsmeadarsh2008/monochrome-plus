@@ -1151,8 +1151,11 @@ kbd {
 
 .sidebar {
     grid-area: sidebar;
-    background:
-        linear-gradient(165deg, color-mix(in srgb, var(--card) 78%, transparent) 0%, color-mix(in srgb, var(--background) 92%, transparent) 100%);
+    background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--card) 78%, transparent) 0%,
+        color-mix(in srgb, var(--background) 92%, transparent) 100%
+    );
     backdrop-filter: blur(26px);
     border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     box-shadow:
@@ -1400,10 +1403,11 @@ kbd {
 }
 
 .sidebar-nav .nav-item a.active {
-    background:
-        linear-gradient(135deg,
-            color-mix(in srgb, var(--primary) 18%, transparent) 0%,
-            color-mix(in srgb, var(--primary) 9%, transparent) 100%);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--primary) 18%, transparent) 0%,
+        color-mix(in srgb, var(--primary) 9%, transparent) 100%
+    );
     color: var(--primary);
     border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
     box-shadow:
@@ -1441,10 +1445,11 @@ kbd {
     padding: 0.56rem 0.66rem;
     border-radius: 0.9rem;
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-    background:
-        linear-gradient(145deg,
-            color-mix(in srgb, var(--card) 92%, transparent) 0%,
-            color-mix(in srgb, var(--background) 96%, transparent) 100%);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--card) 92%, transparent) 0%,
+        color-mix(in srgb, var(--background) 96%, transparent) 100%
+    );
     color: var(--foreground);
     text-align: left;
     cursor: pointer;
@@ -1458,10 +1463,11 @@ kbd {
 .nav-btn-account:hover {
     transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
-    background:
-        linear-gradient(145deg,
-            color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
-            color-mix(in srgb, var(--card) 96%, transparent) 100%);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
+        color-mix(in srgb, var(--card) 96%, transparent) 100%
+    );
     box-shadow:
         0 8px 18px rgb(0, 0, 0, 0.16),
         inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
@@ -4682,16 +4688,20 @@ input:checked + .slider::before {
     height: min(48vh, 48vw);
     border-radius: var(--radius-full);
     background:
-        radial-gradient(circle at center,
+        radial-gradient(
+            circle at center,
             transparent 0 53%,
             rgb(255, 255, 255, 0.035) 60%,
             rgb(0, 0, 0, 0.18) 78%,
-            rgb(0, 0, 0, 0.52) 100%),
-        repeating-radial-gradient(circle at center,
+            rgb(0, 0, 0, 0.52) 100%
+        ),
+        repeating-radial-gradient(
+            circle at center,
             rgb(7, 7, 7, 0.95) 0,
             rgb(7, 7, 7, 0.95) 1px,
             rgb(17, 17, 17, 0.95) 2px,
-            rgb(9, 9, 9, 0.95) 3px),
+            rgb(9, 9, 9, 0.95) 3px
+        ),
         linear-gradient(180deg, #111 0%, #060606 100%);
     box-shadow:
         0 24px 60px rgb(0, 0, 0, 0.74),
@@ -4711,7 +4721,8 @@ input:checked + .slider::before {
     inset: 0;
     border-radius: var(--radius-full);
     background:
-        conic-gradient(from 12deg at 50% 50%,
+        conic-gradient(
+            from 12deg at 50% 50%,
             rgb(255, 255, 255, 0) 0deg,
             rgb(255, 255, 255, 0.06) 18deg,
             rgb(255, 255, 255, 0.3) 33deg,
@@ -4722,7 +4733,8 @@ input:checked + .slider::before {
             rgb(255, 255, 255, 0.24) 216deg,
             rgb(255, 255, 255, 0.05) 232deg,
             rgb(255, 255, 255, 0) 250deg,
-            rgb(255, 255, 255, 0) 360deg),
+            rgb(255, 255, 255, 0) 360deg
+        ),
         radial-gradient(circle at center, transparent 0 57%, rgb(0, 0, 0, 0.24) 80%, transparent 100%);
     mix-blend-mode: screen;
     pointer-events: none;
@@ -4741,7 +4753,12 @@ input:checked + .slider::before {
     width: 1.15%;
     height: 1.15%;
     border-radius: var(--radius-full);
-    background: radial-gradient(circle, rgb(255, 255, 255, 0.88) 0%, rgb(200, 200, 200, 0.62) 56%, rgb(120, 120, 120, 0.44) 100%);
+    background: radial-gradient(
+        circle,
+        rgb(255, 255, 255, 0.88) 0%,
+        rgb(200, 200, 200, 0.62) 56%,
+        rgb(120, 120, 120, 0.44) 100%
+    );
     box-shadow:
         0 0 0 1px rgb(255, 255, 255, 0.25),
         0 0 4px rgb(0, 0, 0, 0.45);
@@ -6108,12 +6125,13 @@ input:checked + .slider::before {
 }
 
 .now-playing-bar .cover.rotating::before {
-    background:
-        repeating-radial-gradient(circle at center,
-            rgb(255, 255, 255, 0.06) 0,
-            rgb(255, 255, 255, 0.06) 1px,
-            transparent 2px,
-            transparent 3.5px);
+    background: repeating-radial-gradient(
+        circle at center,
+        rgb(255, 255, 255, 0.06) 0,
+        rgb(255, 255, 255, 0.06) 1px,
+        transparent 2px,
+        transparent 3.5px
+    );
     mix-blend-mode: soft-light;
     opacity: 0.45;
 }
@@ -8609,7 +8627,11 @@ textarea:focus {
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     background:
         radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 55%),
-        linear-gradient(155deg, color-mix(in srgb, var(--card) 86%, transparent) 0%, color-mix(in srgb, var(--background) 94%, transparent) 100%);
+        linear-gradient(
+            155deg,
+            color-mix(in srgb, var(--card) 86%, transparent) 0%,
+            color-mix(in srgb, var(--background) 94%, transparent) 100%
+        );
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
@@ -8622,8 +8644,11 @@ textarea:focus {
 /* Recommended artist cards */
 .card.artist-circular {
     position: relative;
-    background:
-        linear-gradient(165deg, color-mix(in srgb, var(--card) 86%, transparent) 0%, color-mix(in srgb, var(--background) 94%, transparent) 100%);
+    background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--card) 86%, transparent) 0%,
+        color-mix(in srgb, var(--background) 94%, transparent) 100%
+    );
     border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
     border-radius: 1rem;
     padding: 0.7rem;
@@ -9390,7 +9415,6 @@ textarea:focus {
     font-weight: 800;
     letter-spacing: -0.02em;
     background: linear-gradient(to bottom, var(--foreground), color-mix(in srgb, var(--foreground) 70%, transparent));
-    background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0;

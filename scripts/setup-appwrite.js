@@ -69,7 +69,7 @@ const collections = [
         indexes: [
             { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
             { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
-        ]
+        ],
     },
     {
         id: 'DB_friend_requests',
@@ -133,7 +133,7 @@ const collections = [
             { key: 'idx_chat_created', attributes: ['created_at'], type: 'key' },
             { key: 'idx_chat_read', attributes: ['read'], type: 'key' },
         ],
-    }
+    },
 ];
 
 async function setup() {
@@ -206,7 +206,14 @@ async function setup() {
                             attr.default
                         );
                     } else {
-                        await databases.createIntegerAttribute(DATABASE_ID, col.id, attr.key, attr.required, null, null);
+                        await databases.createIntegerAttribute(
+                            DATABASE_ID,
+                            col.id,
+                            attr.key,
+                            attr.required,
+                            null,
+                            null
+                        );
                     }
                 }
                 // Add sleep to avoid rate limits on cloud

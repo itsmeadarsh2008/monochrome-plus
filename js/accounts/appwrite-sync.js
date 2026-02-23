@@ -179,8 +179,8 @@ const syncManager = {
         const artists = Array.isArray(track.artists)
             ? track.artists.map((artist) => toArtistRef(artist)).filter(Boolean)
             : primaryArtist
-                ? [primaryArtist]
-                : [];
+              ? [primaryArtist]
+              : [];
 
         return {
             id: track.id ?? null,
@@ -217,8 +217,7 @@ const syncManager = {
                 return { serialized, kept: keepCount, total: normalized.length };
             }
 
-            keepCount =
-                keepCount > 250 ? keepCount - 50 : keepCount > 120 ? keepCount - 25 : keepCount - 10;
+            keepCount = keepCount > 250 ? keepCount - 50 : keepCount > 120 ? keepCount - 25 : keepCount - 10;
         }
 
         return { serialized: '[]', kept: 0, total: normalized.length };
@@ -266,13 +265,14 @@ const syncManager = {
             }
 
             const usernameSeed = user.name || user.email?.split('@')[0] || 'user';
-            const username = usernameSeed
-                .toLowerCase()
-                .replace(/[^a-z0-9_.-]/g, '.')
-                .replace(/\.+/g, '.')
-                .replace(/^\./, '')
-                .replace(/\.$/, '')
-                .slice(0, 40) || 'user';
+            const username =
+                usernameSeed
+                    .toLowerCase()
+                    .replace(/[^a-z0-9_.-]/g, '.')
+                    .replace(/\.+/g, '.')
+                    .replace(/^\./, '')
+                    .replace(/\.$/, '')
+                    .slice(0, 40) || 'user';
 
             const displayName = user.name || user.email?.split('@')[0] || 'User';
 
@@ -726,17 +726,11 @@ const syncManager = {
                 return await databases.updateDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, existing.$id, payload);
             }
 
-            return await databases.createDocument(
-                DATABASE_ID,
-                PUBLIC_PLAYLISTS_COLLECTION,
-                ID.unique(),
-                payload,
-                [
-                    Permission.read(Role.any()),
-                    Permission.update(Role.user(user.$id)),
-                    Permission.delete(Role.user(user.$id)),
-                ]
-            );
+            return await databases.createDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, ID.unique(), payload, [
+                Permission.read(Role.any()),
+                Permission.update(Role.user(user.$id)),
+                Permission.delete(Role.user(user.$id)),
+            ]);
         } catch (error) {
             console.error('[Appwrite Sync] Failed to publish playlist:', error);
             throw error;
@@ -755,9 +749,7 @@ const syncManager = {
             ]);
 
             await Promise.allSettled(
-                res.documents.map((doc) =>
-                    databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id)
-                )
+                res.documents.map((doc) => databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id))
             );
         } catch (error) {
             if (error?.code !== 404) {
@@ -1140,15 +1132,15 @@ const syncManager = {
         if (!user || !withUserId) return;
 
         const messages =
-            existingMessages && Array.isArray(existingMessages) ? existingMessages : await this.listChatMessages(withUserId, { markRead: false });
+            existingMessages && Array.isArray(existingMessages)
+                ? existingMessages
+                : await this.listChatMessages(withUserId, { markRead: false });
 
         const unread = messages.filter((msg) => msg.receiverId === user.$id && !msg.read);
         if (!unread.length) return;
 
         await Promise.allSettled(
-            unread.map((msg) =>
-                databases.updateDocument(DATABASE_ID, CHAT_MESSAGES_COLLECTION, msg.id, { read: true })
-            )
+            unread.map((msg) => databases.updateDocument(DATABASE_ID, CHAT_MESSAGES_COLLECTION, msg.id, { read: true }))
         );
     },
 
@@ -1186,7 +1178,9 @@ const syncManager = {
                     allReq.onsuccess = () => {
                         const existing = allReq.result || [];
                         const existingPublicById = new Map(
-                            existing.filter((playlist) => playlist?.isPublic && playlist?.id).map((playlist) => [playlist.id, playlist])
+                            existing
+                                .filter((playlist) => playlist?.isPublic && playlist?.id)
+                                .map((playlist) => [playlist.id, playlist])
                         );
                         const incomingById = new Map(cloudPlaylists.map((playlist) => [playlist.id, playlist]));
 
@@ -1207,7 +1201,8 @@ const syncManager = {
 
                             if (
                                 !existingPlaylist ||
-                                this._playlistSyncSignature(existingPlaylist) !== this._playlistSyncSignature(mergedPlaylist)
+                                this._playlistSyncSignature(existingPlaylist) !==
+                                    this._playlistSyncSignature(mergedPlaylist)
                             ) {
                                 store.put(mergedPlaylist);
                                 changed = true;
@@ -1545,10 +1540,11 @@ const syncManager = {
                 );
 
                 try {
-                    const existingCloudPlaylists = await databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
-                        Query.equal('owner_id', authManager.user.$id),
-                        Query.limit(300),
-                    ]);
+                    const existingCloudPlaylists = await databases.listDocuments(
+                        DATABASE_ID,
+                        PUBLIC_PLAYLISTS_COLLECTION,
+                        [Query.equal('owner_id', authManager.user.$id), Query.limit(300)]
+                    );
 
                     await Promise.allSettled(
                         existingCloudPlaylists.documents
