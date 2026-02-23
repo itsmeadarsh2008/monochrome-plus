@@ -2697,11 +2697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 if (sidebarAccountName) {
                     sidebarAccountName.textContent =
-                        data?.profile?.display_name ||
-                        data?.profile?.username ||
-                        user.name ||
-                        user.email ||
-                        'Account';
+                        data?.profile?.display_name || data?.profile?.username || user.name || user.email || 'Account';
                 }
                 if (sidebarAccountSubtitle) {
                     sidebarAccountSubtitle.textContent = data?.profile?.username

@@ -1387,8 +1387,10 @@ export class UIRenderer {
         document.querySelectorAll('.sidebar-nav a').forEach((link) => {
             const targetPath = link.pathname;
             const isHome = targetPath === '/' && (currentPath === '/' || currentPath === '/home');
-            const isProfile = targetPath === '/profile' && (currentPath === '/profile' || currentPath.startsWith('/user/@'));
-            const isMatch = targetPath !== '/' && (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`));
+            const isProfile =
+                targetPath === '/profile' && (currentPath === '/profile' || currentPath.startsWith('/user/@'));
+            const isMatch =
+                targetPath !== '/' && (currentPath === targetPath || currentPath.startsWith(`${targetPath}/`));
             link.classList.toggle('active', isHome || isProfile || isMatch);
         });
 
@@ -2036,12 +2038,12 @@ export class UIRenderer {
                     const payload = await picksResponse.json();
                     const picksArtists = Array.isArray(payload)
                         ? payload
-                            .filter((item) => item?.artist?.id && item?.artist?.name)
-                            .map((item) => ({
-                                id: item.artist.id,
-                                name: item.artist.name,
-                                picture: item.artist.picture || null,
-                            }))
+                              .filter((item) => item?.artist?.id && item?.artist?.name)
+                              .map((item) => ({
+                                  id: item.artist.id,
+                                  name: item.artist.name,
+                                  picture: item.artist.picture || null,
+                              }))
                         : [];
                     fallbackArtists = picksArtists;
                 }
@@ -2255,7 +2257,7 @@ export class UIRenderer {
 
             try {
                 const response = await fetch('/editors-picks.json');
-                if (!response.ok) throw new Error("Failed to load random picks");
+                if (!response.ok) throw new Error('Failed to load random picks');
 
                 let items = await response.json();
 
@@ -2414,9 +2416,7 @@ export class UIRenderer {
                 if (seedArtists.length === 0) {
                     const fallbackArtists = await this._loadFallbackRecommendedArtists();
                     if (fallbackArtists.length > 0) {
-                        fallbackArtists.forEach((artist) =>
-                            seedArtists.push({ ...artist, score: 1 })
-                        );
+                        fallbackArtists.forEach((artist) => seedArtists.push({ ...artist, score: 1 }));
                     } else {
                         artistsContainer.innerHTML = createPlaceholder(
                             'Play more tracks to get artist recommendations from your recent history.'
@@ -2488,9 +2488,9 @@ export class UIRenderer {
 
                 const hydratedArtists = await this._hydrateArtistsForProvider(rankedArtists, provider, 30);
                 const filteredArtists = await this.filterUserContent(hydratedArtists, 'artist');
-                const renderableArtists = (
-                    filteredArtists.length > 0 ? filteredArtists : hydratedArtists
-                ).filter((artist) => artist && artist.id);
+                const renderableArtists = (filteredArtists.length > 0 ? filteredArtists : hydratedArtists).filter(
+                    (artist) => artist && artist.id
+                );
 
                 if (renderableArtists.length > 0) {
                     const displayArtists = renderableArtists.slice(0, 12);
@@ -4402,8 +4402,9 @@ export class UIRenderer {
         const routeUsername = this._getFriendsChatUsername(routeParam);
         const routeRequested = !!routeUsername;
         let activeFriend =
-            friendsList.find((friend) => friend.username && friend.username.toLowerCase() === routeUsername?.toLowerCase()) ||
-            null;
+            friendsList.find(
+                (friend) => friend.username && friend.username.toLowerCase() === routeUsername?.toLowerCase()
+            ) || null;
 
         if (!activeFriend && !routeRequested && this._friendsActiveChatUid) {
             activeFriend = friendsList.find((friend) => friend.uid === this._friendsActiveChatUid) || null;
@@ -4524,7 +4525,9 @@ export class UIRenderer {
                       db.getIncomingFriendRequests(),
                       db
                           .getFriendRequests()
-                          .then((requests) => requests.filter((request) => request.outgoing && request.status === 'pending')),
+                          .then((requests) =>
+                              requests.filter((request) => request.outgoing && request.status === 'pending')
+                          ),
                       db.getSharedTracks(),
                       db.getCollaborativePlaylists(),
                   ]);
@@ -4627,9 +4630,7 @@ export class UIRenderer {
                 const tempContainer = document.createElement('div');
                 this.renderListWithTracks(
                     tempContainer,
-                    sharedTracks
-                        .map((shared) => shared.track)
-                        .filter((track) => track && typeof track === 'object'),
+                    sharedTracks.map((shared) => shared.track).filter((track) => track && typeof track === 'object'),
                     true
                 );
                 sharedTracksList.innerHTML = tempContainer.innerHTML;
