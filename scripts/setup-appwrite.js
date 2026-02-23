@@ -66,14 +66,6 @@ const collections = [
             { key: 'tracks', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'is_public', type: 'boolean', required: false, default: true },
         ],
-<<<<<<< HEAD
-        indexes: [
-            { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
-            { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
-        ],
-    },
-];
-=======
         indexes: [
             { key: 'idx_playlist_id', attributes: ['id'], type: 'key' },
             { key: 'idx_owner', attributes: ['owner_id'], type: 'key' },
@@ -143,7 +135,6 @@ const collections = [
         ],
     }
 ];
->>>>>>> 1e33a40 (major update)
 
 async function setup() {
     try {
@@ -173,24 +164,6 @@ async function setup() {
             const existingAttrRes = await databases.listAttributes(DATABASE_ID, col.id);
             const existingKeys = existingAttrRes.attributes.map((a) => a.key);
 
-<<<<<<< HEAD
-            for (const attr of col.attributes) {
-                if (existingKeys.includes(attr.key)) continue;
-
-                console.log(`   Adding attribute "${attr.key}" to "${col.id}"...`);
-                if (attr.type === 'string') {
-                    await databases.createStringAttribute(
-                        DATABASE_ID,
-                        col.id,
-                        attr.key,
-                        attr.size,
-                        attr.required,
-                        attr.default
-                    );
-                } else if (attr.type === 'boolean') {
-                    await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, attr.required, attr.default);
-                }
-=======
             for (const attr of col.attributes) {
                 if (existingKeys.includes(attr.key)) continue;
 
@@ -236,7 +209,6 @@ async function setup() {
                         await databases.createIntegerAttribute(DATABASE_ID, col.id, attr.key, attr.required, null, null);
                     }
                 }
->>>>>>> 1e33a40 (major update)
                 // Add sleep to avoid rate limits on cloud
                 await new Promise((r) => setTimeout(r, 1000));
             }

@@ -251,11 +251,6 @@ const syncManager = {
         }
 
         try {
-<<<<<<< HEAD
-            const response = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
-                Query.equal('firebase_id', user.$id),
-            ]);
-=======
             const response = await this._withRetry(
                 () =>
                     databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
@@ -264,7 +259,6 @@ const syncManager = {
                     ]),
                 { label: 'get user record' }
             );
->>>>>>> 1e33a40 (major update)
 
             if (response.documents.length > 0) {
                 this._userRecordCache = response.documents[0];
@@ -282,26 +276,6 @@ const syncManager = {
 
             const displayName = user.name || user.email?.split('@')[0] || 'User';
 
-<<<<<<< HEAD
-            console.log('[Appwrite Sync] Creating new user record for:', user.$id, { username, displayName });
-
-            const newRecord = await databases.createDocument(DATABASE_ID, USERS_COLLECTION, ID.unique(), {
-                firebase_id: user.$id,
-                library: '{}',
-                history: '[]',
-                user_playlists: '{}',
-                user_folders: '{}',
-                username: username,
-                display_name: displayName,
-                avatar_url: user.prefs?.avatar || '',
-            });
-            this._userRecordCache = newRecord;
-            return newRecord;
-        } catch (error) {
-            if (error.code === 404) {
-                console.error(
-                    '[Appwrite Sync] ❌ Database or Collection NOT FOUND. Please run "node scripts/setup-appwrite.js" with your API Key to initialize the infrastructure.'
-=======
             const newRecord = await this._withRetry(
                 () =>
                     databases.createDocument(DATABASE_ID, USERS_COLLECTION, ID.unique(), {
@@ -325,7 +299,6 @@ const syncManager = {
             if (error?.code === 404) {
                 console.error(
                     '[Appwrite Sync] Database or collection missing. Run "node scripts/setup-appwrite.js" with APPWRITE_API_KEY.'
->>>>>>> 1e33a40 (major update)
                 );
             } else {
                 console.error('[Appwrite Sync] Failed to get/create user record:', error);
@@ -366,28 +339,10 @@ const syncManager = {
 
         console.log('[Appwrite Sync] User record found:', record.$id, { username: record.username });
 
-<<<<<<< HEAD
-        const parseSet = (val, fallback) => {
-            if (!val) return fallback;
-            if (typeof val !== 'string') return val;
-            try {
-                return JSON.parse(val);
-            } catch {
-                return fallback;
-            }
-        };
-
-        const library = parseSet(record.library, {});
-        const history = parseSet(record.history, []);
-        const userPlaylists = parseSet(record.user_playlists, {});
-        const userFolders = parseSet(record.user_folders, {});
-        const favoriteAlbums = parseSet(record.favorite_albums, []);
-=======
         const library = this._safeObject(record.library, {});
         const history = this._safeArray(record.history, []);
         const userPlaylists = this._safeObject(record.user_playlists, {});
         const userFolders = this._safeObject(record.user_folders, {});
->>>>>>> 1e33a40 (major update)
 
         const profile = {
             username: record.username,
@@ -415,12 +370,6 @@ const syncManager = {
 
         console.log('[Appwrite Sync] Fetching profile for:', username);
         try {
-<<<<<<< HEAD
-            const stringified = typeof data === 'string' ? data : JSON.stringify(data);
-            const updated = await databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, {
-                [field]: stringified,
-            });
-=======
             const res = await this._withRetry(
                 () =>
                     databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
@@ -466,7 +415,6 @@ const syncManager = {
                 () => databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, updateData),
                 { label: 'update profile' }
             );
->>>>>>> 1e33a40 (major update)
             this._userRecordCache = updated;
             console.log('[Appwrite Sync] Profile updated successfully');
             return updated;
@@ -624,31 +572,12 @@ const syncManager = {
 
     async syncLibraryItem(type, item, added) {
         const record = await this._getUserRecord();
-<<<<<<< HEAD
-        if (!record) return;
-
-        const parseSet = (val, fallback) => {
-            if (!val) return fallback;
-            if (typeof val !== 'string') return val;
-            try {
-                return JSON.parse(val);
-            } catch {
-                return fallback;
-            }
-        };
-
-        let library = parseSet(record.library, {});
-=======
         if (!record || !item) return;
->>>>>>> 1e33a40 (major update)
 
         const library = this._safeObject(record.library, {});
         const pluralType = type === 'mix' ? 'mixes' : `${type}s`;
         const key = type === 'playlist' ? item.uuid || item.id : item.id;
-<<<<<<< HEAD
-=======
         if (!key) return;
->>>>>>> 1e33a40 (major update)
 
         if (!library[pluralType] || typeof library[pluralType] !== 'object') {
             library[pluralType] = {};
@@ -660,62 +589,6 @@ const syncManager = {
             delete library[pluralType][key];
         }
 
-<<<<<<< HEAD
-        await this._updateUserJSON(null, 'library', library);
-    },
-
-    _minifyItem(type, item) {
-        if (!item) return item;
-
-        const base = {
-            id: item.id,
-            addedAt: item.addedAt || Date.now(),
-        };
-
-        if (type === 'track') {
-            return {
-                ...base,
-                title: item.title || null,
-                duration: item.duration || null,
-                explicit: item.explicit || false,
-                artist: item.artist || (item.artists && item.artists.length > 0 ? item.artists[0] : null) || null,
-                artists: item.artists?.map((a) => ({ id: a.id, name: a.name || null })) || [],
-                album: item.album
-                    ? { id: item.album.id, title: item.album.title || null, cover: item.album.cover || null }
-                    : null,
-            };
-        }
-
-        return base;
-    },
-
-    async getProfile(username) {
-        // Optimization: if requesting the current user's profile, use the cache if available
-        if (this._userRecordCache && this._userRecordCache.username === username) {
-            console.log('[Appwrite Sync] Returning cached profile for:', username);
-            return this._userRecordCache;
-        }
-
-        console.log('[Appwrite Sync] Fetching profile for:', username);
-        try {
-            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
-                Query.equal('username', username),
-            ]);
-            if (res.documents.length === 0) {
-                console.warn('[Appwrite Sync] No profile found for username:', username);
-                return null;
-            }
-            const record = res.documents[0];
-            console.log('[Appwrite Sync] Profile found:', record.$id);
-            const parseSet = (val, fallback) => {
-                if (!val) return fallback;
-                if (typeof val !== 'string') return val;
-                try {
-                    return JSON.parse(val);
-                } catch {
-                    return fallback;
-                }
-=======
         try {
             await this._updateUserJSON(null, 'library', library);
         } catch {
@@ -846,7 +719,6 @@ const syncManager = {
                 cover: playlist.cover || '',
                 tracks: tracksPayload.serialized,
                 is_public: true,
->>>>>>> 1e33a40 (major update)
             };
 
             const existing = await this._findPublicPlaylistDoc(playlistId);
@@ -960,13 +832,8 @@ const syncManager = {
             throw new Error('You are already friends.');
         }
 
-<<<<<<< HEAD
-        try {
-            const updated = await databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, updateData);
-=======
         const myProfile = currentData?.profile || {};
         const now = Date.now();
->>>>>>> 1e33a40 (major update)
 
         await databases.createDocument(
             DATABASE_ID,
@@ -996,35 +863,16 @@ const syncManager = {
         );
     },
 
-<<<<<<< HEAD
-    async isUsernameTaken(username) {
-        try {
-            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
-                Query.equal('username', username),
-            ]);
-            return res.total > 0;
-        } catch (e) {
-            return false;
-        }
-    },
-=======
     async listIncomingFriendRequests() {
         const user = authManager.user;
         if (!user) return [];
->>>>>>> 1e33a40 (major update)
 
         try {
-<<<<<<< HEAD
-            const res = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
-                Query.or([Query.contains('username', query), Query.contains('display_name', query)]),
-                Query.limit(10),
-=======
             const res = await databases.listDocuments(DATABASE_ID, FRIEND_REQUESTS_COLLECTION, [
                 Query.equal('receiver_id', user.$id),
                 Query.equal('status', 'pending'),
                 Query.orderDesc('created_at'),
                 Query.limit(100),
->>>>>>> 1e33a40 (major update)
             ]);
 
             return res.documents.map((doc) => ({

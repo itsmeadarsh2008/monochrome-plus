@@ -1041,13 +1041,9 @@ async function fetchFallbackArtistImage(artistName, imgId) {
                 if (imgEl) imgEl.src = newUrl;
             }
         }
-<<<<<<< HEAD
-    } catch (e) {}
-=======
     } catch {
         // Ignore fallback image lookup failures.
     }
->>>>>>> 1e33a40 (major update)
 }
 
 async function fetchLastFmRecentTracks(username) {
