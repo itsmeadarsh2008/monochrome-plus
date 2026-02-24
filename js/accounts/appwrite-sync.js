@@ -845,12 +845,10 @@ const syncManager = {
                 updated_at: now,
             },
             [
-                Permission.read(Role.user(user.$id)),
-                Permission.read(Role.user(targetProfile.firebase_id)),
-                Permission.update(Role.user(user.$id)),
-                Permission.update(Role.user(targetProfile.firebase_id)),
+                // Client SDK cannot grant per-user document access for another user id.
+                Permission.read(Role.users()),
+                Permission.update(Role.users()),
                 Permission.delete(Role.user(user.$id)),
-                Permission.delete(Role.user(targetProfile.firebase_id)),
             ]
         );
     },
@@ -1038,12 +1036,10 @@ const syncManager = {
         };
 
         const created = await databases.createDocument(DATABASE_ID, CHAT_MESSAGES_COLLECTION, ID.unique(), payload, [
-            Permission.read(Role.user(user.$id)),
-            Permission.read(Role.user(toUserId)),
-            Permission.update(Role.user(user.$id)),
-            Permission.update(Role.user(toUserId)),
+            // Client SDK cannot grant per-user document access for another user id.
+            Permission.read(Role.users()),
+            Permission.update(Role.users()),
             Permission.delete(Role.user(user.$id)),
-            Permission.delete(Role.user(toUserId)),
         ]);
         return this._mapChatMessage(created);
     },
