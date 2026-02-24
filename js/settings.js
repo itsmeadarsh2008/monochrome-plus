@@ -963,7 +963,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 imageQualitySelect.value = performanceMode.getSetting('imageQuality');
             }
 
-            const modeAnimationIntensity = normalizeAnimationIntensity(performanceMode.getSetting('animationIntensity'));
+            const modeAnimationIntensity = normalizeAnimationIntensity(
+                performanceMode.getSetting('animationIntensity')
+            );
             animationSettings.setIntensity(modeAnimationIntensity);
             applyAnimationIntensity(modeAnimationIntensity);
             if (animationIntensitySelect) {
