@@ -1793,6 +1793,25 @@ kbd {
     z-index: 1;
 }
 
+/* Main header search: place clear button to the right of the bar (outside input). */
+#search-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+#search-form input {
+    padding-right: 0.9rem;
+}
+
+#search-form .search-clear-btn {
+    position: static;
+    transform: none;
+    right: auto;
+    top: auto;
+}
+
 body.has-page-background .search-bar input {
     background-color: var(--background);
 }
