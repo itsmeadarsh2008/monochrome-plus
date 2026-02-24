@@ -154,10 +154,7 @@ export class Player {
 
         const seedSignature = seedTracks.map((track) => String(track.id || '')).join('|');
         const now = Date.now();
-        if (
-            seedSignature === this._autoMixLastSeedSignature &&
-            now - this._autoMixLastPopulateAt < 15000
-        ) {
+        if (seedSignature === this._autoMixLastSeedSignature && now - this._autoMixLastPopulateAt < 15000) {
             return 0;
         }
 

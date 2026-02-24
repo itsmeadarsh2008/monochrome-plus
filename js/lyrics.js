@@ -1336,11 +1336,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     };
 
     const shouldRunHaptics = () => {
-        return (
-            hapticsEnabled &&
-            typeof navigator.vibrate === 'function' &&
-            document.visibilityState === 'visible'
-        );
+        return hapticsEnabled && typeof navigator.vibrate === 'function' && document.visibilityState === 'visible';
     };
 
     const sampleRhythmEnergy = (now) => {

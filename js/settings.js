@@ -793,7 +793,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
         gaplessPlaybackToggle.checked = playbackBehaviorSettings.isGaplessEnabled();
         gaplessPlaybackToggle.addEventListener('change', (e) => {
             playbackBehaviorSettings.setGaplessEnabled(e.target.checked);
-            window.dispatchEvent(new CustomEvent('gapless-playback-changed', { detail: { enabled: e.target.checked } }));
+            window.dispatchEvent(
+                new CustomEvent('gapless-playback-changed', { detail: { enabled: e.target.checked } })
+            );
         });
     }
 
