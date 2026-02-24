@@ -416,6 +416,7 @@ export const nowPlayingSettings = {
 
 export const lyricsSettings = {
     DOWNLOAD_WITH_TRACKS: 'lyrics-download-with-tracks',
+    HAPTIC_SYNC_KEY: 'lyrics-haptic-sync',
 
     shouldDownloadLyrics() {
         try {
@@ -427,6 +428,19 @@ export const lyricsSettings = {
 
     setDownloadLyrics(enabled) {
         localStorage.setItem(this.DOWNLOAD_WITH_TRACKS, enabled ? 'true' : 'false');
+    },
+
+    isHapticSyncEnabled() {
+        try {
+            // Default to true if not set
+            return localStorage.getItem(this.HAPTIC_SYNC_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setHapticSyncEnabled(enabled) {
+        localStorage.setItem(this.HAPTIC_SYNC_KEY, enabled ? 'true' : 'false');
     },
 };
 
@@ -542,15 +556,31 @@ export const coverArtSizeSettings = {
 
 export const rotatingCoverSettings = {
     STORAGE_KEY: 'rotating-cover-enabled',
+    DISC_SCRATCH_KEY: 'rotating-cover-disc-scratch-enabled',
+
     isEnabled() {
         try {
-            return localStorage.getItem(this.STORAGE_KEY) === 'true';
+            // Default to true if not set
+            return localStorage.getItem(this.STORAGE_KEY) !== 'false';
         } catch {
-            return false;
+            return true;
         }
     },
     setEnabled(enabled) {
         localStorage.setItem(this.STORAGE_KEY, enabled ? 'true' : 'false');
+    },
+
+    isDiscScratchEnabled() {
+        try {
+            // Default to true if not set
+            return localStorage.getItem(this.DISC_SCRATCH_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setDiscScratchEnabled(enabled) {
+        localStorage.setItem(this.DISC_SCRATCH_KEY, enabled ? 'true' : 'false');
     },
 };
 
@@ -2584,7 +2614,7 @@ export const animationSettings = {
     STORAGE_KEY: 'animation-settings',
 
     defaultSettings: {
-        intensity: 'normal', // 'none', 'reduced', 'normal', 'enhanced'
+        intensity: 'normal', // 'none', 'reduced', 'normal', 'enhanced', 'ultra'
         cardHover: true,
         pageTransitions: true,
         listStagger: true,
@@ -2605,13 +2635,28 @@ export const animationSettings = {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
     },
 
+    normalizeIntensity(intensity) {
+        const value = String(intensity || 'normal').toLowerCase();
+        const aliasMap = {
+            full: 'enhanced',
+            minimal: 'reduced',
+        };
+        const normalized = aliasMap[value] || value;
+
+        if (['none', 'reduced', 'normal', 'enhanced', 'ultra'].includes(normalized)) {
+            return normalized;
+        }
+
+        return 'normal';
+    },
+
     getIntensity() {
-        return this.getSettings().intensity;
+        return this.normalizeIntensity(this.getSettings().intensity);
     },
 
     setIntensity(intensity) {
         const settings = this.getSettings();
-        settings.intensity = intensity;
+        settings.intensity = this.normalizeIntensity(intensity);
         this.setSettings(settings);
     },
 

@@ -869,6 +869,81 @@ export function initializeSettings(scrobbler, player, api, ui) {
         playbackSpeedInput.addEventListener('blur', handleInputChange);
     }
 
+    const normalizeAnimationIntensity = (intensity) => {
+        if (animationSettings && typeof animationSettings.normalizeIntensity === 'function') {
+            return animationSettings.normalizeIntensity(intensity);
+        }
+
+        const value = String(intensity || 'normal').toLowerCase();
+        const aliasMap = {
+            full: 'enhanced',
+            minimal: 'reduced',
+        };
+        const normalized = aliasMap[value] || value;
+
+        if (['none', 'reduced', 'normal', 'enhanced', 'ultra'].includes(normalized)) {
+            return normalized;
+        }
+
+        return 'normal';
+    };
+
+    const isStandalonePWA = () => {
+        const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        const displayModeFullscreen = window.matchMedia('(display-mode: fullscreen)').matches;
+        const iosStandalone = window.navigator.standalone === true;
+        const trustedWebActivity = document.referrer.startsWith('android-app://');
+        return displayModeStandalone || displayModeFullscreen || iosStandalone || trustedWebActivity;
+    };
+
+    const applyAnimationIntensity = (rawIntensity) => {
+        const intensity = normalizeAnimationIntensity(rawIntensity);
+        const root = document.documentElement;
+
+        root.classList.remove(
+            'animations-none',
+            'animations-reduced',
+            'animations-enhanced',
+            'animations-ultra',
+            'animations-full',
+            'animations-minimal'
+        );
+
+        if (intensity !== 'normal') {
+            root.classList.add(`animations-${intensity}`);
+        }
+
+        const multipliers = {
+            none: 0,
+            reduced: 0.7,
+            normal: 1,
+            enhanced: 1.15,
+            ultra: 1.22,
+        };
+        root.style.setProperty('--animation-multiplier', String(multipliers[intensity] || 1));
+
+        const thermalAdaptiveUltra =
+            intensity === 'ultra' && isStandalonePWA() && window.matchMedia('(pointer: coarse)').matches;
+        root.classList.toggle('thermal-adaptive', thermalAdaptiveUltra);
+
+        if (intensity === 'ultra') {
+            root.style.setProperty('--motion-wave-amplitude', thermalAdaptiveUltra ? '3px' : '5px');
+            root.style.setProperty('--motion-wave-duration', thermalAdaptiveUltra ? '7.5s' : '5.8s');
+            root.style.setProperty('--dynamic-gradient-duration', thermalAdaptiveUltra ? '26s' : '18s');
+            root.style.setProperty('--ultra-cover-blur-radius', thermalAdaptiveUltra ? '32px' : '44px');
+            root.style.setProperty('--surface-blur', thermalAdaptiveUltra ? '12px' : '18px');
+        } else {
+            root.style.removeProperty('--motion-wave-amplitude');
+            root.style.removeProperty('--motion-wave-duration');
+            root.style.removeProperty('--dynamic-gradient-duration');
+            root.style.removeProperty('--ultra-cover-blur-radius');
+            root.style.removeProperty('--surface-blur');
+            root.classList.remove('thermal-adaptive');
+        }
+
+        return intensity;
+    };
+
     // ========================================
     // Performance Mode Settings
     // ========================================
@@ -886,6 +961,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
             }
             if (imageQualitySelect) {
                 imageQualitySelect.value = performanceMode.getSetting('imageQuality');
+            }
+
+            const modeAnimationIntensity = normalizeAnimationIntensity(performanceMode.getSetting('animationIntensity'));
+            animationSettings.setIntensity(modeAnimationIntensity);
+            applyAnimationIntensity(modeAnimationIntensity);
+            if (animationIntensitySelect) {
+                animationIntensitySelect.value = modeAnimationIntensity;
             }
         });
     }
@@ -915,29 +997,17 @@ export function initializeSettings(scrobbler, player, api, ui) {
     const pageTransitionsToggle = document.getElementById('page-transitions-toggle');
     const rippleEffectsToggle = document.getElementById('ripple-effects-toggle');
 
-    const applyAnimationIntensity = (intensity) => {
-        const root = document.documentElement;
-        root.classList.remove('animations-none', 'animations-reduced', 'animations-enhanced');
-
-        if (intensity !== 'normal') {
-            root.classList.add(`animations-${intensity}`);
-        }
-
-        // Update CSS custom property for animation duration multiplier
-        const multipliers = {
-            none: 0,
-            reduced: 0.5,
-            normal: 1,
-            enhanced: 1.5,
-        };
-        root.style.setProperty('--animation-multiplier', String(multipliers[intensity] || 1));
-    };
-
     if (animationIntensitySelect) {
-        animationIntensitySelect.value = animationSettings.getIntensity();
+        const initialIntensity = normalizeAnimationIntensity(animationSettings.getIntensity());
+        animationSettings.setIntensity(initialIntensity);
+        animationIntensitySelect.value = initialIntensity;
+        applyAnimationIntensity(initialIntensity);
+
         animationIntensitySelect.addEventListener('change', (e) => {
-            animationSettings.setIntensity(e.target.value);
-            applyAnimationIntensity(e.target.value);
+            const normalized = normalizeAnimationIntensity(e.target.value);
+            animationSettings.setIntensity(normalized);
+            e.target.value = normalized;
+            applyAnimationIntensity(normalized);
         });
     }
 
@@ -2125,6 +2195,16 @@ export function initializeSettings(scrobbler, player, api, ui) {
         });
     }
 
+    // Lyrics Haptic Sync Toggle
+    const lyricsHapticSyncToggle = document.getElementById('lyrics-haptic-sync-toggle');
+    if (lyricsHapticSyncToggle) {
+        lyricsHapticSyncToggle.checked = lyricsSettings.isHapticSyncEnabled();
+        lyricsHapticSyncToggle.addEventListener('change', (e) => {
+            lyricsSettings.setHapticSyncEnabled(e.target.checked);
+            window.dispatchEvent(new CustomEvent('lyrics-haptics-changed', { detail: { enabled: e.target.checked } }));
+        });
+    }
+
     // Album Background Toggle
     const albumBackgroundToggle = document.getElementById('album-background-toggle');
     if (albumBackgroundToggle) {
@@ -2386,6 +2466,17 @@ export function initializeSettings(scrobbler, player, api, ui) {
         rotatingCoverToggle.addEventListener('change', (e) => {
             rotatingCoverSettings.setEnabled(e.target.checked);
             window.dispatchEvent(new CustomEvent('rotating-cover-changed', { detail: { enabled: e.target.checked } }));
+        });
+    }
+
+    // Disc Scratch Seek Toggle
+    const discScratchToggle = document.getElementById('disc-scratch-toggle');
+    if (discScratchToggle) {
+        discScratchToggle.checked = rotatingCoverSettings.isDiscScratchEnabled();
+
+        discScratchToggle.addEventListener('change', (e) => {
+            rotatingCoverSettings.setDiscScratchEnabled(e.target.checked);
+            window.dispatchEvent(new CustomEvent('disc-scratch-changed', { detail: { enabled: e.target.checked } }));
         });
     }
 

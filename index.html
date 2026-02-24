@@ -2403,7 +2403,28 @@
                                         playback</span>
                                 </div>
                                 <label class="toggle-switch">
-                                    <input type="checkbox" id="rotating-cover-toggle" />
+                                    <input type="checkbox" id="rotating-cover-toggle" checked />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Manual Disc Scrub Seek</span>
+                                    <span class="description">Rotate the full-screen vinyl clockwise/anticlockwise to
+                                        seek forward/backward (requires Rotating Album Cover)</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="disc-scratch-toggle" checked />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Lyrics Haptic Sync</span>
+                                    <span class="description">Vibrate with synced lyric timing on supported phones</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="lyrics-haptic-sync-toggle" checked />
                                     <span class="slider"></span>
                                 </label>
                             </div>
@@ -3479,9 +3500,10 @@
                                     <span class="description">Control the intensity of UI animations</span>
                                 </div>
                                 <select id="animation-intensity-select" style="min-width: 140px">
-                                    <option value="full">Full</option>
+                                    <option value="ultra">Ultra Smooth (Adaptive)</option>
+                                    <option value="enhanced">Enhanced</option>
+                                    <option value="normal" selected>Normal</option>
                                     <option value="reduced">Reduced</option>
-                                    <option value="minimal">Minimal</option>
                                     <option value="none">None</option>
                                 </select>
                             </div>

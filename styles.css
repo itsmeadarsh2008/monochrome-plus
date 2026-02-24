@@ -228,7 +228,8 @@
     --modal-max-width-xl: 800px;
 
     /* Covers */
-    --cover-filter: blur(50px) brightness(0.4);
+    --cover-blur-radius: 50px;
+    --cover-filter: blur(var(--ultra-cover-blur-radius, var(--cover-blur-radius, 50px))) brightness(0.4);
     --cover-radius: var(--radius-md);
 
     /* -------------------------------------------------------------------------
@@ -274,6 +275,10 @@
 
     /* Background blur intensity */
     --background-blur: 20px;
+    --surface-blur: var(--background-blur);
+    --dynamic-gradient-duration: 15s;
+    --motion-wave-amplitude: 4px;
+    --motion-wave-duration: 6s;
 
     /* -------------------------------------------------------------------------
        SEMANTIC COLORS (will be overridden by themes)
@@ -506,7 +511,7 @@
     --highlight-rgb: 26, 26, 26;
     --active-highlight: var(--highlight);
     --explicit-badge: #1a1a1a;
-    --cover-filter: blur(50px) brightness(1.6) opacity(0.35);
+    --cover-filter: blur(var(--ultra-cover-blur-radius, var(--cover-blur-radius, 50px))) brightness(1.6) opacity(0.35);
 }
 
 :root[data-theme='dynamic'] {
@@ -543,7 +548,7 @@
     z-index: -1;
     background: var(--dynamic-gradient, linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%));
     background-size: 400% 400%;
-    animation: dynamic-gradient-shift 15s ease infinite;
+    animation: dynamic-gradient-shift var(--dynamic-gradient-duration, 15s) ease infinite;
     transition: background var(--duration-slow) var(--ease-in-out);
     filter: brightness(var(--dynamic-brightness, 0.4));
 }
@@ -567,6 +572,28 @@
 
     100% {
         background-position: 0% 50%;
+    }
+}
+
+:root.animations-ultra[data-theme='dynamic'] .app-container::before {
+    inset: -12%;
+    background-size: 130% 130%;
+    animation: dynamic-gradient-pan var(--dynamic-gradient-duration, 18s) linear infinite;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+}
+
+@keyframes dynamic-gradient-pan {
+    0% {
+        transform: translate3d(-4%, -4%, 0) scale(1.03);
+    }
+
+    50% {
+        transform: translate3d(4%, 4%, 0) scale(1.07);
+    }
+
+    100% {
+        transform: translate3d(-4%, -4%, 0) scale(1.03);
     }
 }
 
@@ -1293,7 +1320,7 @@ kbd {
     /* Standardized radius */
     position: fixed !important;
     background-color: color-mix(in srgb, var(--card) 85%, transparent);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(var(--surface-blur, var(--background-blur, 20px)));
     border: 1px solid var(--border);
     box-shadow: var(--shadow-2xl);
 
@@ -2578,6 +2605,44 @@ html.carousel-mode .card-grid > *,
 
 .animations-enhanced .card:hover {
     transform: translateY(-10px) scale(1.02);
+}
+
+.animations-ultra .card,
+.animations-ultra .now-playing-bar .cover,
+.animations-ultra #vinyl-disc-container.rotating-disc {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+.animations-ultra .card:hover {
+    transform: translate3d(0, -12px, 0) scale3d(1.025, 1.025, 1);
+}
+
+.animations-ultra .now-playing-bar .cover:not(.rotating, :hover) {
+    animation: ultra-butter-wave var(--motion-wave-duration, 6s) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.thermal-adaptive.animations-ultra .now-playing-bar .cover:not(.rotating, :hover) {
+    animation-duration: calc(var(--motion-wave-duration, 6s) * 1.2);
+}
+
+@keyframes ultra-butter-wave {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+
+    25% {
+        transform: translate3d(0, calc(var(--motion-wave-amplitude, 4px) * -1), 0) rotate(-0.35deg);
+    }
+
+    50% {
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+
+    75% {
+        transform: translate3d(0, var(--motion-wave-amplitude, 4px), 0) rotate(0.35deg);
+    }
 }
 
 .animate-spin {
@@ -4682,6 +4747,27 @@ input:checked + .slider::before {
     transition: all var(--duration-normal) var(--ease-in-out);
 }
 
+#vinyl-disc-container.disc-scrub-enabled {
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+}
+
+#vinyl-disc-container.disc-scrub-enabled.disc-scrubbing {
+    cursor: grabbing;
+    transition: none;
+}
+
+#vinyl-disc-container.disc-scrub-enabled #fullscreen-cover-image {
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+#vinyl-disc-container.disc-scrubbing,
+#vinyl-disc-container.disc-scrubbing::before {
+    animation-play-state: paused !important;
+}
+
 /* Fullscreen rotating disc effect - vinyl record */
 #vinyl-disc-container.rotating-disc {
     width: min(48vh, 48vw);
@@ -4803,7 +4889,7 @@ input:checked + .slider::before {
     z-index: 1;
     max-width: 90%;
     background-color: color-mix(in srgb, var(--card) 40%, transparent);
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(var(--surface-blur, var(--background-blur, 20px)));
     padding: 0.75rem 1.5rem;
     border-radius: var(--radius);
     border: 1px solid var(--border);

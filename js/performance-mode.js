@@ -133,7 +133,7 @@ class PerformanceModeManager {
 
     /**
      * Set the performance mode
-     * @param {string} mode - One of: 'extreme', 'performance', 'balanced', 'quality'
+     * @param {string} mode - One of: 'beast', 'quality', 'balanced', 'performance', 'extreme'
      */
     setMode(mode) {
         if (!this.settings[mode]) {
@@ -168,6 +168,56 @@ class PerformanceModeManager {
      */
     getSetting(key) {
         return this.settings[this.mode]?.[key];
+    }
+
+    /**
+     * Normalize animation intensity values (supports legacy aliases)
+     * @param {string} intensity - Raw intensity value
+     * @returns {'none'|'reduced'|'normal'|'enhanced'|'ultra'}
+     */
+    normalizeAnimationIntensity(intensity) {
+        const value = String(intensity || 'normal').toLowerCase();
+        const aliasMap = {
+            full: 'enhanced',
+            minimal: 'reduced',
+        };
+        const normalized = aliasMap[value] || value;
+
+        if (['none', 'reduced', 'normal', 'enhanced', 'ultra'].includes(normalized)) {
+            return normalized;
+        }
+
+        return 'normal';
+    }
+
+    /**
+     * Convert blur intensity keyword to CSS px value
+     * @param {string} blurIntensity - none|low|medium|high
+     * @returns {string}
+     */
+    resolveBlurAmount(blurIntensity) {
+        const map = {
+            none: '0px',
+            low: '12px',
+            medium: '16px',
+            high: '20px',
+        };
+        return map[blurIntensity] || map.medium;
+    }
+
+    /**
+     * Convert cover blur intensity keyword to CSS px value
+     * @param {string} blurIntensity - none|low|medium|high
+     * @returns {string}
+     */
+    resolveCoverBlurAmount(blurIntensity) {
+        const map = {
+            none: '0px',
+            low: '24px',
+            medium: '36px',
+            high: '50px',
+        };
+        return map[blurIntensity] || map.high;
     }
 
     /**
@@ -210,15 +260,44 @@ class PerformanceModeManager {
         const root = document.documentElement;
 
         // Apply animation settings
-        if (!settings.animations) {
-            root.classList.add('animations-none');
-            root.classList.remove('animations-reduced', 'animations-enhanced');
-        } else {
-            root.classList.remove('animations-none');
+        const intensity = settings.animations ? this.normalizeAnimationIntensity(settings.animationIntensity) : 'none';
+        root.classList.remove(
+            'animations-none',
+            'animations-reduced',
+            'animations-enhanced',
+            'animations-ultra',
+            'animations-full',
+            'animations-minimal'
+        );
+
+        if (intensity !== 'normal') {
+            root.classList.add(`animations-${intensity}`);
+        }
+
+        const animationMultipliers = {
+            none: 0,
+            reduced: 0.7,
+            normal: 1,
+            enhanced: 1.15,
+            ultra: 1.22,
+        };
+        root.style.setProperty('--animation-multiplier', String(animationMultipliers[intensity] || 1));
+
+        // Ultra-specific tuning is set by user animation preferences in settings UI.
+        if (intensity !== 'ultra') {
+            root.classList.remove('thermal-adaptive');
+            root.style.removeProperty('--motion-wave-amplitude');
+            root.style.removeProperty('--motion-wave-duration');
+            root.style.removeProperty('--dynamic-gradient-duration');
+            root.style.removeProperty('--ultra-cover-blur-radius');
+            root.style.removeProperty('--cover-blur-radius');
+            root.style.removeProperty('--surface-blur');
         }
 
         // Apply background blur
-        root.style.setProperty('--background-blur', settings.backgroundBlur ? '20px' : '0px');
+        const blurIntensity = settings.backgroundBlur ? settings.blurIntensity || 'medium' : 'none';
+        root.style.setProperty('--background-blur', this.resolveBlurAmount(blurIntensity));
+        root.style.setProperty('--cover-blur-radius', this.resolveCoverBlurAmount(blurIntensity));
 
         // Apply visualizer setting via custom property
         root.style.setProperty('--visualizer-enabled', settings.visualizer ? '1' : '0');
@@ -354,6 +433,7 @@ class PerformanceModeManager {
      */
     getDescription() {
         const descriptions = {
+            beast: 'Maximum visual quality with all animations and effects enabled.',
             extreme: 'Lowest resource usage. Disables animations, blur, and visual effects.',
             performance: 'Optimized for speed. Minimal visual effects.',
             balanced: 'Default experience. Good balance of visuals and performance.',

@@ -1,6 +1,7 @@
 //js/lyrics.js
 import { getTrackTitle, getTrackArtists, buildTrackFilename, SVG_CLOSE } from './utils.js';
 import { sidePanelManager } from './side-panel.js';
+import { lyricsSettings } from './storage.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
@@ -1241,18 +1242,102 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let lastTimestamp = performance.now();
     let animationFrameId = null;
     let lastWaveCssUpdate = 0;
+    let syncedLyricLines = [];
+    let lastHapticLineIndex = -1;
+    let lastHapticAt = 0;
+    let hapticsEnabled = lyricsSettings.isHapticSyncEnabled();
+
+    const onHapticsChanged = (e) => {
+        hapticsEnabled = Boolean(e?.detail?.enabled);
+        if (!hapticsEnabled && typeof navigator.vibrate === 'function') {
+            navigator.vibrate(0);
+        }
+    };
+    window.addEventListener('lyrics-haptics-changed', onHapticsChanged);
 
     // Get timing offset from lyrics manager (in milliseconds)
     const getTimingOffset = () => {
         return lyricsManager?.timingOffset || 0;
     };
 
+    const initializeSyncedLyricLines = () => {
+        const lyricsData = lyricsManager?.lyricsCache?.get(track.id);
+        if (lyricsData?.subtitles) {
+            syncedLyricLines = lyricsManager.parseSyncedLyrics(lyricsData.subtitles);
+        } else {
+            syncedLyricLines = [];
+        }
+    };
+
+    const getLineIndexAtTime = (seconds) => {
+        if (!syncedLyricLines.length || !Number.isFinite(seconds)) return -1;
+
+        let low = 0;
+        let high = syncedLyricLines.length - 1;
+        let result = -1;
+
+        while (low <= high) {
+            const mid = (low + high) >> 1;
+            if (seconds >= syncedLyricLines[mid].time) {
+                result = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        return result;
+    };
+
+    const buildHapticPattern = (lineIndex) => {
+        const line = syncedLyricLines[lineIndex];
+        const nextLine = syncedLyricLines[lineIndex + 1];
+        if (!line) return [10];
+
+        const words = line.text ? line.text.split(/\s+/).filter(Boolean).length : 0;
+        const gapSeconds = nextLine ? Math.max(0.1, nextLine.time - line.time) : 1.2;
+        const adjustedGapMs = (gapSeconds * 1000) / Math.max(audioPlayer.playbackRate || 1, 0.25);
+        const basePulse = words >= 8 ? 8 : words >= 4 ? 10 : 12;
+
+        if (adjustedGapMs >= 2600) return [basePulse, 80, basePulse];
+        if (adjustedGapMs >= 1400) return [basePulse + 3];
+        if (adjustedGapMs >= 700) return [basePulse];
+        return [Math.max(6, basePulse - 2)];
+    };
+
+    const shouldRunHaptics = () => {
+        return (
+            hapticsEnabled &&
+            syncedLyricLines.length > 0 &&
+            typeof navigator.vibrate === 'function' &&
+            document.visibilityState === 'visible'
+        );
+    };
+
+    const maybeTriggerHaptic = (syncedTimeMs) => {
+        if (!shouldRunHaptics()) return;
+
+        const currentLineIndex = getLineIndexAtTime(syncedTimeMs / 1000);
+        if (currentLineIndex < 0 || currentLineIndex === lastHapticLineIndex) return;
+
+        const now = performance.now();
+        if (now - lastHapticAt < 90) return;
+
+        navigator.vibrate(buildHapticPattern(currentLineIndex));
+        lastHapticLineIndex = currentLineIndex;
+        lastHapticAt = now;
+    };
+
+    initializeSyncedLyricLines();
+
     const updateTime = () => {
         const currentMs = audioPlayer.currentTime * 1000;
         baseTimeMs = currentMs;
         lastTimestamp = performance.now();
         // Apply timing offset: positive offset delays lyrics, negative advances them
-        amLyrics.currentTime = currentMs - getTimingOffset();
+        const syncedTimeMs = currentMs - getTimingOffset();
+        amLyrics.currentTime = syncedTimeMs;
+        lastHapticLineIndex = getLineIndexAtTime(syncedTimeMs / 1000);
     };
 
     const tick = () => {
@@ -1261,13 +1346,16 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
             const elapsed = now - lastTimestamp;
             const nextMs = baseTimeMs + elapsed * (audioPlayer.playbackRate || 1);
             // Apply timing offset: positive offset delays lyrics, negative advances them
-            amLyrics.currentTime = nextMs - getTimingOffset();
+            const syncedTimeMs = nextMs - getTimingOffset();
+            amLyrics.currentTime = syncedTimeMs;
 
             // High-refresh visual phase update for wave shimmer (up to ~120Hz)
             if (now - lastWaveCssUpdate >= 8) {
                 amLyrics.style.setProperty('--karaoke-wave-ms', now.toFixed(2));
                 lastWaveCssUpdate = now;
             }
+
+            maybeTriggerHaptic(syncedTimeMs);
 
             animationFrameId = requestAnimationFrame(tick);
         }
@@ -1283,6 +1371,10 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
+        }
+
+        if (typeof navigator.vibrate === 'function') {
+            navigator.vibrate(0);
         }
     };
 
@@ -1333,6 +1425,10 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         audioPlayer.removeEventListener('pause', onPause);
         audioPlayer.removeEventListener('seeked', updateTime);
         amLyrics.removeEventListener('line-click', onLineClick);
+        window.removeEventListener('lyrics-haptics-changed', onHapticsChanged);
+        if (typeof navigator.vibrate === 'function') {
+            navigator.vibrate(0);
+        }
     };
 }
 

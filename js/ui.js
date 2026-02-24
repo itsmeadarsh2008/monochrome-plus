@@ -115,6 +115,8 @@ export class UIRenderer {
         this._friendsSuggestionQuery = '';
         this._friendsSuggestionTimer = null;
         this._friendsSuggestionRequestToken = 0;
+        this.fullscreenDiscScrubCleanup = null;
+        this._fullscreenAudioPlayer = null;
 
         // Listen for dynamic color reset events
         window.addEventListener('reset-dynamic-color', () => {
@@ -123,6 +125,14 @@ export class UIRenderer {
 
         window.addEventListener('history-changed', () => {
             this._clearRecentTrackProfileCache();
+        });
+
+        window.addEventListener('disc-scratch-changed', () => {
+            this.refreshFullscreenDiscScrubbing();
+        });
+
+        window.addEventListener('rotating-cover-changed', () => {
+            this.refreshFullscreenDiscScrubbing();
         });
     }
 
@@ -997,6 +1007,9 @@ export class UIRenderer {
             }
         }
 
+        this._fullscreenAudioPlayer = audioPlayer;
+        this.refreshFullscreenDiscScrubbing();
+
         if (nextTrack) {
             nextTrackEl.classList.remove('animate-in');
             void nextTrackEl.offsetWidth;
@@ -1027,6 +1040,7 @@ export class UIRenderer {
         this.setupFullscreenControls(audioPlayer);
 
         overlay.style.display = 'flex';
+        this.refreshFullscreenDiscScrubbing();
 
         const startVisualizer = () => {
             if (!visualizerSettings.isEnabled()) {
@@ -1074,6 +1088,12 @@ export class UIRenderer {
         const overlay = document.getElementById('fullscreen-cover-overlay');
         overlay.style.display = 'none';
 
+        if (this.fullscreenDiscScrubCleanup) {
+            this.fullscreenDiscScrubCleanup();
+            this.fullscreenDiscScrubCleanup = null;
+        }
+        this._fullscreenAudioPlayer = null;
+
         // Remove rotating disc class
         const vinylContainer = document.getElementById('vinyl-disc-container');
         if (vinylContainer) {
@@ -1091,6 +1111,173 @@ export class UIRenderer {
         if (this.visualizer) {
             this.visualizer.stop();
         }
+    }
+
+    isFullscreenCoverOpen() {
+        const overlay = document.getElementById('fullscreen-cover-overlay');
+        return Boolean(overlay && overlay.style.display !== 'none');
+    }
+
+    refreshFullscreenDiscScrubbing() {
+        if (this.fullscreenDiscScrubCleanup) {
+            this.fullscreenDiscScrubCleanup();
+            this.fullscreenDiscScrubCleanup = null;
+        }
+
+        if (!this.isFullscreenCoverOpen() || !this._fullscreenAudioPlayer) return;
+        this.fullscreenDiscScrubCleanup = this.setupFullscreenDiscScrubbing(this._fullscreenAudioPlayer);
+    }
+
+    setupFullscreenDiscScrubbing(audioPlayer) {
+        const vinylContainer = document.getElementById('vinyl-disc-container');
+        const fullscreenCover = document.getElementById('fullscreen-cover-image');
+        if (!vinylContainer || !fullscreenCover || !audioPlayer) return null;
+
+        const isEnabled = rotatingCoverSettings.isEnabled() && rotatingCoverSettings.isDiscScratchEnabled();
+
+        const resetDiscScrubState = () => {
+            vinylContainer.classList.remove('disc-scrub-enabled', 'disc-scrubbing');
+            vinylContainer.style.removeProperty('transform');
+            fullscreenCover.style.removeProperty('pointer-events');
+        };
+
+        if (!isEnabled) {
+            resetDiscScrubState();
+            return null;
+        }
+
+        vinylContainer.classList.add('disc-scrub-enabled');
+        // Prevent fullscreen close-on-cover-click while scrubbing is enabled.
+        fullscreenCover.style.pointerEvents = 'none';
+
+        const SECONDS_PER_DEGREE = 0.05;
+        let dragging = false;
+        let activePointerId = null;
+        let lastAngle = 0;
+        let visualRotation = 0;
+        let pendingSeekSeconds = 0;
+        let seekRafId = null;
+
+        const getCenterAngle = (event) => {
+            const rect = vinylContainer.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const dx = event.clientX - centerX;
+            const dy = event.clientY - centerY;
+            return (Math.atan2(dy, dx) * 180) / Math.PI;
+        };
+
+        const normalizeDeltaAngle = (delta) => {
+            if (delta > 180) return delta - 360;
+            if (delta < -180) return delta + 360;
+            return delta;
+        };
+
+        const applySeekDelta = (secondsDelta) => {
+            if (!Number.isFinite(secondsDelta) || Math.abs(secondsDelta) < 0.0001) return;
+            const duration = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : Infinity;
+            const nextTime = Math.max(0, Math.min(duration, audioPlayer.currentTime + secondsDelta));
+            audioPlayer.currentTime = nextTime;
+        };
+
+        const flushPendingSeek = () => {
+            seekRafId = null;
+            if (pendingSeekSeconds !== 0) {
+                applySeekDelta(pendingSeekSeconds);
+                pendingSeekSeconds = 0;
+            }
+        };
+
+        const scheduleSeekFlush = () => {
+            if (seekRafId) return;
+            seekRafId = requestAnimationFrame(flushPendingSeek);
+        };
+
+        const stopDragging = () => {
+            if (!dragging) return;
+            dragging = false;
+
+            if (seekRafId) {
+                cancelAnimationFrame(seekRafId);
+                seekRafId = null;
+            }
+            flushPendingSeek();
+
+            vinylContainer.classList.remove('disc-scrubbing');
+            vinylContainer.style.removeProperty('transform');
+            if (!audioPlayer.paused && rotatingCoverSettings.isEnabled()) {
+                vinylContainer.classList.remove('paused');
+            } else {
+                vinylContainer.classList.add('paused');
+            }
+        };
+
+        const onPointerDown = (event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+            dragging = true;
+            activePointerId = event.pointerId;
+            lastAngle = getCenterAngle(event);
+            visualRotation = 0;
+            pendingSeekSeconds = 0;
+
+            if (event.pointerId !== undefined && vinylContainer.setPointerCapture) {
+                vinylContainer.setPointerCapture(event.pointerId);
+            }
+
+            vinylContainer.classList.add('disc-scrubbing', 'paused');
+            event.preventDefault();
+        };
+
+        const onPointerMove = (event) => {
+            if (!dragging) return;
+            if (activePointerId !== null && event.pointerId !== activePointerId) return;
+
+            const angle = getCenterAngle(event);
+            const deltaAngle = normalizeDeltaAngle(angle - lastAngle);
+            if (Math.abs(deltaAngle) < 0.05) return;
+
+            lastAngle = angle;
+            visualRotation += deltaAngle;
+            vinylContainer.style.transform = `rotate(${visualRotation.toFixed(2)}deg)`;
+
+            pendingSeekSeconds += deltaAngle * SECONDS_PER_DEGREE;
+            scheduleSeekFlush();
+            event.preventDefault();
+        };
+
+        const onPointerUp = (event) => {
+            if (activePointerId !== null && event.pointerId !== activePointerId) return;
+            if (event.pointerId !== undefined && vinylContainer.releasePointerCapture) {
+                try {
+                    vinylContainer.releasePointerCapture(event.pointerId);
+                } catch {
+                    // Ignore if pointer capture was already released.
+                }
+            }
+            activePointerId = null;
+            stopDragging();
+        };
+
+        const onPointerCancel = (event) => {
+            if (activePointerId !== null && event.pointerId !== activePointerId) return;
+            activePointerId = null;
+            stopDragging();
+        };
+
+        vinylContainer.addEventListener('pointerdown', onPointerDown);
+        vinylContainer.addEventListener('pointermove', onPointerMove, { passive: false });
+        vinylContainer.addEventListener('pointerup', onPointerUp);
+        vinylContainer.addEventListener('pointercancel', onPointerCancel);
+
+        return () => {
+            stopDragging();
+            vinylContainer.removeEventListener('pointerdown', onPointerDown);
+            vinylContainer.removeEventListener('pointermove', onPointerMove);
+            vinylContainer.removeEventListener('pointerup', onPointerUp);
+            vinylContainer.removeEventListener('pointercancel', onPointerCancel);
+            resetDiscScrubState();
+        };
     }
 
     setupFullscreenControls(audioPlayer) {
