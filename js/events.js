@@ -133,7 +133,7 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
     });
 
     audioPlayer.addEventListener('ended', () => {
-        player.playNext();
+        player.handleTrackEnded();
     });
 
     audioPlayer.addEventListener('timeupdate', async () => {

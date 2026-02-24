@@ -2,6 +2,7 @@
 import { getTrackTitle, getTrackArtists, buildTrackFilename, SVG_CLOSE } from './utils.js';
 import { sidePanelManager } from './side-panel.js';
 import { lyricsSettings } from './storage.js';
+import { audioContextManager } from './audio-context.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
@@ -1245,7 +1246,15 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let syncedLyricLines = [];
     let lastHapticLineIndex = -1;
     let lastHapticAt = 0;
+    let lastBeatPulseAt = 0;
     let hapticsEnabled = lyricsSettings.isHapticSyncEnabled();
+    let hapticEnhancementEnabled = lyricsSettings.isHapticEnhancementEnabled();
+    let analyser = null;
+    let analyserData = null;
+    let bassBinCount = 0;
+    let lowMidBinCount = 0;
+    let energyBaseline = 0;
+    let lastEnergySampleAt = 0;
 
     const onHapticsChanged = (e) => {
         hapticsEnabled = Boolean(e?.detail?.enabled);
@@ -1254,6 +1263,24 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         }
     };
     window.addEventListener('lyrics-haptics-changed', onHapticsChanged);
+
+    const onHapticEnhancementChanged = (e) => {
+        hapticEnhancementEnabled = Boolean(e?.detail?.enabled);
+    };
+    window.addEventListener('lyrics-haptic-enhancement-changed', onHapticEnhancementChanged);
+
+    const ensureAnalyserData = () => {
+        if (analyser && analyserData) return true;
+
+        const analyserNode = audioContextManager.getAnalyser();
+        if (!analyserNode) return false;
+
+        analyser = analyserNode;
+        analyserData = new Uint8Array(analyser.frequencyBinCount);
+        bassBinCount = Math.max(10, Math.floor(analyserData.length * 0.1));
+        lowMidBinCount = Math.max(10, Math.floor(analyserData.length * 0.2));
+        return true;
+    };
 
     // Get timing offset from lyrics manager (in milliseconds)
     const getTimingOffset = () => {
@@ -1297,21 +1324,52 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         const words = line.text ? line.text.split(/\s+/).filter(Boolean).length : 0;
         const gapSeconds = nextLine ? Math.max(0.1, nextLine.time - line.time) : 1.2;
         const adjustedGapMs = (gapSeconds * 1000) / Math.max(audioPlayer.playbackRate || 1, 0.25);
-        const basePulse = words >= 8 ? 8 : words >= 4 ? 10 : 12;
+        const punctuationBoost = /[!?]/.test(line.text || '') ? 2 : /[,;:]/.test(line.text || '') ? 1 : 0;
+        const densityBoost = words >= 10 ? -2 : words >= 6 ? -1 : 1;
+        const enhancementBoost = hapticEnhancementEnabled ? 1 : 0;
+        const basePulse = Math.max(6, 10 + densityBoost + punctuationBoost + enhancementBoost);
 
-        if (adjustedGapMs >= 2600) return [basePulse, 80, basePulse];
-        if (adjustedGapMs >= 1400) return [basePulse + 3];
+        if (adjustedGapMs >= 2600) return [basePulse + 1, 70, basePulse + 2];
+        if (adjustedGapMs >= 1400) return [basePulse + 1];
         if (adjustedGapMs >= 700) return [basePulse];
-        return [Math.max(6, basePulse - 2)];
+        return [Math.max(5, basePulse - 2)];
     };
 
     const shouldRunHaptics = () => {
         return (
             hapticsEnabled &&
-            syncedLyricLines.length > 0 &&
             typeof navigator.vibrate === 'function' &&
             document.visibilityState === 'visible'
         );
+    };
+
+    const sampleRhythmEnergy = (now) => {
+        if (!ensureAnalyserData()) return null;
+        if (now - lastEnergySampleAt < 72) return null;
+        lastEnergySampleAt = now;
+
+        analyser.getByteFrequencyData(analyserData);
+
+        const bassEnd = Math.min(analyserData.length, bassBinCount);
+        let bassTotal = 0;
+        for (let i = 0; i < bassEnd; i++) {
+            bassTotal += analyserData[i];
+        }
+
+        const lowMidStart = bassEnd;
+        const lowMidEnd = Math.min(analyserData.length, bassEnd + lowMidBinCount);
+        let lowMidTotal = 0;
+        for (let i = lowMidStart; i < lowMidEnd; i++) {
+            lowMidTotal += analyserData[i];
+        }
+
+        const bassBinsUsed = Math.max(1, bassEnd);
+        const lowMidBinsUsed = Math.max(1, lowMidEnd - lowMidStart);
+        const bassEnergy = bassTotal / (bassBinsUsed * 255);
+        const lowMidEnergy = lowMidTotal / (lowMidBinsUsed * 255);
+        const weightedEnergy = bassEnergy * 0.74 + lowMidEnergy * 0.26;
+        energyBaseline = energyBaseline === 0 ? weightedEnergy : energyBaseline * 0.9 + weightedEnergy * 0.1;
+        return weightedEnergy;
     };
 
     const maybeTriggerHaptic = (syncedTimeMs) => {
@@ -1321,10 +1379,50 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         if (currentLineIndex < 0 || currentLineIndex === lastHapticLineIndex) return;
 
         const now = performance.now();
-        if (now - lastHapticAt < 90) return;
+        if (now - lastHapticAt < (hapticEnhancementEnabled ? 75 : 90)) return;
 
         navigator.vibrate(buildHapticPattern(currentLineIndex));
         lastHapticLineIndex = currentLineIndex;
+        lastHapticAt = now;
+        lastBeatPulseAt = now;
+    };
+
+    const maybeTriggerBeatPulse = (syncedTimeMs) => {
+        if (!shouldRunHaptics()) return;
+        if (!hapticEnhancementEnabled && syncedLyricLines.length > 0) return;
+
+        const now = performance.now();
+        if (now - lastHapticAt < (hapticEnhancementEnabled ? 120 : 180)) return;
+
+        const sampledEnergy = sampleRhythmEnergy(now);
+        const fallbackBeatMs = 680 / Math.max(audioPlayer.playbackRate || 1, 0.5);
+
+        if (sampledEnergy === null) {
+            if (!syncedLyricLines.length && now - lastBeatPulseAt >= fallbackBeatMs) {
+                navigator.vibrate([7]);
+                lastBeatPulseAt = now;
+                lastHapticAt = now;
+            }
+            return;
+        }
+
+        const thresholdFloor = hapticEnhancementEnabled ? 0.14 : 0.19;
+        const thresholdMultiplier = hapticEnhancementEnabled ? 1.22 : 1.35;
+        const threshold = Math.max(thresholdFloor, energyBaseline * thresholdMultiplier);
+        const cooldownMs = hapticEnhancementEnabled ? 180 : 260;
+
+        if (now - lastBeatPulseAt < cooldownMs) return;
+        if (sampledEnergy < threshold && now - lastBeatPulseAt < fallbackBeatMs) return;
+
+        const lift = Math.max(0, Math.min(1, (sampledEnergy - threshold + 0.08) * 5));
+        const swing = 0.55 + 0.45 * Math.sin((syncedTimeMs / 1000) * Math.PI);
+        const primaryPulse = Math.round(6 + lift * 7 + (hapticEnhancementEnabled ? swing * 2 : 0));
+        const pattern = hapticEnhancementEnabled
+            ? [Math.max(6, primaryPulse), 16, Math.max(6, primaryPulse - 1)]
+            : [Math.max(6, primaryPulse - 1)];
+
+        navigator.vibrate(pattern);
+        lastBeatPulseAt = now;
         lastHapticAt = now;
     };
 
@@ -1356,6 +1454,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
             }
 
             maybeTriggerHaptic(syncedTimeMs);
+            maybeTriggerBeatPulse(syncedTimeMs);
 
             animationFrameId = requestAnimationFrame(tick);
         }
@@ -1426,6 +1525,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         audioPlayer.removeEventListener('seeked', updateTime);
         amLyrics.removeEventListener('line-click', onLineClick);
         window.removeEventListener('lyrics-haptics-changed', onHapticsChanged);
+        window.removeEventListener('lyrics-haptic-enhancement-changed', onHapticEnhancementChanged);
         if (typeof navigator.vibrate === 'function') {
             navigator.vibrate(0);
         }

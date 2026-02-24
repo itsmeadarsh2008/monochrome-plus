@@ -417,6 +417,7 @@ export const nowPlayingSettings = {
 export const lyricsSettings = {
     DOWNLOAD_WITH_TRACKS: 'lyrics-download-with-tracks',
     HAPTIC_SYNC_KEY: 'lyrics-haptic-sync',
+    HAPTIC_ENHANCEMENT_KEY: 'lyrics-haptic-enhancement',
 
     shouldDownloadLyrics() {
         try {
@@ -441,6 +442,18 @@ export const lyricsSettings = {
 
     setHapticSyncEnabled(enabled) {
         localStorage.setItem(this.HAPTIC_SYNC_KEY, enabled ? 'true' : 'false');
+    },
+
+    isHapticEnhancementEnabled() {
+        try {
+            return localStorage.getItem(this.HAPTIC_ENHANCEMENT_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    },
+
+    setHapticEnhancementEnabled(enabled) {
+        localStorage.setItem(this.HAPTIC_ENHANCEMENT_KEY, enabled ? 'true' : 'false');
     },
 };
 
@@ -1342,6 +1355,37 @@ export const audioEffectsSettings = {
     setSpeed(speed) {
         const validSpeed = Math.max(0.01, Math.min(100, parseFloat(speed) || 1.0));
         localStorage.setItem(this.SPEED_KEY, validSpeed.toString());
+    },
+};
+
+export const playbackBehaviorSettings = {
+    GAPLESS_KEY: 'playback-gapless-enabled',
+    AUTOMIX_KEY: 'playback-automix-enabled',
+
+    isGaplessEnabled() {
+        try {
+            // Default to true if not set
+            return localStorage.getItem(this.GAPLESS_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setGaplessEnabled(enabled) {
+        localStorage.setItem(this.GAPLESS_KEY, enabled ? 'true' : 'false');
+    },
+
+    isAutoMixEnabled() {
+        try {
+            // Default to true if not set
+            return localStorage.getItem(this.AUTOMIX_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setAutoMixEnabled(enabled) {
+        localStorage.setItem(this.AUTOMIX_KEY, enabled ? 'true' : 'false');
     },
 };
 

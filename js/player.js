@@ -16,11 +16,10 @@ import {
     trackDateSettings,
     exponentialVolumeSettings,
     audioEffectsSettings,
-    rotatingCoverSettings,
+    playbackBehaviorSettings,
     performanceModeSettings,
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
-import { performanceMode } from './performance-mode.js';
 
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
@@ -39,6 +38,11 @@ export class Player {
         this.currentRgValues = null;
         this.userVolume = parseFloat(localStorage.getItem('volume') || '0.7');
         this.isFallbackRetry = false;
+        this._playbackMonitorTimer = null;
+        this._gaplessTransitionInProgress = false;
+        this._autoMixRequest = null;
+        this._autoMixLastPopulateAt = 0;
+        this._autoMixLastSeedSignature = '';
 
         // Sleep timer properties
         this.sleepTimer = null;
@@ -73,6 +77,172 @@ export class Player {
                 audioContextManager.resume();
             }
         });
+
+        this.audio.addEventListener('play', () => {
+            this.startPlaybackMonitor();
+        });
+
+        this.audio.addEventListener('pause', () => {
+            this.stopPlaybackMonitor();
+            this._gaplessTransitionInProgress = false;
+        });
+
+        this.audio.addEventListener('emptied', () => {
+            this.stopPlaybackMonitor();
+            this._gaplessTransitionInProgress = false;
+        });
+    }
+
+    startPlaybackMonitor() {
+        if (this._playbackMonitorTimer) return;
+
+        const run = () => {
+            this._playbackMonitorTimer = null;
+
+            if (this.audio.paused || !this.currentTrack) {
+                return;
+            }
+
+            this.ensureAutoMixQueue().catch(() => {});
+
+            const shouldAdvanceGapless =
+                playbackBehaviorSettings.isGaplessEnabled() &&
+                this.repeatMode !== REPEAT_MODE.ONE &&
+                !this._gaplessTransitionInProgress;
+
+            if (shouldAdvanceGapless) {
+                const duration = this.audio.duration;
+                const hasDuration = Number.isFinite(duration) && duration > 0;
+
+                if (hasDuration) {
+                    const remaining = duration - this.audio.currentTime;
+                    if (remaining <= 0.2 && remaining >= -0.08) {
+                        this._gaplessTransitionInProgress = true;
+                        this.playNext();
+                        return;
+                    }
+                }
+            }
+
+            this._playbackMonitorTimer = setTimeout(run, 120);
+        };
+
+        this._playbackMonitorTimer = setTimeout(run, 120);
+    }
+
+    stopPlaybackMonitor() {
+        if (!this._playbackMonitorTimer) return;
+        clearTimeout(this._playbackMonitorTimer);
+        this._playbackMonitorTimer = null;
+    }
+
+    async ensureAutoMixQueue(minUpcomingTracks = 2) {
+        if (!playbackBehaviorSettings.isAutoMixEnabled()) return 0;
+
+        const currentQueue = this.getCurrentQueue();
+        if (!currentQueue.length || this.currentQueueIndex < 0) return 0;
+
+        const upcomingTracks = currentQueue.length - this.currentQueueIndex - 1;
+        if (upcomingTracks >= minUpcomingTracks) return 0;
+
+        if (this._autoMixRequest) {
+            return this._autoMixRequest;
+        }
+
+        const seedTracks = this.getAutoMixSeedTracks();
+        if (!seedTracks.length) return 0;
+
+        const seedSignature = seedTracks.map((track) => String(track.id || '')).join('|');
+        const now = Date.now();
+        if (
+            seedSignature === this._autoMixLastSeedSignature &&
+            now - this._autoMixLastPopulateAt < 15000
+        ) {
+            return 0;
+        }
+
+        const fetchCount = Math.max(6, minUpcomingTracks * 3);
+        this._autoMixRequest = (async () => {
+            try {
+                const recommendations = await this.api.getRecommendedTracksForPlaylist(seedTracks, fetchCount, {
+                    skipCache: false,
+                });
+                const dedupedRecommendations = this.filterAutoMixCandidates(recommendations);
+                if (!dedupedRecommendations.length) return 0;
+
+                const tracksToAppend = dedupedRecommendations
+                    .slice(0, Math.max(4, minUpcomingTracks * 2))
+                    .map((track) => ({ ...track, isAutoMixTrack: true }));
+
+                this.appendAutoMixTracks(tracksToAppend);
+                this._autoMixLastPopulateAt = Date.now();
+                this._autoMixLastSeedSignature = seedSignature;
+                this.saveQueueState();
+                this.preloadNextTracks();
+                return tracksToAppend.length;
+            } catch (error) {
+                console.warn('[AutoMix] Failed to fetch recommendations:', error);
+                return 0;
+            } finally {
+                this._autoMixRequest = null;
+            }
+        })();
+
+        return this._autoMixRequest;
+    }
+
+    getAutoMixSeedTracks() {
+        const queue = this.getCurrentQueue();
+        if (!queue.length || this.currentQueueIndex < 0) return [];
+
+        const start = Math.max(0, this.currentQueueIndex - 2);
+        const end = Math.min(queue.length, this.currentQueueIndex + 1);
+        const seeds = queue.slice(start, end).filter(Boolean);
+
+        if (this.currentTrack && !seeds.some((track) => String(track.id) === String(this.currentTrack.id))) {
+            seeds.push(this.currentTrack);
+        }
+
+        return seeds.slice(-5);
+    }
+
+    filterAutoMixCandidates(candidates) {
+        if (!Array.isArray(candidates) || !candidates.length) return [];
+
+        const queue = this.getCurrentQueue();
+        const existingTrackIds = new Set(queue.map((track) => String(track?.id || '')).filter(Boolean));
+        if (this.currentTrack?.id) {
+            existingTrackIds.add(String(this.currentTrack.id));
+        }
+
+        const unique = [];
+        for (const candidate of candidates) {
+            if (!candidate || candidate.id === undefined || candidate.id === null) continue;
+            const trackId = String(candidate.id);
+            if (!trackId || existingTrackIds.has(trackId)) continue;
+            existingTrackIds.add(trackId);
+            unique.push(candidate);
+        }
+
+        return unique;
+    }
+
+    appendAutoMixTracks(tracks) {
+        if (!Array.isArray(tracks) || !tracks.length) return;
+
+        this.queue.push(...tracks);
+
+        if (this.shuffleActive) {
+            this.shuffledQueue.push(...tracks);
+            this.originalQueueBeforeShuffle.push(...tracks);
+        }
+    }
+
+    handleTrackEnded() {
+        if (this._gaplessTransitionInProgress) {
+            return;
+        }
+        this.playNext();
     }
 
     setVolume(value) {
@@ -390,6 +560,8 @@ export class Player {
             return;
         }
 
+        this._gaplessTransitionInProgress = false;
+
         const track = currentQueue[this.currentQueueIndex];
         if (track.isUnavailable) {
             console.warn(`Attempted to play unavailable track: ${track.title}. Skipping...`);
@@ -647,8 +819,10 @@ export class Player {
             }
 
             this.preloadNextTracks();
+            this.ensureAutoMixQueue().catch(() => {});
         } catch (error) {
             console.error(`Could not play track: ${trackTitle}`, error);
+            this._gaplessTransitionInProgress = false;
             // Skip to next track on unexpected error
             if (recursiveCount < currentQueue.length) {
                 setTimeout(() => this.playNext(recursiveCount + 1), 1000);
@@ -671,6 +845,7 @@ export class Player {
         if (recursiveCount > currentQueue.length) {
             console.error('All tracks in queue are unavailable or blocked.');
             this.audio.pause();
+            this._gaplessTransitionInProgress = false;
             return;
         }
 
@@ -681,6 +856,7 @@ export class Player {
                 !currentQueue[this.currentQueueIndex]?.isUnavailable &&
                 !contentBlockingSettings.shouldHideTrack(currentQueue[this.currentQueueIndex])
             ) {
+                this._gaplessTransitionInProgress = false;
                 this.playTrackFromQueue(0, recursiveCount);
                 return;
             }
@@ -700,14 +876,31 @@ export class Player {
                     return this.playNext(recursiveCount + 1);
                 }
             } else {
+                if (playbackBehaviorSettings.isAutoMixEnabled()) {
+                    this.ensureAutoMixQueue(1)
+                        .then((addedTracks) => {
+                            if (addedTracks > 0) {
+                                this.playNext(recursiveCount + 1);
+                                return;
+                            }
+                            this._gaplessTransitionInProgress = false;
+                        })
+                        .catch(() => {
+                            this._gaplessTransitionInProgress = false;
+                        });
+                } else {
+                    this._gaplessTransitionInProgress = false;
+                }
                 return;
             }
 
+            this._gaplessTransitionInProgress = false;
             this.playTrackFromQueue(0, recursiveCount);
         });
     }
 
     playPrev(recursiveCount = 0) {
+        this._gaplessTransitionInProgress = false;
         if (this.audio.currentTime > 3) {
             this.audio.currentTime = 0;
             this.updateMediaSessionPositionState();

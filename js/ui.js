@@ -117,6 +117,7 @@ export class UIRenderer {
         this._friendsSuggestionRequestToken = 0;
         this.fullscreenDiscScrubCleanup = null;
         this._fullscreenAudioPlayer = null;
+        this._fullscreenDiscResizeHandler = null;
 
         // Listen for dynamic color reset events
         window.addEventListener('reset-dynamic-color', () => {
@@ -1008,7 +1009,6 @@ export class UIRenderer {
         }
 
         this._fullscreenAudioPlayer = audioPlayer;
-        this.refreshFullscreenDiscScrubbing();
 
         if (nextTrack) {
             nextTrackEl.classList.remove('animate-in');
@@ -1040,6 +1040,7 @@ export class UIRenderer {
         this.setupFullscreenControls(audioPlayer);
 
         overlay.style.display = 'flex';
+        this.startAdaptiveFullscreenDiscSizing();
         this.refreshFullscreenDiscScrubbing();
 
         const startVisualizer = () => {
@@ -1092,6 +1093,7 @@ export class UIRenderer {
             this.fullscreenDiscScrubCleanup();
             this.fullscreenDiscScrubCleanup = null;
         }
+        this.stopAdaptiveFullscreenDiscSizing();
         this._fullscreenAudioPlayer = null;
 
         // Remove rotating disc class
@@ -1116,6 +1118,69 @@ export class UIRenderer {
     isFullscreenCoverOpen() {
         const overlay = document.getElementById('fullscreen-cover-overlay');
         return Boolean(overlay && overlay.style.display !== 'none');
+    }
+
+    applyAdaptiveFullscreenDiscSize() {
+        const overlay = document.getElementById('fullscreen-cover-overlay');
+        const mainView = overlay?.querySelector('.fullscreen-main-view');
+        const vinylContainer = document.getElementById('vinyl-disc-container');
+        const trackInfo = overlay?.querySelector('.fullscreen-track-info');
+        const controls = overlay?.querySelector('.fullscreen-controls');
+
+        if (!overlay || !mainView || !vinylContainer || overlay.style.display === 'none') return;
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const isLandscape = viewportWidth > viewportHeight;
+        const mainRect = mainView.getBoundingClientRect();
+
+        const infoHeight = trackInfo?.offsetHeight || 0;
+        const controlsHeight = controls?.offsetHeight || 0;
+        const verticalPaddingReserve = isLandscape ? 48 : 32;
+
+        const verticalBudget = Math.max(220, mainRect.height - infoHeight - controlsHeight - verticalPaddingReserve);
+        const horizontalBudget = Math.max(220, mainRect.width - (isLandscape ? 72 : 32));
+
+        const sizeByWidth = horizontalBudget * (isLandscape ? 0.62 : 0.88);
+        const sizeByHeight = verticalBudget * (isLandscape ? 0.95 : 1.0);
+        const targetSize = Math.min(sizeByWidth, sizeByHeight);
+
+        const minSize = Math.max(200, Math.min(viewportWidth, viewportHeight) * (isLandscape ? 0.4 : 0.46));
+        const maxSize = Math.min(
+            700,
+            Math.min(viewportWidth * (isLandscape ? 0.6 : 0.92), viewportHeight * (isLandscape ? 0.82 : 0.64))
+        );
+
+        const finalSize = Math.max(minSize, Math.min(maxSize, targetSize));
+        vinylContainer.style.setProperty('--vinyl-disc-size', `${Math.round(finalSize)}px`);
+    }
+
+    startAdaptiveFullscreenDiscSizing() {
+        this.stopAdaptiveFullscreenDiscSizing();
+
+        this._fullscreenDiscResizeHandler = () => {
+            requestAnimationFrame(() => this.applyAdaptiveFullscreenDiscSize());
+        };
+
+        window.addEventListener('resize', this._fullscreenDiscResizeHandler);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', this._fullscreenDiscResizeHandler);
+        }
+
+        requestAnimationFrame(() => this.applyAdaptiveFullscreenDiscSize());
+    }
+
+    stopAdaptiveFullscreenDiscSizing() {
+        if (!this._fullscreenDiscResizeHandler) return;
+
+        window.removeEventListener('resize', this._fullscreenDiscResizeHandler);
+        if (window.visualViewport) {
+            window.visualViewport.removeEventListener('resize', this._fullscreenDiscResizeHandler);
+        }
+        this._fullscreenDiscResizeHandler = null;
+
+        const vinylContainer = document.getElementById('vinyl-disc-container');
+        vinylContainer?.style.removeProperty('--vinyl-disc-size');
     }
 
     refreshFullscreenDiscScrubbing() {
@@ -1158,12 +1223,41 @@ export class UIRenderer {
         let pendingSeekSeconds = 0;
         let seekRafId = null;
 
+        const getCurrentRotationDegrees = () => {
+            const computedTransform = getComputedStyle(vinylContainer).transform;
+            if (!computedTransform || computedTransform === 'none') return 0;
+
+            const matrixValues = computedTransform.match(/matrix\(([^)]+)\)/);
+            if (matrixValues && matrixValues[1]) {
+                const [a, b] = matrixValues[1].split(',').map((value) => parseFloat(value.trim()));
+                if (Number.isFinite(a) && Number.isFinite(b)) {
+                    return (Math.atan2(b, a) * 180) / Math.PI;
+                }
+            }
+
+            const matrix3dValues = computedTransform.match(/matrix3d\(([^)]+)\)/);
+            if (matrix3dValues && matrix3dValues[1]) {
+                const values = matrix3dValues[1].split(',').map((value) => parseFloat(value.trim()));
+                const a = values[0];
+                const b = values[1];
+                if (Number.isFinite(a) && Number.isFinite(b)) {
+                    return (Math.atan2(b, a) * 180) / Math.PI;
+                }
+            }
+
+            return 0;
+        };
+
         const getCenterAngle = (event) => {
             const rect = vinylContainer.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             const dx = event.clientX - centerX;
             const dy = event.clientY - centerY;
+            const radius = Math.hypot(dx, dy);
+            if (radius < rect.width * 0.12) {
+                return null;
+            }
             return (Math.atan2(dy, dx) * 180) / Math.PI;
         };
 
@@ -1215,10 +1309,13 @@ export class UIRenderer {
         const onPointerDown = (event) => {
             if (event.pointerType === 'mouse' && event.button !== 0) return;
 
+            const startAngle = getCenterAngle(event);
+            if (startAngle === null) return;
+
             dragging = true;
             activePointerId = event.pointerId;
-            lastAngle = getCenterAngle(event);
-            visualRotation = 0;
+            lastAngle = startAngle;
+            visualRotation = getCurrentRotationDegrees();
             pendingSeekSeconds = 0;
 
             if (event.pointerId !== undefined && vinylContainer.setPointerCapture) {
@@ -1234,6 +1331,7 @@ export class UIRenderer {
             if (activePointerId !== null && event.pointerId !== activePointerId) return;
 
             const angle = getCenterAngle(event);
+            if (angle === null) return;
             const deltaAngle = normalizeDeltaAngle(angle - lastAngle);
             if (Math.abs(deltaAngle) < 0.05) return;
 

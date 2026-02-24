@@ -4770,8 +4770,8 @@ input:checked + .slider::before {
 
 /* Fullscreen rotating disc effect - vinyl record */
 #vinyl-disc-container.rotating-disc {
-    width: min(48vh, 48vw);
-    height: min(48vh, 48vw);
+    width: var(--vinyl-disc-size, min(48vh, 48vw));
+    height: var(--vinyl-disc-size, min(48vh, 48vw));
     border-radius: var(--radius-full);
     background:
         radial-gradient(

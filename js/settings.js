@@ -27,6 +27,7 @@ import {
     monoAudioSettings,
     exponentialVolumeSettings,
     audioEffectsSettings,
+    playbackBehaviorSettings,
     settingsUiState,
     pwaUpdateSettings,
     contentBlockingSettings,
@@ -783,6 +784,25 @@ export function initializeSettings(scrobbler, player, api, ui) {
         useAlbumReleaseYearToggle.checked = trackDateSettings.useAlbumYear();
         useAlbumReleaseYearToggle.addEventListener('change', (e) => {
             trackDateSettings.setUseAlbumYear(e.target.checked);
+        });
+    }
+
+    // Playback Behavior Settings
+    const gaplessPlaybackToggle = document.getElementById('gapless-playback-toggle');
+    if (gaplessPlaybackToggle) {
+        gaplessPlaybackToggle.checked = playbackBehaviorSettings.isGaplessEnabled();
+        gaplessPlaybackToggle.addEventListener('change', (e) => {
+            playbackBehaviorSettings.setGaplessEnabled(e.target.checked);
+            window.dispatchEvent(new CustomEvent('gapless-playback-changed', { detail: { enabled: e.target.checked } }));
+        });
+    }
+
+    const autoMixToggle = document.getElementById('auto-mix-toggle');
+    if (autoMixToggle) {
+        autoMixToggle.checked = playbackBehaviorSettings.isAutoMixEnabled();
+        autoMixToggle.addEventListener('change', (e) => {
+            playbackBehaviorSettings.setAutoMixEnabled(e.target.checked);
+            window.dispatchEvent(new CustomEvent('auto-mix-changed', { detail: { enabled: e.target.checked } }));
         });
     }
 
@@ -2204,6 +2224,18 @@ export function initializeSettings(scrobbler, player, api, ui) {
         lyricsHapticSyncToggle.addEventListener('change', (e) => {
             lyricsSettings.setHapticSyncEnabled(e.target.checked);
             window.dispatchEvent(new CustomEvent('lyrics-haptics-changed', { detail: { enabled: e.target.checked } }));
+        });
+    }
+
+    // Lyrics Vibration Enhancement Toggle
+    const lyricsVibrationEnhancementToggle = document.getElementById('lyrics-vibration-enhancement-toggle');
+    if (lyricsVibrationEnhancementToggle) {
+        lyricsVibrationEnhancementToggle.checked = lyricsSettings.isHapticEnhancementEnabled();
+        lyricsVibrationEnhancementToggle.addEventListener('change', (e) => {
+            lyricsSettings.setHapticEnhancementEnabled(e.target.checked);
+            window.dispatchEvent(
+                new CustomEvent('lyrics-haptic-enhancement-changed', { detail: { enabled: e.target.checked } })
+            );
         });
     }
 
