@@ -1145,9 +1145,11 @@ export class UIRenderer {
         const sizeByHeight = verticalBudget * (isLandscape ? 0.95 : 1.0);
         const targetSize = Math.min(sizeByWidth, sizeByHeight);
 
+        // Keep desktop fullscreen from rendering an oversized vinyl disc.
+        const desktopCap = isLandscape && viewportWidth >= 1024 ? 520 : 620;
         const minSize = Math.max(200, Math.min(viewportWidth, viewportHeight) * (isLandscape ? 0.4 : 0.46));
         const maxSize = Math.min(
-            700,
+            desktopCap,
             Math.min(viewportWidth * (isLandscape ? 0.6 : 0.92), viewportHeight * (isLandscape ? 0.82 : 0.64))
         );
 
