@@ -6262,6 +6262,7 @@ input:checked + .slider::before {
 }
 
 /* Friends Page Styles */
+
 /* Friends Hero */
 .friends-hero {
     padding: 2.5rem 0 1.5rem;
@@ -6308,7 +6309,9 @@ input:checked + .slider::before {
     border-radius: 12px;
     padding: 1rem 1.25rem;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease;
     border: 1px solid var(--border);
     display: flex;
     align-items: center;

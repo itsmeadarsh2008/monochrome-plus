@@ -1,4 +1,3 @@
-
 export class SidePanelManager {
     constructor() {
         this.panel = document.getElementById('side-panel');

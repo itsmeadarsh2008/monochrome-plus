@@ -23,7 +23,6 @@ import { authManager } from './accounts/auth.js';
 import { waveformGenerator } from './waveform.js';
 import { audioContextManager } from './audio-context.js';
 
-
 let currentTrackIdForWaveform = null;
 
 export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {

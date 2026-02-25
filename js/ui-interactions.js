@@ -17,7 +17,6 @@ import { db } from './db.js';
 import { syncManager } from './accounts/appwrite-sync.js';
 import { showNotification, downloadTracks } from './downloads.js';
 
-
 export function initializeUIInteractions(player, api, ui) {
     const sidebar = document.querySelector('.sidebar');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
