@@ -74,6 +74,12 @@ function destroySmoothScrolling() {
     }
 }
 
+export function scrollToTop() {
+    if (lenis) {
+        lenis.scrollTo(0, { immediate: true });
+    }
+}
+
 async function setupSmoothScrolling() {
     // Check if smooth scrolling is enabled
     const smoothScrollingEnabled = smoothScrollingSettings.isEnabled();

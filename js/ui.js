@@ -49,7 +49,7 @@ import {
     createProjectCardHTML,
     createTrackFromSong,
 } from './tracker.js';
-import { trackSearch, trackChangeSort } from './analytics.js';
+import { scrollToTop } from './smooth-scrolling.js';
 
 fontSettings.applyFont();
 fontSettings.applyFontSize();
@@ -1681,7 +1681,9 @@ export class UIRenderer {
             link.classList.toggle('active', isHome || isProfile || isMatch);
         });
 
-        document.querySelector('.main-content').scrollTop = 0;
+        const mainContent = document.querySelector('.main-content');
+        mainContent.scrollTop = 0;
+        scrollToTop();
 
         // Clear background and color if not on album, artist, playlist, or mix page
         if (!['album', 'artist', 'playlist', 'mix'].includes(pageId)) {
@@ -3021,8 +3023,6 @@ export class UIRenderer {
 
             // Track search with results
             const totalResults = finalTracks.length + finalArtists.length + finalAlbums.length + finalPlaylists.length;
-            trackSearch(query, totalResults);
-
             if (finalTracks.length) {
                 this.renderListWithTracks(tracksContainer, finalTracks, true);
             } else {
@@ -4375,14 +4375,6 @@ export class UIRenderer {
         return decodeURIComponent(window.location.pathname.slice('/friends/'.length));
     }
 
-    _getFriendsChatUsername(routeParam = '') {
-        if (routeParam && routeParam.startsWith('chat/@')) {
-            return decodeURIComponent(routeParam.slice('chat/@'.length));
-        }
-        const match = window.location.pathname.match(/^\/friends\/chat\/@([^/]+)/);
-        return match ? decodeURIComponent(match[1]) : null;
-    }
-
     _normalizeFriendUsername(username) {
         return String(username || '')
             .trim()
@@ -4594,182 +4586,6 @@ export class UIRenderer {
         }
     }
 
-    _renderChatMessageHTML(message, currentUserId) {
-        const isMine = message.senderId === currentUserId;
-        const timeLabel = new Date(message.createdAt || Date.now()).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-        const body = message.message ? `<div class="social-chat-text">${escapeHtml(message.message)}</div>` : '';
-
-        let trackHtml = '';
-        const track = message.trackPayload;
-        if (track && typeof track === 'object') {
-            const trackTitle = escapeHtml(track.title || 'Shared Track');
-            const trackArtist = escapeHtml(track.artist || 'Unknown Artist');
-            const trackHref = track.link || (track.id ? `/track/${track.id}` : null);
-            const trackCover = track.cover ? this.api.getCoverUrl(track.cover, '160') : '/assets/appicon.png';
-            trackHtml = `
-                <a class="social-chat-track" href="${trackHref || '#'}" ${trackHref ? '' : 'data-disabled="true"'}>
-                    <img src="${trackCover}" alt="${trackTitle}" loading="lazy" />
-                    <div class="social-chat-track-meta">
-                        <div class="social-chat-track-title">${trackTitle}</div>
-                        <div class="social-chat-track-subtitle">${trackArtist}</div>
-                    </div>
-                </a>
-            `;
-        }
-
-        return `
-            <div class="social-chat-message ${isMine ? 'mine' : 'theirs'}">
-                <div class="social-chat-bubble">
-                    ${body}
-                    ${trackHtml}
-                    <div class="social-chat-time">${timeLabel}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    async renderFriendsChatSection(friends, routeParam = '') {
-        const section = document.getElementById('friends-chat-section');
-        const chatList = document.getElementById('friends-chat-list');
-        const chatEmpty = document.getElementById('friends-chat-empty');
-        const threadTitle = document.getElementById('friends-chat-thread-title');
-        const threadMessages = document.getElementById('friends-chat-messages');
-        const threadEmpty = document.getElementById('friends-chat-thread-empty');
-        const chatForm = document.getElementById('friends-chat-form');
-        const chatInput = document.getElementById('friends-chat-input');
-        const chatSend = document.getElementById('friends-chat-send');
-        const threadShare = document.getElementById('friends-chat-thread-share');
-
-        if (
-            !section ||
-            !chatList ||
-            !chatEmpty ||
-            !threadTitle ||
-            !threadMessages ||
-            !threadEmpty ||
-            !chatForm ||
-            !chatInput ||
-            !chatSend ||
-            !threadShare
-        ) {
-            return;
-        }
-
-        if (!authManager.user) {
-            section.style.display = 'none';
-            return;
-        }
-
-        section.style.display = 'block';
-        const friendsList = Array.isArray(friends) ? friends : [];
-
-        if (friendsList.length === 0) {
-            chatList.innerHTML = '';
-            chatEmpty.style.display = 'block';
-            threadTitle.textContent = 'Select a friend';
-            threadMessages.innerHTML = '';
-            threadEmpty.style.display = 'block';
-            threadEmpty.textContent = 'Add a friend to start chatting.';
-            chatForm.dataset.friendUid = '';
-            chatForm.dataset.friendUsername = '';
-            chatInput.value = '';
-            chatInput.disabled = true;
-            chatSend.disabled = true;
-            threadShare.style.display = 'none';
-            return;
-        }
-
-        chatEmpty.style.display = 'none';
-        const summaries = await syncManager.listChatSummaries();
-        const summaryByPeer = new Map(summaries.map((summary) => [summary.peerId, summary]));
-
-        const routeUsername = this._getFriendsChatUsername(routeParam);
-        const routeRequested = !!routeUsername;
-        let activeFriend =
-            friendsList.find(
-                (friend) => friend.username && friend.username.toLowerCase() === routeUsername?.toLowerCase()
-            ) || null;
-
-        if (!activeFriend && !routeRequested && this._friendsActiveChatUid) {
-            activeFriend = friendsList.find((friend) => friend.uid === this._friendsActiveChatUid) || null;
-        }
-        if (!activeFriend && !routeRequested) {
-            activeFriend = friendsList[0] || null;
-        }
-
-        this._friendsActiveChatUid = activeFriend?.uid || null;
-
-        chatList.innerHTML = friendsList
-            .map((friend) => {
-                const summary = summaryByPeer.get(friend.uid);
-                const isActive = activeFriend && friend.uid === activeFriend.uid;
-                const preview = summary?.lastMessage ? escapeHtml(summary.lastMessage) : 'No messages yet';
-                const unreadBadge =
-                    summary?.unreadCount > 0
-                        ? `<span class="social-chat-unread">${summary.unreadCount > 99 ? '99+' : summary.unreadCount}</span>`
-                        : '';
-
-                return `
-                    <button class="social-chat-user ${isActive ? 'active' : ''}" data-uid="${friend.uid}" data-username="${escapeHtml(friend.username || '')}">
-                        <img class="social-chat-user-avatar" src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(friend.displayName || friend.username || 'Friend')}" />
-                        <div class="social-chat-user-meta">
-                            <div class="social-chat-user-name">${escapeHtml(friend.displayName || friend.username || 'Friend')}</div>
-                            <div class="social-chat-user-preview">${preview}</div>
-                        </div>
-                        ${unreadBadge}
-                    </button>
-                `;
-            })
-            .join('');
-
-        if (!activeFriend) {
-            threadTitle.textContent = routeRequested ? `@${routeUsername}` : 'Select a friend';
-            threadMessages.innerHTML = '';
-            threadEmpty.style.display = 'block';
-            threadEmpty.textContent = routeRequested
-                ? 'This chat URL is valid, but that user is not in your friends list.'
-                : 'Select a friend to open a conversation.';
-            chatForm.dataset.friendUid = '';
-            chatForm.dataset.friendUsername = '';
-            chatInput.value = '';
-            chatInput.disabled = true;
-            chatSend.disabled = true;
-            threadShare.style.display = 'none';
-            return;
-        }
-
-        const messages = await syncManager.listChatMessages(activeFriend.uid, { markRead: true });
-        threadTitle.textContent = activeFriend.displayName || activeFriend.username || 'Conversation';
-        threadShare.style.display = 'inline-flex';
-        threadShare.dataset.username = activeFriend.username || '';
-
-        threadMessages.innerHTML = messages
-            .map((message) => this._renderChatMessageHTML(message, authManager.user.$id))
-            .join('');
-
-        threadMessages.querySelectorAll('.social-chat-track').forEach((trackLink) => {
-            if (trackLink.dataset.disabled === 'true') return;
-            trackLink.addEventListener('click', (event) => {
-                event.preventDefault();
-                const href = trackLink.getAttribute('href');
-                if (href) navigate(href);
-            });
-        });
-
-        threadEmpty.style.display = messages.length > 0 ? 'none' : 'block';
-        threadEmpty.textContent = messages.length === 0 ? 'No messages yet. Say hi.' : '';
-        threadMessages.scrollTop = threadMessages.scrollHeight;
-
-        chatForm.dataset.friendUid = activeFriend.uid || '';
-        chatForm.dataset.friendUsername = activeFriend.username || '';
-        chatForm.dataset.friendDisplayName = activeFriend.displayName || activeFriend.username || 'Friend';
-        chatInput.disabled = false;
-        chatSend.disabled = false;
-    }
-
     async renderFriendsPage(routeParam = '') {
         this.showPage('friends');
 
@@ -4819,22 +4635,38 @@ export class UIRenderer {
                       db.getCollaborativePlaylists(),
                   ]);
 
+            // Enrich friends with status from their profiles
+            if (useCloudSocial && friends.length > 0) {
+                await Promise.allSettled(
+                    friends.map(async (friend) => {
+                        try {
+                            const profile = await syncManager.getProfile(friend.username);
+                            if (profile?.status) friend.status = profile.status;
+                        } catch {}
+                    })
+                );
+            }
+
             if (friends && friends.length > 0) {
                 friendsGrid.innerHTML = friends
                     .map((friend) => {
                         const username = friend.username || '';
                         const safeDisplayName = escapeHtml(friend.displayName || username || 'Friend');
                         const safeUsername = escapeHtml(username);
+                        const statusText = friend.status || '';
+                        const safeStatus = statusText ? escapeHtml(statusText) : '';
                         return `
                             <div class="friend-card" data-uid="${friend.uid}" data-username="${safeUsername}">
                                 <div class="friend-avatar">
                                     <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}">
                                 </div>
-                                <div class="friend-name">${safeDisplayName}</div>
-                                <div class="friend-username">@${safeUsername}</div>
+                                <div class="friend-card-body">
+                                    <div class="friend-name">${safeDisplayName}</div>
+                                    <div class="friend-username">@${safeUsername}</div>
+                                    ${safeStatus ? `<div class="friend-status">${safeStatus}</div>` : ''}
+                                </div>
                                 <div class="friend-card-actions">
                                     <button class="btn-secondary friend-open-profile-btn" data-username="${safeUsername}">Profile</button>
-                                    <button class="btn-primary friend-open-chat-btn" data-username="${safeUsername}">Chat</button>
                                 </div>
                             </div>
                         `;
@@ -4948,7 +4780,6 @@ export class UIRenderer {
                 if (noCollabPlaylistsMessage) noCollabPlaylistsMessage.style.display = 'block';
             }
 
-            await this.renderFriendsChatSection(friends, routeParam);
             this.setupFriendsPageEventListeners({ useCloudSocial });
 
             if (!this._friendsRealtimeBound) {
@@ -4959,7 +4790,6 @@ export class UIRenderer {
                     }
                 };
                 window.addEventListener('pb-friend-request-updated', this._friendsRealtimeHandler);
-                window.addEventListener('pb-chat-message', this._friendsRealtimeHandler);
             }
         } catch (error) {
             console.error('Failed to load friends page:', error);
@@ -5069,86 +4899,14 @@ export class UIRenderer {
             };
         });
 
-        document.querySelectorAll('.friend-open-chat-btn').forEach((btn) => {
-            btn.onclick = (event) => {
-                event.stopPropagation();
-                const username = btn.dataset.username;
-                if (username) {
-                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
-                }
-            };
-        });
-
         document.querySelectorAll('.friend-card').forEach((card) => {
             card.onclick = () => {
                 const username = card.dataset.username;
                 if (username) {
-                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
+                    navigate(`/user/@${encodeURIComponent(username)}`);
                 }
             };
         });
-
-        const chatList = document.getElementById('friends-chat-list');
-        if (chatList) {
-            chatList.onclick = (event) => {
-                const target = event.target.closest('.social-chat-user');
-                if (!target) return;
-                const username = target.dataset.username;
-                if (username) {
-                    navigate(`/friends/chat/@${encodeURIComponent(username)}`);
-                }
-            };
-        }
-
-        const chatShareBtn = document.getElementById('friends-chat-thread-share');
-        if (chatShareBtn) {
-            chatShareBtn.onclick = () => {
-                const username = chatShareBtn.dataset.username;
-                if (!username) return;
-                const url = getShareUrl(`/friends/chat/@${encodeURIComponent(username)}`);
-                navigator.clipboard.writeText(url).then(() => {
-                    const original = chatShareBtn.textContent;
-                    chatShareBtn.textContent = 'Copied';
-                    setTimeout(() => {
-                        chatShareBtn.textContent = original || 'Share URL';
-                    }, 1400);
-                });
-            };
-        }
-
-        const chatForm = document.getElementById('friends-chat-form');
-        const chatInput = document.getElementById('friends-chat-input');
-        const chatSend = document.getElementById('friends-chat-send');
-        if (chatForm && chatInput && chatSend) {
-            chatForm.onsubmit = async (event) => {
-                event.preventDefault();
-                if (!useCloudSocial) return;
-
-                const friendUid = chatForm.dataset.friendUid;
-                const friendUsername = chatForm.dataset.friendUsername;
-                const friendDisplayName = chatForm.dataset.friendDisplayName;
-                const message = chatInput.value.trim();
-
-                if (!friendUid || !friendUsername || !message) return;
-
-                chatSend.disabled = true;
-                try {
-                    await syncManager.sendChatMessage({
-                        toUserId: friendUid,
-                        toUsername: friendUsername,
-                        toDisplayName: friendDisplayName,
-                        message,
-                    });
-                    chatInput.value = '';
-                    await this.renderFriendsPage(`chat/@${encodeURIComponent(friendUsername)}`);
-                } catch (error) {
-                    console.error('Failed to send chat message:', error);
-                    alert(error?.message || 'Failed to send message.');
-                } finally {
-                    chatSend.disabled = false;
-                }
-            };
-        }
 
         const createCollabBtn = document.getElementById('create-collab-playlist-btn');
         const createCollabModal = document.getElementById('create-collab-playlist-modal');
@@ -5317,7 +5075,6 @@ export class UIRenderer {
                 const handleSort = (ev) => {
                     const li = ev.target.closest('li');
                     if (li && li.dataset.sort) {
-                        trackChangeSort(li.dataset.sort);
                         onSort(li.dataset.sort);
                         closeMenu();
                     }

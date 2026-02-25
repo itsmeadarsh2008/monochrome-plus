@@ -30,28 +30,7 @@ import './smooth-scrolling.js';
 import { openEditProfile } from './profile.js';
 
 import { initTracker } from './tracker.js';
-import {
-    initAnalytics,
-    trackSidebarNavigation,
-    trackCreatePlaylist,
-    trackCreateFolder,
-    trackImportJSPF,
-    trackImportCSV,
-    trackImportXSPF,
-    trackImportXML,
-    trackImportM3U,
-    trackSelectLocalFolder,
-    trackChangeLocalFolder,
-    trackOpenModal,
-    trackCloseModal,
-    trackKeyboardShortcut,
-    trackPwaUpdate,
-    trackDismissUpdate,
-    trackOpenFullscreenCover,
-    trackCloseFullscreenCover,
-    trackOpenLyrics,
-    trackCloseLyrics,
-} from './analytics.js';
+
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
 
 // Lazy-loaded modules
@@ -160,66 +139,52 @@ function initializeKeyboardShortcuts(player, audioPlayer) {
         switch (e.key.toLowerCase()) {
             case ' ':
                 e.preventDefault();
-                trackKeyboardShortcut('Space');
                 player.handlePlayPause();
                 break;
             case 'arrowright':
                 if (e.shiftKey) {
-                    trackKeyboardShortcut('Shift+Right');
                     player.playNext();
                 } else {
-                    trackKeyboardShortcut('Right');
                     audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 10);
                 }
                 break;
             case 'arrowleft':
                 if (e.shiftKey) {
-                    trackKeyboardShortcut('Shift+Left');
                     player.playPrev();
                 } else {
-                    trackKeyboardShortcut('Left');
                     audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 10);
                 }
                 break;
             case 'arrowup':
                 e.preventDefault();
-                trackKeyboardShortcut('Up');
                 player.setVolume(player.userVolume + 0.1);
                 break;
             case 'arrowdown':
                 e.preventDefault();
-                trackKeyboardShortcut('Down');
                 player.setVolume(player.userVolume - 0.1);
                 break;
             case 'm':
-                trackKeyboardShortcut('M');
                 audioPlayer.muted = !audioPlayer.muted;
                 break;
             case 's':
-                trackKeyboardShortcut('S');
                 document.getElementById('shuffle-btn')?.click();
                 break;
             case 'r':
-                trackKeyboardShortcut('R');
                 document.getElementById('repeat-btn')?.click();
                 break;
             case 'q':
-                trackKeyboardShortcut('Q');
                 document.getElementById('queue-btn')?.click();
                 break;
             case '/':
                 e.preventDefault();
-                trackKeyboardShortcut('/');
                 document.getElementById('search-input')?.focus();
                 break;
             case 'escape':
-                trackKeyboardShortcut('Escape');
                 document.getElementById('search-input')?.blur();
                 sidePanelManager.close();
                 clearLyricsPanelSync(audioPlayer, sidePanelManager.panel);
                 break;
             case 'l':
-                trackKeyboardShortcut('L');
                 document.querySelector('.now-playing-bar .cover')?.click();
                 break;
         }
@@ -300,9 +265,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         .ping()
         .then(() => console.log('[Appwrite] Connected'))
         .catch((err) => console.error('[Appwrite] Connection failed', err));
-
-    // Initialize analytics
-    initAnalytics();
 
     // Wait for Auth initialization
     console.log('[Appwrite] Waiting for Auth initialization...');
@@ -442,7 +404,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const href = link.getAttribute('href');
             if (href && !href.startsWith('http')) {
                 const item = link.querySelector('span')?.textContent || href;
-                trackSidebarNavigation(item);
             }
         });
     });
@@ -477,23 +438,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const mode = nowPlayingSettings.getMode();
-
-        if (mode === 'lyrics') {
-            const isActive = sidePanelManager.isActive('lyrics');
-
-            if (isActive) {
-                trackCloseLyrics(player.currentTrack);
-            } else {
-                trackOpenLyrics(player.currentTrack);
-            }
-        } else if (mode === 'cover') {
-            const overlay = document.getElementById('fullscreen-cover-overlay');
-            if (overlay && overlay.style.display === 'flex') {
-                trackCloseFullscreenCover();
-            } else {
-                trackOpenFullscreenCover(player.currentTrack);
-            }
-        }
 
         if (mode === 'lyrics') {
             const isActive = sidePanelManager.isActive('lyrics');
@@ -542,7 +486,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     document.getElementById('close-fullscreen-cover-btn')?.addEventListener('click', () => {
-        trackCloseFullscreenCover();
         if (window.location.hash === '#fullscreen') {
             window.history.back();
         } else {
@@ -955,7 +898,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (e.target.closest('#create-playlist-btn')) {
-            trackOpenModal('Create Playlist');
             const modal = document.getElementById('playlist-modal');
             document.getElementById('playlist-modal-title').textContent = 'Create Playlist';
             document.getElementById('playlist-name-input').value = '';
@@ -1009,7 +951,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (e.target.closest('#create-folder-btn')) {
-            trackOpenModal('Create Folder');
             const modal = document.getElementById('folder-modal');
             document.getElementById('folder-name-input').value = '';
             document.getElementById('folder-cover-input').value = '';
@@ -1023,11 +964,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (name) {
                 const folder = await db.createFolder(name, cover);
-                trackCreateFolder(folder);
                 await syncManager.syncUserFolder(folder, 'create');
                 ui.renderLibraryPage();
                 document.getElementById('folder-modal').classList.remove('active');
-                trackCloseModal('Create Folder');
             }
         }
 
@@ -1226,7 +1165,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
 
                             console.log(`Imported ${tracks.length} tracks from YouTube`);
-                            trackImportCSV(name || 'Untitled', tracks.length, missingTracks.length);
 
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
@@ -1306,12 +1244,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 jspfPlaylist?.creator ||
                                 jspfPlaylist?.extension?.['https://musicbrainz.org/doc/jspf#playlist']?.creator ||
                                 'unknown';
-                            trackImportJSPF(
-                                name || jspfPlaylist?.title || 'Untitled',
-                                tracks.length,
-                                missingTracks.length,
-                                jspfCreator
-                            );
 
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
@@ -1372,8 +1304,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                             console.log(`Imported ${tracks.length} tracks from CSV`);
 
-                            trackImportCSV(name || 'Untitled', tracks.length, missingTracks.length);
-
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
                                     showMissingTracksNotification(missingTracks);
@@ -1430,8 +1360,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 return;
                             }
                             console.log(`Imported ${tracks.length} tracks from XSPF`);
-
-                            trackImportXSPF(name || 'Untitled', tracks.length, missingTracks.length);
 
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
@@ -1490,8 +1418,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                             console.log(`Imported ${tracks.length} tracks from XML`);
 
-                            trackImportXML(name || 'Untitled', tracks.length, missingTracks.length);
-
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
                                     showMissingTracksNotification(missingTracks);
@@ -1549,8 +1475,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                             console.log(`Imported ${tracks.length} tracks from M3U`);
 
-                            trackImportM3U(name || 'Untitled', tracks.length, missingTracks.length);
-
                             if (missingTracks.length > 0) {
                                 setTimeout(() => {
                                     showMissingTracksNotification(missingTracks);
@@ -1582,10 +1506,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Update DB again with isPublic flag
                         await db.performTransaction('user_playlists', 'readwrite', (store) => store.put(playlist));
                         await syncManager.syncUserPlaylist(playlist, 'create');
-                        trackCreatePlaylist(playlist, importSource);
                         ui.renderLibraryPage();
                         modal.classList.remove('active');
-                        trackCloseModal('Create Playlist');
                     });
                 }
             }
@@ -2073,9 +1995,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
 
                 await db.saveSetting('local_folder_handle', handle);
-                if (isChange) {
-                    trackChangeLocalFolder();
-                }
 
                 const btn = document.getElementById('select-local-folder-btn');
                 const btnText = document.getElementById('select-local-folder-text');
@@ -2155,7 +2074,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
 
                 window.localFilesCache = tracks;
-                trackSelectLocalFolder(tracks.length);
                 ui.renderLibraryPage();
             } catch (err) {
                 if (err.name !== 'AbortError') {
@@ -2348,81 +2266,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Share Track Modal
-    const shareTrackModal = document.getElementById('share-track-modal');
-    const cancelShareTrackBtn = document.getElementById('cancel-share-track-btn');
-    const confirmShareTrackBtn = document.getElementById('confirm-share-track-btn');
-
-    if (shareTrackModal) {
-        shareTrackModal.querySelector('.modal-overlay')?.addEventListener('click', () => {
-            shareTrackModal.classList.remove('active');
-        });
-    }
-    if (cancelShareTrackBtn) {
-        cancelShareTrackBtn.addEventListener('click', () => {
-            shareTrackModal?.classList.remove('active');
-        });
-    }
-    if (confirmShareTrackBtn) {
-        confirmShareTrackBtn.addEventListener('click', async () => {
-            const friendSelect = document.getElementById('share-track-friend-select');
-            const messageInput = document.getElementById('share-track-message');
-            const friendUid = friendSelect?.value;
-            const message = messageInput?.value?.trim() || '';
-
-            if (!friendUid) {
-                alert('Please select a friend to share with');
-                return;
-            }
-
-            const trackData = shareTrackModal?.dataset;
-            if (trackData?.trackId) {
-                try {
-                    const trackTitle = document.getElementById('share-track-title')?.textContent || '';
-                    const trackArtist = document.getElementById('share-track-artist')?.textContent || '';
-                    const trackCover =
-                        document.getElementById('share-track-cover')?.src?.includes('data:image') ||
-                        !document.getElementById('share-track-cover')?.src
-                            ? null
-                            : document.getElementById('share-track-cover')?.src;
-
-                    if (authManager.user) {
-                        const cloudFriends = await syncManager.listFriends();
-                        const targetFriend = cloudFriends.find((friend) => friend.uid === friendUid);
-                        await syncManager.sendChatMessage({
-                            toUserId: friendUid,
-                            toUsername: targetFriend?.username || '',
-                            toDisplayName: targetFriend?.displayName || '',
-                            toAvatarUrl: targetFriend?.avatarUrl || '',
-                            message,
-                            trackPayload: {
-                                id: trackData.trackId,
-                                title: trackTitle,
-                                artist: trackArtist,
-                                cover: trackCover,
-                                link: `/track/${trackData.trackId}`,
-                            },
-                        });
-                    } else {
-                        const track = {
-                            id: trackData.trackId,
-                            title: trackTitle,
-                            sharedByName: authManager.user?.name || 'A friend',
-                        };
-                        await db.shareTrack(track, friendUid, message);
-                    }
-
-                    shareTrackModal.classList.remove('active');
-                    if (messageInput) messageInput.value = '';
-                    alert('Track shared!');
-                } catch (error) {
-                    console.error('Failed to share track:', error);
-                    alert('Failed to share track');
-                }
-            }
-        });
-    }
-
     // PWA Update Logic
     if (window.__AUTH_GATE__) {
         disablePwaForAuthGate();
@@ -2431,12 +2274,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             onNeedRefresh() {
                 if (pwaUpdateSettings.isAutoUpdateEnabled()) {
                     // Auto-update: immediately activate the new service worker
-                    trackPwaUpdate();
                     updateSW(true);
                 } else {
                     // Show notification with Update button and dismiss option
                     showUpdateNotification(() => {
-                        trackPwaUpdate();
                         updateSW(true);
                     });
                 }
@@ -2773,7 +2614,6 @@ function showUpdateNotification(updateCallback) {
     });
 
     document.getElementById('dismiss-update-btn').addEventListener('click', () => {
-        trackDismissUpdate();
         notification.remove();
     });
 }

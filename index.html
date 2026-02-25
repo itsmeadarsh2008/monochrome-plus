@@ -45,21 +45,6 @@
         rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
 
-    <!-- Privacy-friendly analytics by Plausible -->
-    <script async src="https://plausible.canine.tools/js/pa-dCMvQpiD1-AJmi8o3xviO.js"></script>
-    <script>
-        window.plausible =
-            window.plausible ||
-            function () {
-                (plausible.q = plausible.q || []).push(arguments);
-            };
-        plausible.init =
-            plausible.init ||
-            function (i) {
-                plausible.o = i || {};
-            };
-        plausible.init();
-    </script>
 </head>
 
 <body>
@@ -78,7 +63,6 @@
             </li>
             <li data-action="toggle-pin" data-type-filter="album,artist,playlist,user-playlist">Pin</li>
             <li data-action="add-to-playlist" data-type-filter="track">Add to playlist</li>
-            <li data-action="share-with-friend" data-type-filter="track">Share with friend</li>
             <li data-action="go-to-artist" data-type-filter="track,album">Go to artist</li>
             <li data-action="go-to-album" data-type-filter="track">Go to album</li>
             <li data-action="copy-link">Copy link</li>
@@ -986,43 +970,6 @@
         </div>
     </div>
 
-    <!-- Share Track Modal -->
-    <div id="share-track-modal" class="modal">
-        <div class="modal-overlay"></div>
-        <div class="modal-content">
-            <h3>Share Track</h3>
-            <p style="margin: 0.5rem 0 1rem; color: var(--muted-foreground)">Share this track with a friend</p>
-            <div id="share-track-info" style="
-                        display: flex;
-                        align-items: center;
-                        gap: var(--space-4);
-                        margin-bottom: var(--space-4);
-                        padding: var(--space-2);
-                        background: var(--card);
-                        border-radius: var(--radius-md);
-                    ">
-                <img id="share-track-cover" src="" alt=""
-                    style="width: 48px; height: 48px; object-fit: cover; border-radius: var(--radius-sm)" />
-                <div>
-                    <div id="share-track-title" style="font-weight: 500"></div>
-                    <div id="share-track-artist" style="color: var(--muted-foreground); font-size: 0.875rem"></div>
-                </div>
-            </div>
-            <div style="margin-bottom: 1rem">
-                <label class="label">Share with</label>
-                <select id="share-track-friend-select" class="input">
-                    <option value="">Select a friend</option>
-                </select>
-            </div>
-            <input type="text" id="share-track-message" class="input" placeholder="Add a message (optional)"
-                style="margin-bottom: 1rem" />
-            <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
-                <button class="btn-secondary" id="cancel-share-track-btn">Cancel</button>
-                <button class="btn-primary" id="confirm-share-track-btn">Share</button>
-            </div>
-        </div>
-    </div>
-
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-content">
@@ -1475,11 +1422,9 @@
             </div>
 
             <div id="page-friends" class="page">
-                <div id="friends-greeting" style="padding: 2rem 0">
-                    <h1 id="friends-greeting-text" style="margin-bottom: 0.5rem; font-size: 2rem; font-weight: 700">
-                        Connect with Friends
-                    </h1>
-                    <p style="color: var(--muted-foreground)">Share music and create playlists together</p>
+                <div id="friends-greeting" class="friends-hero">
+                    <h1 id="friends-greeting-text" class="friends-hero-title">Connect with Friends</h1>
+                    <p class="friends-hero-subtitle">See what your friends are listening to</p>
                 </div>
 
                 <!-- Friends Request Section -->
@@ -1512,12 +1457,7 @@
 
                 <!-- Friends List Section -->
                 <section class="content-section" id="friends-list-section">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
+                    <div class="friends-section-header">
                         <h2 class="section-title" style="margin-bottom: 0">Your Friends</h2>
                         <button class="btn-primary" id="add-friend-btn" title="Add Friend">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
@@ -1531,14 +1471,16 @@
                             <span>Add Friend</span>
                         </button>
                     </div>
-                    <div class="friends-grid" id="friends-grid" style="
-                                display: grid;
-                                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-                                gap: 1rem;
-                            "></div>
-                    <div id="no-friends-message"
-                        style="display: none; text-align: center; padding: 3rem; color: var(--muted-foreground)">
-                        <p>No friends yet. Add some friends to start sharing music!</p>
+                    <div class="friends-grid" id="friends-grid"></div>
+                    <div id="no-friends-message" class="friends-empty-state" style="display: none">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4; margin-bottom: 1rem">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        <p style="font-weight: 500; margin-bottom: 0.25rem">No friends yet</p>
+                        <p style="font-size: 0.875rem">Search for people to add as friends</p>
                     </div>
                 </section>
 
@@ -1566,34 +1508,6 @@
                             Type at least 2 characters to find people.
                         </div>
                         <div id="friends-suggestions-list" class="friends-suggestions-list"></div>
-                    </div>
-                </section>
-
-                <section class="content-section" id="friends-chat-section" style="display: none">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem">
-                        <h2 class="section-title" style="margin-bottom: 0">Music Chat</h2>
-                    </div>
-                    <div class="social-chat-layout">
-                        <aside class="social-chat-sidebar">
-                            <div id="friends-chat-list" class="social-chat-list"></div>
-                            <div id="friends-chat-empty" style="display: none; color: var(--muted-foreground); padding: 1rem">
-                                Add friends to start chatting.
-                            </div>
-                        </aside>
-                        <div class="social-chat-thread">
-                            <div class="social-chat-thread-header">
-                                <h3 id="friends-chat-thread-title">Select a friend</h3>
-                                <button id="friends-chat-thread-share" class="btn-secondary" style="display: none">Share URL</button>
-                            </div>
-                            <div id="friends-chat-messages" class="social-chat-messages"></div>
-                            <div id="friends-chat-thread-empty" class="social-chat-thread-empty">
-                                Select a friend to open a conversation.
-                            </div>
-                            <form id="friends-chat-form" class="social-chat-composer">
-                                <input type="text" id="friends-chat-input" class="input" placeholder="Send a message..." disabled />
-                                <button type="submit" id="friends-chat-send" class="btn-primary" disabled>Send</button>
-                            </form>
-                        </div>
                     </div>
                 </section>
 
@@ -3488,16 +3402,6 @@
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="pwa-auto-update-toggle" checked />
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="setting-item">
-                                <div class="info">
-                                    <span class="label">Analytics</span>
-                                    <span class="description">Send anonymous usage data to help improve the app</span>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="analytics-toggle" checked />
                                     <span class="slider"></span>
                                 </label>
                             </div>

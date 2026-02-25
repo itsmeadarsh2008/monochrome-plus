@@ -32,7 +32,6 @@ import {
     pwaUpdateSettings,
     contentBlockingSettings,
     musicProviderSettings,
-    analyticsSettings,
     modalSettings,
     rotatingCoverSettings,
     performanceModeSettings,
@@ -3047,15 +3046,6 @@ export function initializeSettings(scrobbler, player, api, ui) {
         pwaAutoUpdateToggle.checked = pwaUpdateSettings.isAutoUpdateEnabled();
         pwaAutoUpdateToggle.addEventListener('change', (e) => {
             pwaUpdateSettings.setAutoUpdateEnabled(e.target.checked);
-        });
-    }
-
-    // Analytics Toggle
-    const analyticsToggle = document.getElementById('analytics-toggle');
-    if (analyticsToggle) {
-        analyticsToggle.checked = analyticsSettings.isEnabled();
-        analyticsToggle.addEventListener('change', (e) => {
-            analyticsSettings.setEnabled(e.target.checked);
         });
     }
 
