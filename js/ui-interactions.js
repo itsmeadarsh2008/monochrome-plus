@@ -468,12 +468,17 @@ export function initializeUIInteractions(player, api, ui) {
         });
     });
 
-    // Tooltip for truncated text
+    // Tooltip for truncated text — disabled on touch devices
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     let tooltipEl = document.getElementById('custom-tooltip');
     if (!tooltipEl) {
         tooltipEl = document.createElement('div');
         tooltipEl.id = 'custom-tooltip';
         document.body.appendChild(tooltipEl);
+    }
+
+    if (isTouchDevice) {
+        tooltipEl.style.display = 'none';
     }
 
     const updateTooltipPosition = (e) => {
@@ -508,35 +513,37 @@ export function initializeUIInteractions(player, api, ui) {
         tooltipEl.style.left = '0';
     };
 
-    document.body.addEventListener('mouseover', (e) => {
-        const selector =
-            '.card-title, .card-subtitle, .track-item-details .title, .track-item-details .artist, .now-playing-bar .title, .now-playing-bar .artist, .now-playing-bar .album, .pinned-item-name';
-        const target = e.target.closest(selector);
+    if (!isTouchDevice) {
+        document.body.addEventListener('mouseover', (e) => {
+            const selector =
+                '.card-title, .card-subtitle, .track-item-details .title, .track-item-details .artist, .now-playing-bar .title, .now-playing-bar .artist, .now-playing-bar .album, .pinned-item-name';
+            const target = e.target.closest(selector);
 
-        if (target) {
-            // Remove native title if present to avoid double tooltip
-            if (target.hasAttribute('title')) {
-                target.removeAttribute('title');
+            if (target) {
+                // Remove native title if present to avoid double tooltip
+                if (target.hasAttribute('title')) {
+                    target.removeAttribute('title');
+                }
+
+                if (target.scrollWidth > target.clientWidth) {
+                    tooltipEl.innerHTML = target.innerHTML.trim();
+                    tooltipEl.classList.add('visible');
+                    updateTooltipPosition(e);
+
+                    const moveHandler = (moveEvent) => {
+                        updateTooltipPosition(moveEvent);
+                    };
+
+                    const outHandler = () => {
+                        tooltipEl.classList.remove('visible');
+                        target.removeEventListener('mousemove', moveHandler);
+                        target.removeEventListener('mouseleave', outHandler);
+                    };
+
+                    target.addEventListener('mousemove', moveHandler);
+                    target.addEventListener('mouseleave', outHandler);
+                }
             }
-
-            if (target.scrollWidth > target.clientWidth) {
-                tooltipEl.innerHTML = target.innerHTML.trim();
-                tooltipEl.classList.add('visible');
-                updateTooltipPosition(e);
-
-                const moveHandler = (moveEvent) => {
-                    updateTooltipPosition(moveEvent);
-                };
-
-                const outHandler = () => {
-                    tooltipEl.classList.remove('visible');
-                    target.removeEventListener('mousemove', moveHandler);
-                    target.removeEventListener('mouseleave', outHandler);
-                };
-
-                target.addEventListener('mousemove', moveHandler);
-                target.addEventListener('mouseleave', outHandler);
-            }
-        }
-    });
+        });
+    }
 }

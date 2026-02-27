@@ -13,6 +13,7 @@ const CHAT_MESSAGES_COLLECTION = 'DB_chat_messages';
 
 const DEFAULT_PRIVACY = { playlists: 'public', lastfm: 'public' };
 const MAX_HISTORY_ITEMS = 300;
+const MAX_HISTORY_STRING_LENGTH = 65000; // Appwrite limit is 65535 chars
 const MAX_TRACK_SYNC = 1500;
 const MAX_ALBUM_SYNC = 1000;
 const MAX_ARTIST_SYNC = 1000;
@@ -64,6 +65,27 @@ const syncManager = {
         if (Array.isArray(parsed)) return parsed;
         if (parsed && typeof parsed === 'object') return Object.values(parsed);
         return fallback;
+    },
+
+    _truncateHistoryToFit(history) {
+        if (!Array.isArray(history) || history.length === 0) {
+            return history;
+        }
+
+        let serialized = JSON.stringify(history);
+        if (serialized.length <= MAX_HISTORY_STRING_LENGTH) {
+            return history;
+        }
+
+        let truncated = [...history];
+        while (truncated.length > 0 && JSON.stringify(truncated).length > MAX_HISTORY_STRING_LENGTH) {
+            truncated.pop();
+        }
+
+        console.warn(
+            `[Appwrite Sync] History truncated from ${history.length} to ${truncated.length} items to fit within ${MAX_HISTORY_STRING_LENGTH} char limit`
+        );
+        return truncated;
     },
 
     _normalizeFavoriteAlbums(value) {
@@ -312,7 +334,15 @@ const syncManager = {
         if (!record) return null;
 
         try {
-            const payload = { [field]: typeof data === 'string' ? data : JSON.stringify(data) };
+            let serializedData = typeof data === 'string' ? data : JSON.stringify(data);
+
+            // Check if the serialized data exceeds Appwrite's 65535 char limit for strings
+            if (field === 'history' && serializedData.length > MAX_HISTORY_STRING_LENGTH) {
+                const truncatedData = this._truncateHistoryToFit(data);
+                serializedData = JSON.stringify(truncatedData);
+            }
+
+            const payload = { [field]: serializedData };
             const updated = await this._withRetry(
                 () => databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, payload),
                 { label: `update ${field}` }
@@ -611,7 +641,8 @@ const syncManager = {
             nextHistory.unshift(minified);
             nextHistory.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            await this._updateUserJSON(null, 'history', nextHistory.slice(0, MAX_HISTORY_ITEMS));
+            const truncatedHistory = this._truncateHistoryToFit(nextHistory.slice(0, MAX_HISTORY_ITEMS));
+            await this._updateUserJSON(null, 'history', truncatedHistory);
             window.dispatchEvent(new CustomEvent('history-changed'));
         } catch (error) {
             console.warn('[Appwrite Sync] Failed to sync history item:', error);
@@ -1388,6 +1419,12 @@ const syncManager = {
         if (!authManager.user || !track) return;
         if (Date.now() < this._statusBackoffUntil) return;
 
+        // Check private listening mode
+        try {
+            const userData = await this.getUserData();
+            if (userData?.profile?.privacy?.listening === 'private') return;
+        } catch {}
+
         const statusData = {
             text: `${track.title} - ${getTrackArtists(track)}`,
             image: track.album?.cover || 'assets/appicon.png',
@@ -1502,7 +1539,15 @@ const syncManager = {
                     mixes: asMap((localData.favorites_mixes || []).slice(0, MAX_MIX_SYNC)),
                 };
 
-                const history = (localData.history_tracks || []).slice(0, MAX_HISTORY_ITEMS);
+                const history = this._truncateHistoryToFit(
+                    (localData.history_tracks || [])
+                        .slice(0, MAX_HISTORY_ITEMS)
+                        .map((entry) => {
+                            const minified = this._minifyItem('track', entry);
+                            minified.timestamp = entry.timestamp || Date.now();
+                            return minified;
+                        })
+                );
                 const playlists = localData.user_playlists || [];
 
                 const publicPlaylists = {};

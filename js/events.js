@@ -1115,6 +1115,47 @@ export async function handleTrackAction(
         list.addEventListener('click', handleOptionClick);
 
         modal.classList.add('active');
+    } else if (action === 'add-to-collab-playlist') {
+        const collabPlaylists = await db.getCollaborativePlaylists();
+        if (!collabPlaylists || collabPlaylists.length === 0) {
+            showNotification('No collaborative playlists yet. Create one from the Friends page.');
+            return;
+        }
+        const modal = document.getElementById('playlist-select-modal');
+        const list = document.getElementById('playlist-select-list');
+        if (!modal || !list) return;
+        list.innerHTML = collabPlaylists
+            .map(
+                (p) =>
+                    `<div class="modal-option" data-id="${p.id}" data-collab="true">${escapeHtml(p.name)} <span style="color: var(--muted-foreground); font-size: 0.8em;">(collab)</span></div>`
+            )
+            .join('');
+        const overlay = modal.querySelector('.modal-overlay');
+        const cancelBtn = document.getElementById('playlist-select-cancel');
+        const closeModal = () => {
+            modal.classList.remove('active');
+            list.removeEventListener('click', handleOptionClick);
+            if (overlay) overlay.removeEventListener('click', closeModal);
+            if (cancelBtn) cancelBtn.removeEventListener('click', closeModal);
+        };
+        const handleOptionClick = async (e) => {
+            const option = e.target.closest('.modal-option');
+            if (option) {
+                const playlistId = option.dataset.id;
+                try {
+                    await db.addTracksToCollaborativePlaylist(playlistId, [item]);
+                    showNotification('Added to collaborative playlist!');
+                } catch (error) {
+                    console.error('Failed to add to collaborative playlist:', error);
+                    showNotification('Failed to add track.');
+                }
+                closeModal();
+            }
+        };
+        if (overlay) overlay.addEventListener('click', closeModal);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        list.addEventListener('click', handleOptionClick);
+        modal.classList.add('active');
     } else if (action === 'go-to-artist') {
         const artistId = extraData?.artistId || item.artist?.id || item.artists?.[0]?.id;
         const trackerSheetId = extraData?.trackerSheetId || (item.isTracker ? item.trackerInfo?.sheetId : null);
@@ -1761,8 +1802,6 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
         }
 
         if (action && track) {
-            // Track context menu action
-            trackContextMenuAction(action, type, track);
             await handleTrackAction(action, track, player, api, lyricsManager, type, ui, scrobbler, target.dataset);
         }
 

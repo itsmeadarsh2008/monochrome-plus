@@ -4984,6 +4984,95 @@ export class UIRenderer {
         });
     }
 
+    async renderCollabPlaylistPage(playlistId) {
+        this.showPage('collabplaylist');
+
+        const titleEl = document.getElementById('collab-playlist-title');
+        const metaEl = document.getElementById('collab-playlist-meta');
+        const coverEl = document.getElementById('collab-playlist-cover');
+        const tracksContainer = document.getElementById('collab-playlist-tracks');
+        const emptyEl = document.getElementById('collab-playlist-empty');
+        const playBtn = document.getElementById('collab-play-btn');
+        const shuffleBtn = document.getElementById('collab-shuffle-btn');
+        const deleteBtn = document.getElementById('collab-delete-btn');
+
+        if (titleEl) titleEl.textContent = 'Loading...';
+        if (metaEl) metaEl.textContent = '';
+        if (tracksContainer) tracksContainer.innerHTML = '';
+
+        const playlist = await db.getCollaborativePlaylist(playlistId);
+        if (!playlist) {
+            if (titleEl) titleEl.textContent = 'Playlist not found';
+            if (emptyEl) emptyEl.style.display = 'block';
+            return;
+        }
+
+        if (titleEl) titleEl.textContent = playlist.name;
+        if (metaEl) metaEl.textContent = `${playlist.tracks?.length || 0} tracks · ${playlist.members?.length || 0} members`;
+        if (coverEl) coverEl.src = playlist.cover || '/assets/appicon.png';
+
+        const tracks = playlist.tracks || [];
+        if (tracks.length > 0) {
+            if (emptyEl) emptyEl.style.display = 'none';
+            this.renderListWithTracks(tracksContainer, tracks, true);
+
+            // Add remove buttons to each track
+            tracksContainer.querySelectorAll('.track-item').forEach((item) => {
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-icon collab-remove-track-btn';
+                removeBtn.title = 'Remove from playlist';
+                removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
+                removeBtn.style.cssText = 'color: var(--muted-foreground); margin-left: 0.25rem; opacity: 0.6; transition: opacity 0.2s;';
+                removeBtn.onmouseenter = () => { removeBtn.style.opacity = '1'; removeBtn.style.color = 'var(--danger, #ef4444)'; };
+                removeBtn.onmouseleave = () => { removeBtn.style.opacity = '0.6'; removeBtn.style.color = 'var(--muted-foreground)'; };
+
+                const trackId = item.dataset.trackId;
+                removeBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (trackId) {
+                        await db.removeTrackFromCollaborativePlaylist(playlistId, trackId);
+                        this.renderCollabPlaylistPage(playlistId);
+                    }
+                };
+
+                const actionsEl = item.querySelector('.track-item-actions');
+                if (actionsEl) {
+                    actionsEl.prepend(removeBtn);
+                }
+            });
+        } else {
+            if (emptyEl) emptyEl.style.display = 'block';
+        }
+
+        if (playBtn) {
+            playBtn.onclick = () => {
+                if (tracks.length > 0 && window.monochromePlayer) {
+                    window.monochromePlayer.setQueue(tracks, 0);
+                    window.monochromePlayer.playTrackFromQueue();
+                }
+            };
+        }
+
+        if (shuffleBtn) {
+            shuffleBtn.onclick = () => {
+                if (tracks.length > 0 && window.monochromePlayer) {
+                    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+                    window.monochromePlayer.setQueue(shuffled, 0);
+                    window.monochromePlayer.playTrackFromQueue();
+                }
+            };
+        }
+
+        if (deleteBtn) {
+            deleteBtn.onclick = async () => {
+                if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
+                    await db.deleteCollaborativePlaylist(playlistId);
+                    navigate('/friends');
+                }
+            };
+        }
+    }
+
     async renderUnreleasedPage() {
         this.showPage('unreleased');
         const container = document.getElementById('unreleased-content');

@@ -807,6 +807,34 @@ export function initializeSettings(scrobbler, player, api, ui) {
         });
     }
 
+    const crossfadeToggle = document.getElementById('crossfade-toggle');
+    const crossfadeDurationSetting = document.getElementById('crossfade-duration-setting');
+    const crossfadeDurationSlider = document.getElementById('crossfade-duration-slider');
+    const crossfadeDurationValue = document.getElementById('crossfade-duration-value');
+
+    if (crossfadeToggle) {
+        crossfadeToggle.checked = playbackBehaviorSettings.isCrossfadeEnabled();
+        if (crossfadeDurationSetting) {
+            crossfadeDurationSetting.style.display = crossfadeToggle.checked ? '' : 'none';
+        }
+        crossfadeToggle.addEventListener('change', (e) => {
+            playbackBehaviorSettings.setCrossfadeEnabled(e.target.checked);
+            if (crossfadeDurationSetting) {
+                crossfadeDurationSetting.style.display = e.target.checked ? '' : 'none';
+            }
+        });
+    }
+
+    if (crossfadeDurationSlider && crossfadeDurationValue) {
+        crossfadeDurationSlider.value = playbackBehaviorSettings.getCrossfadeDuration();
+        crossfadeDurationValue.textContent = crossfadeDurationSlider.value + 's';
+        crossfadeDurationSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            playbackBehaviorSettings.setCrossfadeDuration(val);
+            crossfadeDurationValue.textContent = val + 's';
+        });
+    }
+
     const zippedBulkDownloadsToggle = document.getElementById('zipped-bulk-downloads-toggle');
     if (zippedBulkDownloadsToggle) {
         zippedBulkDownloadsToggle.checked = !bulkDownloadSettings.shouldForceIndividual();

@@ -63,6 +63,7 @@
             </li>
             <li data-action="toggle-pin" data-type-filter="album,artist,playlist,user-playlist">Pin</li>
             <li data-action="add-to-playlist" data-type-filter="track">Add to playlist</li>
+            <li data-action="add-to-collab-playlist" data-type-filter="track">Add to collaborative playlist</li>
             <li data-action="go-to-artist" data-type-filter="track,album">Go to artist</li>
             <li data-action="go-to-album" data-type-filter="track">Go to album</li>
             <li data-action="copy-link">Copy link</li>
@@ -668,6 +669,14 @@
             <div class="setting-item" style="padding: 0.5rem 0; border: none">
                 <div class="info"><span class="label">Show Last.fm Link & Stats</span></div>
                 <label class="toggle-switch"><input type="checkbox" id="privacy-lastfm-toggle" checked /><span
+                        class="slider"></span></label>
+            </div>
+            <div class="setting-item" style="padding: 0.5rem 0; border: none">
+                <div class="info">
+                    <span class="label">Private Listening</span>
+                    <span class="description">Hide what you're currently listening to from your profile</span>
+                </div>
+                <label class="toggle-switch"><input type="checkbox" id="privacy-listening-toggle" /><span
                         class="slider"></span></label>
             </div>
 
@@ -1537,6 +1546,30 @@
                         <p>No collaborative playlists yet. Create one to jam with friends!</p>
                     </div>
                 </section>
+            </div>
+
+            <div id="page-collabplaylist" class="page">
+                <div class="playlist-detail-header" id="collab-playlist-header">
+                    <div class="playlist-detail-cover">
+                        <img id="collab-playlist-cover" src="/assets/appicon.png" alt="Playlist Cover">
+                    </div>
+                    <div class="playlist-detail-info">
+                        <h1 id="collab-playlist-title"></h1>
+                        <p id="collab-playlist-meta" style="color: var(--muted-foreground)"></p>
+                        <div class="playlist-detail-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                            <button class="btn-primary" id="collab-play-btn">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>Play</span>
+                            </button>
+                            <button class="btn-secondary" id="collab-shuffle-btn">Shuffle</button>
+                            <button class="btn-secondary" id="collab-delete-btn" style="color: var(--danger, #ef4444)">Delete Playlist</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="track-list" id="collab-playlist-tracks"></div>
+                <div id="collab-playlist-empty" style="display: none; text-align: center; padding: 3rem; color: var(--muted-foreground)">
+                    <p>No tracks yet. Add tracks from the context menu.</p>
+                </div>
             </div>
 
             <div id="page-recent" class="page">
@@ -3007,6 +3040,27 @@
                                     <input type="checkbox" id="auto-mix-toggle" checked />
                                     <span class="slider"></span>
                                 </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Crossfade</span>
+                                    <span class="description">Smoothly blend between tracks with an audio crossfade transition</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="crossfade-toggle" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item" id="crossfade-duration-setting" style="display: none">
+                                <div class="info">
+                                    <span class="label">Crossfade Duration</span>
+                                    <span class="description">How long the crossfade lasts (in seconds)</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <input type="range" id="crossfade-duration-slider" min="1" max="12" step="1" value="6"
+                                        style="flex: 1; accent-color: var(--primary);" />
+                                    <span id="crossfade-duration-value" style="min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums;">6s</span>
+                                </div>
                             </div>
                             <div class="setting-item">
                                 <div class="info">

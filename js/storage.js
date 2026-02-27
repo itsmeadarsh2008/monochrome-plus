@@ -1387,6 +1387,35 @@ export const playbackBehaviorSettings = {
     setAutoMixEnabled(enabled) {
         localStorage.setItem(this.AUTOMIX_KEY, enabled ? 'true' : 'false');
     },
+
+    CROSSFADE_KEY: 'playback-crossfade-enabled',
+    CROSSFADE_DURATION_KEY: 'playback-crossfade-duration',
+
+    isCrossfadeEnabled() {
+        try {
+            return localStorage.getItem(this.CROSSFADE_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    },
+
+    setCrossfadeEnabled(enabled) {
+        localStorage.setItem(this.CROSSFADE_KEY, enabled ? 'true' : 'false');
+    },
+
+    getCrossfadeDuration() {
+        try {
+            const val = parseFloat(localStorage.getItem(this.CROSSFADE_DURATION_KEY));
+            return Number.isFinite(val) && val >= 1 && val <= 12 ? val : 6;
+        } catch {
+            return 6;
+        }
+    },
+
+    setCrossfadeDuration(seconds) {
+        const clamped = Math.max(1, Math.min(12, parseFloat(seconds) || 6));
+        localStorage.setItem(this.CROSSFADE_DURATION_KEY, clamped.toString());
+    },
 };
 
 export const settingsUiState = {

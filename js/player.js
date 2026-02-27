@@ -40,6 +40,8 @@ export class Player {
         this.isFallbackRetry = false;
         this._playbackMonitorTimer = null;
         this._gaplessTransitionInProgress = false;
+        this._crossfadeInProgress = false;
+        this._crossfadeFadeTimer = null;
         this._autoMixRequest = null;
         this._autoMixLastPopulateAt = 0;
         this._autoMixLastSeedSignature = '';
@@ -90,6 +92,7 @@ export class Player {
         this.audio.addEventListener('emptied', () => {
             this.stopPlaybackMonitor();
             this._gaplessTransitionInProgress = false;
+            this._cancelCrossfade();
         });
     }
 
@@ -104,6 +107,24 @@ export class Player {
             }
 
             this.ensureAutoMixQueue().catch(() => {});
+
+            // Crossfade: start fading out early and trigger next track
+            if (
+                playbackBehaviorSettings.isCrossfadeEnabled() &&
+                this.repeatMode !== REPEAT_MODE.ONE &&
+                !this._crossfadeInProgress &&
+                !this._gaplessTransitionInProgress
+            ) {
+                const duration = this.audio.duration;
+                const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
+                if (Number.isFinite(duration) && duration > crossfadeDuration + 1) {
+                    const remaining = duration - this.audio.currentTime;
+                    if (remaining <= crossfadeDuration && remaining > crossfadeDuration - 0.2) {
+                        this._crossfadeInProgress = true;
+                        this._startCrossfadeOut(crossfadeDuration);
+                    }
+                }
+            }
 
             const shouldAdvanceGapless =
                 playbackBehaviorSettings.isGaplessEnabled() &&
@@ -235,7 +256,40 @@ export class Player {
         }
     }
 
+    _startCrossfadeOut(duration) {
+        const startVolume = this.audio.volume;
+        const fadeInterval = 50;
+        const steps = (duration * 1000) / fadeInterval;
+        const volumeStep = startVolume / steps;
+        let currentStep = 0;
+
+        this._crossfadeFadeTimer = setInterval(() => {
+            currentStep++;
+            const newVolume = Math.max(0, startVolume - volumeStep * currentStep);
+            this.audio.volume = newVolume;
+            if (currentStep >= steps) {
+                clearInterval(this._crossfadeFadeTimer);
+                this._crossfadeFadeTimer = null;
+            }
+        }, fadeInterval);
+
+        setTimeout(() => {
+            this._crossfadeInProgress = false;
+            this._gaplessTransitionInProgress = true;
+            this.playNext();
+        }, 300);
+    }
+
+    _cancelCrossfade() {
+        if (this._crossfadeFadeTimer) {
+            clearInterval(this._crossfadeFadeTimer);
+            this._crossfadeFadeTimer = null;
+        }
+        this._crossfadeInProgress = false;
+    }
+
     handleTrackEnded() {
+        this._cancelCrossfade();
         if (this._gaplessTransitionInProgress) {
             return;
         }

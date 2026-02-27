@@ -31,6 +31,7 @@ const editWebsite = document.getElementById('edit-profile-website');
 const editLastfm = document.getElementById('edit-profile-lastfm');
 const privacyPlaylists = document.getElementById('privacy-playlists-toggle');
 const privacyLastfm = document.getElementById('privacy-lastfm-toggle');
+const privacyListening = document.getElementById('privacy-listening-toggle');
 const saveProfileBtn = document.getElementById('edit-profile-save');
 const cancelProfileBtn = document.getElementById('edit-profile-cancel');
 const shareProfileBtn = document.getElementById('profile-share-btn');
@@ -631,6 +632,7 @@ export function openEditProfile() {
 
         privacyPlaylists.checked = p.privacy?.playlists !== 'private';
         privacyLastfm.checked = p.privacy?.lastfm !== 'private';
+        if (privacyListening) privacyListening.checked = p.privacy?.listening === 'private';
 
         editProfileModal.classList.add('active');
     });
@@ -676,6 +678,7 @@ async function saveProfile() {
         privacy: {
             playlists: privacyPlaylists.checked ? 'public' : 'private',
             lastfm: privacyLastfm.checked ? 'public' : 'private',
+            listening: privacyListening?.checked ? 'private' : 'public',
         },
     };
 

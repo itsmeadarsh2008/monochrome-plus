@@ -67,6 +67,9 @@ export function createRouter(ui) {
             case 'userplaylist':
                 await ui.renderPlaylistPage(param, 'user');
                 break;
+            case 'collabplaylist':
+                await ui.renderCollabPlaylistPage(param);
+                break;
             case 'folder':
                 await ui.renderFolderPage(param);
                 break;
