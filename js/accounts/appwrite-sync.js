@@ -1540,13 +1540,11 @@ const syncManager = {
                 };
 
                 const history = this._truncateHistoryToFit(
-                    (localData.history_tracks || [])
-                        .slice(0, MAX_HISTORY_ITEMS)
-                        .map((entry) => {
-                            const minified = this._minifyItem('track', entry);
-                            minified.timestamp = entry.timestamp || Date.now();
-                            return minified;
-                        })
+                    (localData.history_tracks || []).slice(0, MAX_HISTORY_ITEMS).map((entry) => {
+                        const minified = this._minifyItem('track', entry);
+                        minified.timestamp = entry.timestamp || Date.now();
+                        return minified;
+                    })
                 );
                 const playlists = localData.user_playlists || [];
 

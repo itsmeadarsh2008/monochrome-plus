@@ -5008,7 +5008,8 @@ export class UIRenderer {
         }
 
         if (titleEl) titleEl.textContent = playlist.name;
-        if (metaEl) metaEl.textContent = `${playlist.tracks?.length || 0} tracks · ${playlist.members?.length || 0} members`;
+        if (metaEl)
+            metaEl.textContent = `${playlist.tracks?.length || 0} tracks · ${playlist.members?.length || 0} members`;
         if (coverEl) coverEl.src = playlist.cover || '/assets/appicon.png';
 
         const tracks = playlist.tracks || [];
@@ -5021,10 +5022,18 @@ export class UIRenderer {
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-icon collab-remove-track-btn';
                 removeBtn.title = 'Remove from playlist';
-                removeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
-                removeBtn.style.cssText = 'color: var(--muted-foreground); margin-left: 0.25rem; opacity: 0.6; transition: opacity 0.2s;';
-                removeBtn.onmouseenter = () => { removeBtn.style.opacity = '1'; removeBtn.style.color = 'var(--danger, #ef4444)'; };
-                removeBtn.onmouseleave = () => { removeBtn.style.opacity = '0.6'; removeBtn.style.color = 'var(--muted-foreground)'; };
+                removeBtn.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
+                removeBtn.style.cssText =
+                    'color: var(--muted-foreground); margin-left: 0.25rem; opacity: 0.6; transition: opacity 0.2s;';
+                removeBtn.onmouseenter = () => {
+                    removeBtn.style.opacity = '1';
+                    removeBtn.style.color = 'var(--danger, #ef4444)';
+                };
+                removeBtn.onmouseleave = () => {
+                    removeBtn.style.opacity = '0.6';
+                    removeBtn.style.color = 'var(--muted-foreground)';
+                };
 
                 const trackId = item.dataset.trackId;
                 removeBtn.onclick = async (e) => {
