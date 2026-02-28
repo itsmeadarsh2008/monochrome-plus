@@ -155,21 +155,78 @@ export async function applyPaletteFromImage(imageUrl) {
             if (score > bestScore) { bestScore = score; bestIdx = i; }
         }
 
-        const [r, g, b] = centroids[bestIdx];
-        const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+        let [r, g, b] = centroids[bestIdx];
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Adjust brightness for light/dark mode
+        const theme = document.documentElement.getAttribute('data-theme');
+        if (theme === 'white' && brightness > 150) {
+            const factor = 0.7;
+            r = Math.round(r * factor);
+            g = Math.round(g * factor);
+            b = Math.round(b * factor);
+        } else if (theme !== 'white' && brightness < 80) {
+            const factor = 1.4;
+            r = Math.min(255, Math.round(r * factor));
+            g = Math.min(255, Math.round(g * factor));
+            b = Math.min(255, Math.round(b * factor));
+        }
+
+        const adjustedBrightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        const toHex = (rv, gv, bv) => `#${rv.toString(16).padStart(2, '0')}${gv.toString(16).padStart(2, '0')}${bv.toString(16).padStart(2, '0')}`;
+        const hex = toHex(r, g, b);
 
         // Sort remaining centroids by brightness for secondary/tertiary uses
         const others = centroids
             .filter((_, i) => i !== bestIdx)
             .sort((a, b) => luminance(b) - luminance(a));
 
+        const secondaryHex = others[0] ? toHex(others[0][0], others[0][1], others[0][2]) : hex;
+        const tertiaryHex = others[1] ? toHex(others[1][0], others[1][1], others[1][2]) : secondaryHex;
+
         const root = document.documentElement;
+
+        // Core accent variables
         root.style.setProperty('--accent-color', hex);
+        root.style.setProperty('--accent-glow', hex + '44');
+        root.style.setProperty('--accent-dim', hex + '88');
         root.style.setProperty('--palette-rgb', `${r},${g},${b}`);
-        if (others[0]) {
-            const [r2, g2, b2] = others[0];
-            root.style.setProperty('--palette-secondary', `#${r2.toString(16).padStart(2, '0')}${g2.toString(16).padStart(2, '0')}${b2.toString(16).padStart(2, '0')}`);
+        root.style.setProperty('--palette-1', hex + '55');
+        root.style.setProperty('--palette-2', secondaryHex + '44');
+        root.style.setProperty('--palette-3', tertiaryHex + '33');
+        root.style.setProperty('--palette-border', hex + '26');
+        root.style.setProperty('--palette-secondary', secondaryHex);
+
+        // Backward-compatible variables (from setVibrantColor)
+        root.style.setProperty('--primary', hex);
+        root.style.setProperty('--primary-foreground', adjustedBrightness > 128 ? '#000000' : '#ffffff');
+        root.style.setProperty('--highlight', hex);
+        root.style.setProperty('--highlight-rgb', `${r}, ${g}, ${b}`);
+        root.style.setProperty('--active-highlight', hex);
+        root.style.setProperty('--ring', hex);
+        root.style.setProperty('--track-hover-bg', `rgba(${r},${g},${b}, ${adjustedBrightness > 200 ? 0.25 : 0.15})`);
+
+        // Dynamic theme gradient
+        if (theme === 'dynamic') {
+            const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+            const r2 = clamp(r + 40), g2 = clamp(g - 30), b2 = clamp(b + 20);
+            const r3 = clamp(r - 30), g3 = clamp(g + 40), b3 = clamp(b - 20);
+            root.style.setProperty('--dynamic-gradient',
+                `linear-gradient(135deg, ` +
+                `rgb(${clamp(r * 0.3)},${clamp(g * 0.3)},${clamp(b * 0.3)}) 0%, ` +
+                `rgb(${clamp(r2 * 0.35)},${clamp(g2 * 0.35)},${clamp(b2 * 0.35)}) 25%, ` +
+                `rgb(${clamp(r3 * 0.25)},${clamp(g3 * 0.25)},${clamp(b3 * 0.25)}) 50%, ` +
+                `rgb(${clamp(r * 0.2)},${clamp(g * 0.2)},${clamp(b * 0.2)}) 75%, ` +
+                `rgb(${clamp(r2 * 0.3)},${clamp(g2 * 0.3)},${clamp(b2 * 0.3)}) 100%)`
+            );
+            root.style.setProperty('--dynamic-brightness',
+                adjustedBrightness > 150 ? '0.3' : adjustedBrightness > 100 ? '0.4' : '0.5'
+            );
         }
+
+        // Palette transition
+        root.style.setProperty('--palette-transition', '0.8s');
+        setTimeout(() => root.style.setProperty('--palette-transition', '0s'), 900);
 
         // Update theme-color meta tag (affects mobile browser chrome)
         let themeColorMeta = document.querySelector('meta[name="theme-color"]');
@@ -178,7 +235,6 @@ export async function applyPaletteFromImage(imageUrl) {
             themeColorMeta.name = 'theme-color';
             document.head.appendChild(themeColorMeta);
         }
-        // Use a darkened version of the accent as theme-color so the browser chrome looks good
         const darkFactor = 0.6;
         const themeMeta = `rgb(${Math.round(r * darkFactor)},${Math.round(g * darkFactor)},${Math.round(b * darkFactor)})`;
         themeColorMeta.content = themeMeta;
@@ -195,9 +251,17 @@ export async function applyPaletteFromImage(imageUrl) {
  */
 export function resetPalette() {
     const root = document.documentElement;
-    root.style.removeProperty('--accent-color');
-    root.style.removeProperty('--palette-rgb');
-    root.style.removeProperty('--palette-secondary');
+    const vars = [
+        '--accent-color', '--accent-glow', '--accent-dim',
+        '--palette-rgb', '--palette-1', '--palette-2', '--palette-3',
+        '--palette-border', '--palette-secondary',
+        '--primary', '--primary-foreground',
+        '--highlight', '--highlight-rgb', '--active-highlight',
+        '--ring', '--track-hover-bg',
+        '--dynamic-gradient', '--dynamic-brightness',
+        '--palette-transition',
+    ];
+    for (const v of vars) root.style.removeProperty(v);
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
     if (themeColorMeta) themeColorMeta.content = '';
 }

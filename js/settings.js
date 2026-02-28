@@ -874,9 +874,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
     if (showLdacBtn && ldacModal) {
         showLdacBtn.addEventListener('click', () => {
-            ldacModal.style.display = 'flex';
+            ldacModal.classList.add('active');
         });
-        const closeLdac = () => { ldacModal.style.display = 'none'; };
+        const closeLdac = () => { ldacModal.classList.remove('active'); };
         if (closeLdacBtn) closeLdacBtn.addEventListener('click', closeLdac);
         if (ldacOkBtn) ldacOkBtn.addEventListener('click', closeLdac);
         ldacModal.addEventListener('click', (e) => {

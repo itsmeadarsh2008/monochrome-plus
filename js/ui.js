@@ -34,7 +34,7 @@ import {
     rotatingCoverSettings,
 } from './storage.js';
 import { db } from './db.js';
-import { getVibrantColorFromImage } from './vibrant-color.js';
+import { applyPaletteFromImage, resetPalette } from './palette.js';
 import { syncManager } from './accounts/appwrite-sync.js';
 import { authManager } from './accounts/auth.js';
 import { Visualizer } from './visualizer.js';
@@ -104,7 +104,7 @@ export class UIRenderer {
         this.player = player;
         this.currentTrack = null;
         this.searchAbortController = null;
-        this.vibrantColorCache = new Map();
+        this._lastPaletteUrl = null;
         this.visualizer = null;
         this._homeArtistsRetryTimer = null;
         this._homeArtistsRetryCount = 0;
@@ -151,47 +151,20 @@ export class UIRenderer {
             return;
         }
 
-        // Check if dynamic coloring is enabled
         if (!dynamicColorSettings.isEnabled()) {
             this.resetVibrantColor();
             return;
         }
 
-        // Check cache first
-        if (this.vibrantColorCache.has(url)) {
-            const cachedColor = this.vibrantColorCache.get(url);
-            if (cachedColor) {
-                this.setVibrantColor(cachedColor);
-                return;
-            }
-        }
+        // Avoid re-processing the same URL
+        if (this._lastPaletteUrl === url) return;
+        this._lastPaletteUrl = url;
 
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        // Add cache buster to bypass opaque response in cache
-        const separator = url.includes('?') ? '&' : '?';
-        img.src = `${url}${separator}not-from-cache-please`;
-
-        img.onload = () => {
-            try {
-                const color = getVibrantColorFromImage(img);
-                if (color) {
-                    this.vibrantColorCache.set(url, color);
-                    this.setVibrantColor(color);
-                } else {
-                    this.vibrantColorCache.set(url, null);
-                    this.resetVibrantColor();
-                }
-            } catch {
-                this.vibrantColorCache.set(url, null);
-                this.resetVibrantColor();
-            }
-        };
-
-        img.onerror = () => {
-            this.vibrantColorCache.set(url, null);
+        try {
+            await applyPaletteFromImage(url);
+        } catch {
             this.resetVibrantColor();
-        };
+        }
     }
 
     async updateLikeState(element, type, id) {
@@ -843,113 +816,9 @@ export class UIRenderer {
         }
     }
 
-    setVibrantColor(color) {
-        if (!color) return;
-
-        const root = document.documentElement;
-        const theme = root.getAttribute('data-theme');
-        const isLightMode = theme === 'white';
-
-        let hex = color.replace('#', '');
-        // Handle shorthand hex
-        if (hex.length === 3) {
-            hex = hex
-                .split('')
-                .map((char) => char + char)
-                .join('');
-        }
-
-        let r = parseInt(hex.substr(0, 2), 16);
-        let g = parseInt(hex.substr(2, 2), 16);
-        let b = parseInt(hex.substr(4, 2), 16);
-
-        // Calculate perceived brightness
-        let brightness = (r * 299 + g * 587 + b * 114) / 1000;
-
-        if (isLightMode) {
-            // In light mode, the background is white.
-            // We need the color (used for text/highlights) to be dark enough.
-            // If brightness is too high (> 150), darken it.
-            while (brightness > 150) {
-                r = Math.floor(r * 0.9);
-                g = Math.floor(g * 0.9);
-                b = Math.floor(b * 0.9);
-                brightness = (r * 299 + g * 587 + b * 114) / 1000;
-            }
-        } else {
-            // In dark mode, the background is dark.
-            // We need the color to be light enough.
-            // If brightness is too low (< 80), lighten it.
-            while (brightness < 80) {
-                r = Math.min(255, Math.max(r + 1, Math.floor(r * 1.15)));
-                g = Math.min(255, Math.max(g + 1, Math.floor(g * 1.15)));
-                b = Math.min(255, Math.max(b + 1, Math.floor(b * 1.15)));
-                brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                // Break if we hit white or can't get brighter to avoid infinite loop
-                if (r >= 255 && g >= 255 && b >= 255) break;
-            }
-        }
-
-        const adjustedColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-
-        // Calculate contrast text color for buttons (text on top of the vibrant color)
-        const foreground = brightness > 128 ? '#000000' : '#ffffff';
-
-        // Set global CSS variables
-        root.style.setProperty('--primary', adjustedColor);
-        root.style.setProperty('--primary-foreground', foreground);
-        root.style.setProperty('--highlight', adjustedColor);
-        root.style.setProperty('--highlight-rgb', `${r}, ${g}, ${b}`);
-        root.style.setProperty('--active-highlight', adjustedColor);
-        root.style.setProperty('--ring', adjustedColor);
-
-        // Calculate a safe hover color
-        let hoverColor;
-        if (brightness > 200) {
-            const dr = Math.floor(r * 0.85);
-            const dg = Math.floor(g * 0.85);
-            const db = Math.floor(b * 0.85);
-            hoverColor = `rgba(${dr}, ${dg}, ${db}, 0.25)`;
-        } else {
-            hoverColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
-        }
-        root.style.setProperty('--track-hover-bg', hoverColor);
-
-        // Update dynamic theme gradient if active
-        if (theme === 'dynamic') {
-            // Create complementary colors for gradient
-            const r2 = Math.min(255, r + 40);
-            const g2 = Math.max(0, g - 30);
-            const b2 = Math.min(255, b + 20);
-            const r3 = Math.max(0, r - 30);
-            const g3 = Math.min(255, g + 40);
-            const b3 = Math.max(0, b - 20);
-
-            const gradient = `linear-gradient(135deg, 
-                rgb(${Math.floor(r * 0.3)}, ${Math.floor(g * 0.3)}, ${Math.floor(b * 0.3)}) 0%, 
-                rgb(${Math.floor(r2 * 0.35)}, ${Math.floor(g2 * 0.35)}, ${Math.floor(b2 * 0.35)}) 25%, 
-                rgb(${Math.floor(r3 * 0.25)}, ${Math.floor(g3 * 0.25)}, ${Math.floor(b3 * 0.25)}) 50%, 
-                rgb(${Math.floor(r * 0.2)}, ${Math.floor(g * 0.2)}, ${Math.floor(b * 0.2)}) 75%, 
-                rgb(${Math.floor(r2 * 0.3)}, ${Math.floor(g2 * 0.3)}, ${Math.floor(b2 * 0.3)}) 100%)`;
-
-            // Compute brightness to keep it from being too bright
-            const dynamicBrightness = brightness > 150 ? 0.3 : brightness > 100 ? 0.4 : 0.5;
-            root.style.setProperty('--dynamic-gradient', gradient);
-            root.style.setProperty('--dynamic-brightness', dynamicBrightness.toString());
-        }
-    }
-
     resetVibrantColor() {
-        const root = document.documentElement;
-        root.style.removeProperty('--primary');
-        root.style.removeProperty('--primary-foreground');
-        root.style.removeProperty('--highlight');
-        root.style.removeProperty('--highlight-rgb');
-        root.style.removeProperty('--active-highlight');
-        root.style.removeProperty('--ring');
-        root.style.removeProperty('--track-hover-bg');
-        root.style.removeProperty('--dynamic-gradient');
-        root.style.removeProperty('--dynamic-brightness');
+        this._lastPaletteUrl = null;
+        resetPalette();
     }
 
     updateFullscreenMetadata(track, nextTrack) {

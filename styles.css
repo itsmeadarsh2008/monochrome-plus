@@ -8,6 +8,9 @@
 :root {
     color-scheme: light dark;
 
+    /* Dynamic palette transition (set by JS) */
+    --palette-transition: 0s;
+
     /* -------------------------------------------------------------------------
        TYPOGRAPHY SCALE
        Use these variables for ALL font sizes
@@ -291,6 +294,22 @@
     --color-warning-hover: #d97706;
     --color-info: #3b82f6;
     --color-info-hover: #2563eb;
+}
+
+/* Palette-driven colour transitions ---------------------------------------- */
+.btn-primary,
+.progress-fill,
+.seek-thumb,
+.volume-fill,
+.quality-hires,
+.fullscreen-controls .progress-fill,
+.fullscreen-buttons button.active,
+.card:hover,
+.nav-item.active a,
+#fs-play-pause-btn {
+    transition-property: background-color, color, border-color, box-shadow;
+    transition-duration: var(--palette-transition);
+    transition-timing-function: ease;
 }
 
 :root[data-theme='monochrome'] {
