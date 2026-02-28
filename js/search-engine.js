@@ -4,10 +4,8 @@
 
 import Fuse from 'fuse.js';
 
-const HISTORY_KEY = 'search-history-v2';
 const CACHE_KEY_PREFIX = 'search-cache-v1:';
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_HISTORY = 20;
 const MAX_CACHE_ENTRIES = 50;
 
 export class SearchEngine {
@@ -113,33 +111,6 @@ export class SearchEngine {
             console.warn('[SearchEngine] Remote search failed:', err);
             onRemote(null);
         }
-    }
-
-    // ─── Search History ───────────────────────────────────────────────────────
-
-    getHistory() {
-        try {
-            return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-        } catch {
-            return [];
-        }
-    }
-
-    addToHistory(query) {
-        if (!query || query.length < 2) return;
-        let history = this.getHistory().filter(q => q !== query);
-        history.unshift(query);
-        if (history.length > MAX_HISTORY) history = history.slice(0, MAX_HISTORY);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    }
-
-    clearHistory() {
-        localStorage.removeItem(HISTORY_KEY);
-    }
-
-    removeFromHistory(query) {
-        const history = this.getHistory().filter(q => q !== query);
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     }
 
     // ─── Voice Search ─────────────────────────────────────────────────────────

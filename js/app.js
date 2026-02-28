@@ -2293,22 +2293,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         performSearch(query);
     });
 
-    searchInput.addEventListener('change', (e) => {
-        const query = e.target.value.trim();
-        if (query.length > 1) searchEngine.addToHistory(query);
-    });
-
     searchInput.addEventListener('focus', () => {
-        const history = searchEngine.getHistory();
-        if (history.length > 0) showSuggestions(history.slice(0, 8), true);
-        ui.renderSearchHistory();
+        // Search history removed - suggestions only show for typed queries
     });
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.search-bar')) {
             hideSuggestions();
-            const historyEl = document.getElementById('search-history');
-            if (historyEl) historyEl.style.display = 'none';
         }
     });
 
@@ -2316,8 +2307,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault();
         const query = searchInput.value.trim();
         if (query) {
-            searchEngine.addToHistory(query);
-            ui.addToSearchHistory(query);
             navigate(`/search/${encodeURIComponent(query)}`);
             hideSuggestions();
             const historyEl = document.getElementById('search-history');

@@ -21,6 +21,8 @@ import {
     audioProcessingSettings,
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
+import { AutoMixEngine, checkKeyCompatibility } from './automix.js';
+import { AutoMixEngineHowler, AutoMixController } from './automix-howler.js';
 
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
@@ -70,6 +72,15 @@ export class Player {
         this.sleepTimerEndTime = null;
         this.sleepTimerInterval = null;
 
+        // AutoMix Engine (legacy)
+        this.autoMixEngine = null;
+        this._trackAnalyses = new Map();
+        this._nextTrackPreloaded = false;
+
+        // New Howler-based AutoMix Controller
+        this.autoMixController = null;
+        this._useHowlerAutoMix = false; // Disabled by default - use legacy system
+
         // Initialize dash.js player
         this.dashPlayer = MediaPlayer().create();
         this.dashPlayer.updateSettings({
@@ -99,6 +110,15 @@ export class Player {
             }
         });
 
+        // Set up initial audio event listeners
+        this._setupAudioEventListeners();
+    }
+
+    /**
+     * Set up essential event listeners on the main audio element
+     * Called initially and after gapless audio swap
+     */
+    _setupAudioEventListeners() {
         this.audio.addEventListener('play', () => {
             this.startPlaybackMonitor();
         });
@@ -113,6 +133,11 @@ export class Player {
             this._gaplessTransitionInProgress = false;
             this._cancelCrossfade();
         });
+
+        // Re-initialize audio context with new audio element if needed
+        if (audioContextManager.isReady()) {
+            audioContextManager.init(this.audio);
+        }
     }
 
     startPlaybackMonitor() {
@@ -125,7 +150,7 @@ export class Player {
                 return;
             }
 
-            this.ensureAutoMixQueue().catch(() => { });
+            this.ensureAutoMixQueue().catch(() => {});
 
             // BPM detection for AutoMix
             if (playbackBehaviorSettings.isAutoMixEnabled()) {
@@ -141,19 +166,30 @@ export class Player {
                 !this._gaplessTransitionInProgress &&
                 !this._autoMixTransitionActive
             ) {
-                const duration = this.audio.duration;
-                const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
-                if (Number.isFinite(duration) && duration > crossfadeDuration + 1) {
-                    const remaining = duration - this.audio.currentTime;
-                    // Trigger earlier if trailing silence detected
-                    const triggerPoint = this._silenceDetected
-                        ? Math.max(crossfadeDuration, duration - this._silenceStart)
-                        : crossfadeDuration;
-                    if (remaining <= triggerPoint && remaining > triggerPoint - 0.2) {
-                        this._crossfadeInProgress = true;
-                        this._startAutoMixTransition(crossfadeDuration);
+                // Use new Howler-based AutoMix if available
+                if (this._useHowlerAutoMix && this.autoMixController) {
+                    // Howler AutoMix handles its own timing
+                    if (!this.autoMixController.isEnabled) {
+                        this.autoMixController.enable();
+                    }
+                } else {
+                    // Legacy AutoMix transition
+                    const duration = this.audio.duration;
+                    const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
+                    if (Number.isFinite(duration) && duration > crossfadeDuration + 5) {
+                        const remaining = duration - this.audio.currentTime;
+                        // Trigger transition only in the last 2 seconds of the song
+                        // This ensures the song plays almost to the very end
+                        const triggerPoint = 2; // Start transition 2 seconds before end
+                        if (remaining <= triggerPoint && remaining > 0 && !this._crossfadeInProgress) {
+                            this._crossfadeInProgress = true;
+                            this._startAutoMixTransition(crossfadeDuration);
+                        }
                     }
                 }
+            } else if (this.autoMixController?.isEnabled) {
+                // Disable Howler AutoMix when conditions not met
+                this.autoMixController.disable();
             }
             // Basic crossfade (fallback when AutoMix is OFF)
             else if (
@@ -165,9 +201,11 @@ export class Player {
             ) {
                 const duration = this.audio.duration;
                 const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
-                if (Number.isFinite(duration) && duration > crossfadeDuration + 1) {
+                if (Number.isFinite(duration) && duration > crossfadeDuration + 5) {
                     const remaining = duration - this.audio.currentTime;
-                    if (remaining <= crossfadeDuration && remaining > crossfadeDuration - 0.2) {
+                    // Trigger transition only in the last 2 seconds - play song to the end
+                    const triggerPoint = 2;
+                    if (remaining <= triggerPoint && remaining > 0 && !this._crossfadeInProgress) {
                         this._crossfadeInProgress = true;
                         this._startCrossfadeOut(crossfadeDuration);
                     }
@@ -203,6 +241,78 @@ export class Player {
         if (!this._playbackMonitorTimer) return;
         clearTimeout(this._playbackMonitorTimer);
         this._playbackMonitorTimer = null;
+    }
+
+    /**
+     * Initialize the AutoMix Engine with advanced features
+     */
+    initAutoMixEngine() {
+        if (this.autoMixEngine) return;
+
+        const audioContext = audioContextManager.getAudioContext();
+        if (!audioContext) return;
+
+        // Initialize legacy AutoMix engine
+        this.autoMixEngine = new AutoMixEngine(audioContext, {
+            crossfadeDuration: playbackBehaviorSettings.getCrossfadeDuration() || 12,
+            introSkipEnabled: false, // Never skip intro
+            outroTrimEnabled: false, // Never trim outro - play to the end
+            eqDuckEnabled: true,
+            harmonicMixEnabled: false,
+            beatSyncEnabled: false,
+        });
+
+        // Initialize new Howler-based AutoMix Controller
+        if (this._useHowlerAutoMix && !this.autoMixController) {
+            this.autoMixController = new AutoMixController(this);
+            console.log('[AutoMix] Howler-based controller initialized');
+        }
+
+        console.log('[AutoMix] Engine initialized with advanced features');
+    }
+
+    /**
+     * Pre-analyze a track for AutoMix
+     * Only analyzes one track at a time to prevent performance issues
+     */
+    async preAnalyzeTrackForAutoMix(track) {
+        if (!this.autoMixEngine) {
+            this.initAutoMixEngine();
+        }
+
+        if (!track?.id || this._trackAnalyses.has(track.id)) {
+            return this._trackAnalyses.get(track?.id);
+        }
+
+        // Only analyze next track, not entire queue
+        const currentQueue = this.getCurrentQueue();
+        const nextIndex = this.currentQueueIndex + 1;
+        if (nextIndex >= currentQueue.length || currentQueue[nextIndex]?.id !== track.id) {
+            return null; // Only analyze the immediate next track
+        }
+
+        try {
+            const streamUrl = await this.api.getStreamUrl(track.id, this.quality);
+            if (!streamUrl) return null;
+
+            // Add timeout to prevent blocking
+            const analysis = await Promise.race([
+                this.autoMixEngine.getTrackAnalysis(track.id, streamUrl),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Analysis timeout')), 8000)),
+            ]);
+
+            if (analysis) {
+                this._trackAnalyses.set(track.id, analysis);
+                console.log(`[AutoMix] Analyzed track ${track.id}:`, {
+                    introSkip: analysis.introSkipPoint?.toFixed(2),
+                    outroTrim: analysis.outroTrimPoint?.toFixed(2),
+                });
+            }
+            return analysis;
+        } catch (error) {
+            console.warn('[AutoMix] Failed to analyze track:', error.message);
+            return null;
+        }
     }
 
     async ensureAutoMixQueue(minUpcomingTracks = 2) {
@@ -441,9 +551,16 @@ export class Player {
             return;
         }
 
+        const currentTrack = currentQueue[this.currentQueueIndex];
         const nextTrack = currentQueue[nextIndex];
 
         try {
+            // Initialize AutoMix Engine if not already done
+            if (!this.autoMixEngine) {
+                this.initAutoMixEngine();
+            }
+
+            // Get stream URL for next track
             let streamUrl;
             if (this.preloadCache.has(nextTrack.id)) {
                 streamUrl = this.preloadCache.get(nextTrack.id);
@@ -459,6 +576,36 @@ export class Player {
                 return;
             }
 
+            // Pre-analyze tracks for optimal mixing
+            const [currentAnalysis, nextAnalysis] = await Promise.all([
+                this.preAnalyzeTrackForAutoMix(currentTrack),
+                this.preAnalyzeTrackForAutoMix(nextTrack),
+            ]);
+
+            // Check harmonic compatibility
+            if (currentAnalysis?.key && nextAnalysis?.key) {
+                const harmonicCheck = checkKeyCompatibility(currentAnalysis.key, nextAnalysis.key);
+                console.log('[AutoMix] Harmonic compatibility:', harmonicCheck);
+            }
+
+            // Calculate optimal transition timing
+            let timing;
+            if (currentAnalysis && nextAnalysis) {
+                timing = this.autoMixEngine.calculateTransitionTiming(currentAnalysis, nextAnalysis);
+                console.log('[AutoMix] Transition timing:', {
+                    mixOut: timing.mixOutPoint.toFixed(2),
+                    mixIn: timing.mixInPoint.toFixed(2),
+                    duration: timing.duration,
+                });
+            } else {
+                timing = {
+                    mixOutPoint: this.audio.duration - duration,
+                    mixInPoint: 0,
+                    duration: duration,
+                };
+            }
+
+            // Set up mix audio
             if (!this._mixSourceReady && audioContextManager.isReady()) {
                 this._mixSourceReady = audioContextManager.initMixAudio(this._mixAudio);
             }
@@ -466,8 +613,12 @@ export class Player {
             this._mixAudio.src = streamUrl;
             this._mixAudio.preload = 'auto';
 
-            const currentBPM = this._estimatedBPM;
-            const nextBPM = this._trackBPMs.get(String(nextTrack.id));
+            // Start from beginning for seamless blend
+            this._mixAudio.currentTime = 0;
+
+            // Tempo matching
+            const currentBPM = currentAnalysis?.averageRMS ? this._estimatedBPM : 0;
+            const nextBPM = nextAnalysis?.averageRMS ? this._trackBPMs.get(String(nextTrack.id)) : 0;
             let tempoRatio = 1.0;
 
             if (currentBPM >= 60 && currentBPM <= 200 && nextBPM >= 60 && nextBPM <= 200) {
@@ -501,91 +652,106 @@ export class Player {
             });
             if (this._autoMixAborted) return;
 
-            if (this._mixSourceReady) {
-                audioContextManager.setMixGain(0);
-            } else {
-                this._mixAudio.volume = 0;
-            }
-            await this._mixAudio.play();
-            if (this._autoMixAborted) return;
+            // Use AutoMix Engine for transition if available
+            if (this.autoMixEngine && this._mixSourceReady) {
+                // Get gain nodes from audioContextManager
+                const primaryGain = audioContextManager.getPrimaryGainNode();
+                const mixGain = audioContextManager.getMixGainNode();
 
-            if (this._mixSourceReady) {
-                audioContextManager.scheduleCrossfade(duration);
-            } else {
-                const fadeInterval = 50;
-                const totalSteps = Math.ceil((duration * 1000) / fadeInterval);
-                let step = 0;
-                await new Promise((resolve) => {
-                    this._crossfadeFadeTimer = setInterval(() => {
-                        step++;
-                        const t = Math.min(1, step / totalSteps);
-                        const gainOut = Math.cos((t * Math.PI) / 2);
-                        const gainIn = Math.sin((t * Math.PI) / 2);
-                        this.audio.volume = gainOut * this.userVolume;
-                        this._mixAudio.volume = gainIn * this.userVolume;
-                        if (step >= totalSteps) {
-                            clearInterval(this._crossfadeFadeTimer);
-                            this._crossfadeFadeTimer = null;
-                            resolve();
-                        }
-                    }, fadeInterval);
-                });
-            }
+                if (primaryGain && mixGain) {
+                    // Reset gains before starting
+                    const now = audioContextManager.getAudioContext().currentTime;
+                    primaryGain.gain.setValueAtTime(1, now);
+                    mixGain.gain.setValueAtTime(0, now);
 
-            await new Promise((resolve) => setTimeout(resolve, this._mixSourceReady ? duration * 1000 : 0));
-            if (this._autoMixAborted) return;
-
-            this.audio.pause();
-            this.audio.src = streamUrl;
-            this.audio.preload = 'auto';
-
-            try {
-                await new Promise((resolve, reject) => {
-                    const onReady = () => {
-                        this.audio.removeEventListener('canplay', onReady);
-                        this.audio.removeEventListener('error', onErr);
-                        resolve();
-                    };
-                    const onErr = () => {
-                        this.audio.removeEventListener('canplay', onReady);
-                        this.audio.removeEventListener('error', onErr);
-                        reject();
-                    };
-                    this.audio.addEventListener('canplay', onReady);
-                    this.audio.addEventListener('error', onErr);
-                    setTimeout(() => {
-                        this.audio.removeEventListener('canplay', onReady);
-                        this.audio.removeEventListener('error', onErr);
-                        reject(new Error('swap timeout'));
-                    }, 5000);
-                });
-                if (this._autoMixAborted) return;
-
-                this.audio.currentTime = this._mixAudio.currentTime;
-                if (tempoRatio !== 1.0) {
-                    this.audio.playbackRate = tempoRatio;
-                    this.audio.preservesPitch = true;
+                    // Start the transition with proper blending
+                    await this.autoMixEngine.startTransition(primaryGain, mixGain, timing, {
+                        applyEQ: true,
+                    });
+                } else {
+                    // Fallback to basic crossfade
+                    audioContextManager.scheduleCrossfade(duration);
                 }
-
+            } else {
+                // Fallback to basic crossfade
                 if (this._mixSourceReady) {
-                    audioContextManager.setPrimaryGain(1);
                     audioContextManager.setMixGain(0);
                 } else {
-                    this.audio.volume = this.userVolume;
+                    this._mixAudio.volume = 0;
                 }
+                await this._mixAudio.play();
+                if (this._autoMixAborted) return;
 
-                await this.audio.play();
-            } catch {
-                // Swap failed - primary audio couldn't load the same URL
+                if (this._mixSourceReady) {
+                    audioContextManager.scheduleCrossfade(duration);
+                } else {
+                    const fadeInterval = 50;
+                    const totalSteps = Math.ceil((duration * 1000) / fadeInterval);
+                    let step = 0;
+                    await new Promise((resolve) => {
+                        this._crossfadeFadeTimer = setInterval(() => {
+                            step++;
+                            const t = Math.min(1, step / totalSteps);
+                            const gainOut = Math.cos((t * Math.PI) / 2);
+                            const gainIn = Math.sin((t * Math.PI) / 2);
+                            this.audio.volume = gainOut * this.userVolume;
+                            this._mixAudio.volume = gainIn * this.userVolume;
+                            if (step >= totalSteps) {
+                                clearInterval(this._crossfadeFadeTimer);
+                                this._crossfadeFadeTimer = null;
+                                resolve();
+                            }
+                        }, fadeInterval);
+                    });
+                }
             }
 
-            this._mixAudio.pause();
+            // Wait for crossfade to complete only if using gain nodes (background crossfade)
+            // Volume-based crossfade already waited in its Promise
+            if (this._mixSourceReady) {
+                await new Promise((resolve) => setTimeout(resolve, duration * 1000));
+            }
+            if (this._autoMixAborted) return;
+
+            // TRUE GAPLESS: Swap audio element references instead of reloading
+            // This ensures continuous playback without any loading gap
+            const oldAudio = this.audio;
+            const newAudio = this._mixAudio;
+
+            // Update the main audio reference to the already-playing mix audio
+            this.audio = newAudio;
+
+            // Create a fresh mix audio element for the next transition
+            this._mixAudio = document.createElement('audio');
+            this._mixAudio.preload = 'auto';
+
+            // Re-initialize mix audio in audio context manager
+            if (this._mixSourceReady && audioContextManager.isReady()) {
+                audioContextManager.initMixAudio(this._mixAudio);
+                // Reset gains for the new main audio
+                audioContextManager.setPrimaryGain(1);
+                audioContextManager.setMixGain(0);
+            } else {
+                this.audio.volume = this.userVolume;
+            }
+
+            // Copy playback properties
+            if (tempoRatio !== 1.0) {
+                this.audio.playbackRate = tempoRatio;
+                this.audio.preservesPitch = true;
+            }
+
+            // Clean up old audio element
             try {
-                this._mixAudio.removeAttribute('src');
-                this._mixAudio.load();
+                oldAudio.pause();
+                oldAudio.removeAttribute('src');
+                oldAudio.load();
             } catch {
-                /* ignore */
+                // Ignore cleanup errors
             }
+
+            // Set up event listeners on the new main audio
+            this._setupAudioEventListeners();
 
             this.audio.playbackRate = audioEffectsSettings.getSpeed();
             this.audio.preservesPitch = false;
@@ -607,7 +773,7 @@ export class Player {
             this.applyAudioEffects();
             this.saveQueueState();
             this.preloadNextTracks();
-            this.ensureAutoMixQueue().catch(() => { });
+            this.ensureAutoMixQueue().catch(() => {});
         } catch (error) {
             console.warn('[AutoMix] Transition failed, falling back:', error);
             this._mixAudio.pause();
@@ -935,7 +1101,7 @@ export class Player {
                 // Warm connection/cache
                 // For Blob URLs (DASH), this head request is not needed and can cause errors.
                 if (!streamUrl.startsWith('blob:')) {
-                    fetch(streamUrl, { method: 'HEAD', signal: this.preloadAbortController.signal }).catch(() => { });
+                    fetch(streamUrl, { method: 'HEAD', signal: this.preloadAbortController.signal }).catch(() => {});
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
@@ -1283,7 +1449,7 @@ export class Player {
             }
 
             this.preloadNextTracks();
-            this.ensureAutoMixQueue().catch(() => { });
+            this.ensureAutoMixQueue().catch(() => {});
         } catch (error) {
             console.error(`Could not play track: ${trackTitle}`, error);
             this._gaplessTransitionInProgress = false;
@@ -1605,7 +1771,7 @@ export class Player {
                     }
                 }
             })
-            .catch(() => { });
+            .catch(() => {});
     }
 
     updatePlayingTrackIndicator() {

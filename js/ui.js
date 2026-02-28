@@ -312,10 +312,164 @@ export class UIRenderer {
     adjustTitleFontSize(element, text) {
         element.classList.remove('long-title', 'very-long-title');
         if (!text) return;
-        if (text.length > 40) {
+
+        // Get viewport width for responsive calculations
+        const vw = window.innerWidth;
+        const containerWidth = element.parentElement?.offsetWidth || vw;
+
+        // Calculate available width (accounting for padding and other elements)
+        const availableWidth = Math.min(containerWidth, vw * 0.9);
+
+        // Estimate character width (average ~0.6em for most fonts)
+        const fontSize = parseFloat(getComputedStyle(element).fontSize) || 16;
+        const charWidth = fontSize * 0.6;
+        const maxChars = Math.floor(availableWidth / charWidth);
+
+        // Dynamic thresholds based on viewport
+        const veryLongThreshold = Math.max(30, Math.floor(maxChars * 1.2));
+        const longThreshold = Math.max(20, Math.floor(maxChars * 0.8));
+
+        if (text.length > veryLongThreshold) {
             element.classList.add('very-long-title');
-        } else if (text.length > 25) {
+        } else if (text.length > longThreshold) {
             element.classList.add('long-title');
+        }
+    }
+
+    /**
+     * Renders playlist description with Read More functionality
+     * @param {HTMLElement} descEl - The description element
+     * @param {string} description - The full description text
+     * @param {number} maxLength - Maximum characters before truncation (default: 150)
+     */
+    renderPlaylistDescription(descEl, description, maxLength = 150) {
+        if (!description) {
+            descEl.textContent = '';
+            descEl.classList.remove('truncated', 'expanded');
+            return;
+        }
+
+        // Clear previous content
+        descEl.innerHTML = '';
+        descEl.classList.remove('truncated', 'expanded');
+
+        const isLong = description.length > maxLength;
+
+        if (isLong) {
+            // Create truncated version
+            const truncatedText = description.substring(0, maxLength).trim();
+            descEl.textContent = truncatedText + '...';
+            descEl.classList.add('truncated');
+
+            // Create Read More button
+            const readMore = document.createElement('span');
+            readMore.className = 'description-read-more';
+            readMore.textContent = 'Read More';
+            readMore.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (descEl.classList.contains('expanded')) {
+                    // Collapse
+                    descEl.textContent = truncatedText + '...';
+                    descEl.classList.remove('expanded');
+                    descEl.classList.add('truncated');
+                    readMore.textContent = 'Read More';
+                    descEl.appendChild(readMore);
+                } else {
+                    // Expand
+                    descEl.textContent = description;
+                    descEl.classList.remove('truncated');
+                    descEl.classList.add('expanded');
+                    readMore.textContent = 'Show Less';
+                    descEl.appendChild(readMore);
+                }
+            };
+            descEl.appendChild(readMore);
+        } else {
+            descEl.textContent = description;
+        }
+    }
+
+    /**
+     * Setup mobile menu for playlist page
+     * @param {Object} playlistData - The playlist data
+     * @param {Array} tracks - The tracks array
+     */
+    setupPlaylistMobileMenu(playlistData, tracks) {
+        const mobileMenuBtn = document.getElementById('playlist-mobile-menu-btn');
+        const mobileMenuDropdown = document.getElementById('playlist-mobile-menu-dropdown');
+
+        if (!mobileMenuBtn || !mobileMenuDropdown) return;
+
+        // Toggle dropdown on button click
+        mobileMenuBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            mobileMenuDropdown.classList.toggle('active');
+        };
+
+        // Close dropdown when clicking outside
+        const closeDropdown = (e) => {
+            if (!mobileMenuBtn.contains(e.target) && !mobileMenuDropdown.contains(e.target)) {
+                mobileMenuDropdown.classList.remove('active');
+            }
+        };
+        document.addEventListener('click', closeDropdown);
+
+        // Mobile play button
+        const mobilePlayBtn = document.getElementById('mobile-play-playlist-btn');
+        if (mobilePlayBtn) {
+            mobilePlayBtn.onclick = () => {
+                mobileMenuDropdown.classList.remove('active');
+                const playBtn = document.getElementById('play-playlist-btn');
+                if (playBtn) playBtn.click();
+            };
+        }
+
+        // Mobile shuffle button
+        const mobileShuffleBtn = document.getElementById('mobile-shuffle-playlist-btn');
+        if (mobileShuffleBtn) {
+            mobileShuffleBtn.onclick = () => {
+                mobileMenuDropdown.classList.remove('active');
+                const shuffleBtn = document.getElementById('shuffle-playlist-btn');
+                if (shuffleBtn) shuffleBtn.click();
+            };
+        }
+
+        // Mobile download button
+        const mobileDownloadBtn = document.getElementById('mobile-download-playlist-btn');
+        if (mobileDownloadBtn) {
+            mobileDownloadBtn.onclick = () => {
+                mobileMenuDropdown.classList.remove('active');
+                const downloadBtn = document.getElementById('download-playlist-btn');
+                if (downloadBtn) downloadBtn.click();
+            };
+        }
+
+        // Mobile like button
+        const mobileLikeBtn = document.getElementById('mobile-like-playlist-btn');
+        if (mobileLikeBtn) {
+            mobileLikeBtn.onclick = () => {
+                mobileMenuDropdown.classList.remove('active');
+                const likeBtn = document.getElementById('like-playlist-btn');
+                if (likeBtn) likeBtn.click();
+            };
+        }
+
+        // Mobile add to playlist button (for API playlists)
+        const mobileAddBtn = document.getElementById('mobile-add-playlist-to-playlist-btn');
+        if (mobileAddBtn) {
+            const addPlaylistBtn = document.getElementById('add-playlist-to-playlist-btn');
+            if (addPlaylistBtn && addPlaylistBtn.style.display !== 'none') {
+                mobileAddBtn.style.display = 'flex';
+                mobileAddBtn.onclick = () => {
+                    mobileMenuDropdown.classList.remove('active');
+                    addPlaylistBtn.click();
+                };
+            } else {
+                mobileAddBtn.style.display = 'none';
+            }
         }
     }
 
@@ -2957,6 +3111,7 @@ export class UIRenderer {
         const titleEl = document.getElementById('album-detail-title');
         const metaEl = document.getElementById('album-detail-meta');
         const prodEl = document.getElementById('album-detail-producer');
+        const descEl = document.getElementById('album-detail-description');
         const tracklistContainer = document.getElementById('album-detail-tracklist');
         const playBtn = document.getElementById('play-album-btn');
         if (playBtn) playBtn.innerHTML = `${SVG_PLAY}<span>Play Album</span>`;
@@ -2969,7 +3124,8 @@ export class UIRenderer {
         imageEl.style.backgroundColor = 'var(--muted)';
         titleEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
         metaEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
-        prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+        if (prodEl) prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+        if (descEl) descEl.innerHTML = '<div class="skeleton" style="height: 14px; width: 300px; max-width: 90%;"></div>';
         tracklistContainer.innerHTML = `
             <div class="track-list-header">
                 <span style="width: 40px; text-align: center;">#</span>
@@ -3020,9 +3176,21 @@ export class UIRenderer {
             metaEl.innerHTML =
                 (dateDisplay ? `${dateDisplay} • ` : '') + `${tracks.length} tracks • ${formatDuration(totalDuration)}`;
 
-            prodEl.innerHTML =
-                `By <a href="/artist/${album.artist.id}">${album.artist.name}</a>` +
-                (firstCopyright ? ` • ${firstCopyright}` : '');
+            // Show artist in producer line
+            if (prodEl) {
+                prodEl.innerHTML = `By <a href="/artist/${album.artist.id}">${album.artist.name}</a>`;
+                prodEl.style.display = '';
+            }
+
+            // Show copyright in description area
+            if (descEl) {
+                if (firstCopyright) {
+                    descEl.textContent = firstCopyright;
+                    descEl.style.display = '';
+                } else {
+                    descEl.style.display = 'none';
+                }
+            }
 
             tracklistContainer.innerHTML = `
                 <div class="track-list-header">
@@ -3364,6 +3532,7 @@ export class UIRenderer {
                     if (uniqueCovers.length > 0 && collageEl) {
                         imageEl.style.display = 'none';
                         collageEl.style.display = 'grid';
+                        collageEl.className = 'playlist-hero-collage';
                         collageEl.innerHTML = '';
                         const imagesToRender = [];
                         for (let i = 0; i < 4; i++) {
@@ -3384,13 +3553,16 @@ export class UIRenderer {
                 }
 
                 titleEl.textContent = playlistData.name || playlistData.title;
+                titleEl.className = 'playlist-hero-title';
                 this.adjustTitleFontSize(titleEl, titleEl.textContent);
 
                 const tracks = playlistData.tracks || [];
                 const totalDuration = calculateTotalDuration(tracks);
 
                 metaEl.textContent = `${tracks.length} tracks • ${formatDuration(totalDuration)}`;
-                descEl.textContent = playlistData.description || '';
+
+                // Use the new renderPlaylistDescription for Read More functionality
+                this.renderPlaylistDescription(descEl, playlistData.description, 150);
 
                 const originalTracks = [...tracks];
                 const savedSort = localStorage.getItem(`playlist-sort-${playlistId}`);
@@ -3526,12 +3698,15 @@ export class UIRenderer {
                 }
 
                 titleEl.textContent = playlist.title;
+                titleEl.className = 'playlist-hero-title';
                 this.adjustTitleFontSize(titleEl, playlist.title);
 
                 const totalDuration = calculateTotalDuration(tracks);
 
                 metaEl.textContent = `${playlist.numberOfTracks} tracks • ${formatDuration(totalDuration)}`;
-                descEl.textContent = playlist.description || '';
+
+                // Use the new renderPlaylistDescription for Read More functionality
+                this.renderPlaylistDescription(descEl, playlist.description, 150);
 
                 const originalTracks = [...tracks];
                 const savedSort = localStorage.getItem(`playlist-sort-${playlistId}`);
@@ -4976,161 +5151,88 @@ export class UIRenderer {
     }
 
     updatePlaylistHeaderActions(playlist, isOwned, tracks, showShare = false, onSort = null, getCurrentSort = null) {
-        const actionsDiv = document.getElementById('page-playlist').querySelector('.detail-header-actions');
+        // Get button references
+        const shuffleBtn = document.getElementById('shuffle-playlist-btn');
+        const sortBtn = document.getElementById('sort-playlist-btn');
+        const editBtn = document.getElementById('edit-playlist-btn');
+        const deleteBtn = document.getElementById('delete-playlist-btn');
+        const shareBtn = document.getElementById('share-playlist-btn');
 
-        // Cleanup existing dynamic buttons
-        [
-            'shuffle-playlist-btn',
-            'edit-playlist-btn',
-            'delete-playlist-btn',
-            'share-playlist-btn',
-            'sort-playlist-btn',
-        ].forEach((id) => {
-            const btn = actionsDiv.querySelector(`#${id}`);
-            if (btn) btn.remove();
-        });
-
-        const fragment = document.createDocumentFragment();
-
-        // Shuffle
-        const shuffleBtn = document.createElement('button');
-        shuffleBtn.id = 'shuffle-playlist-btn';
-        shuffleBtn.className = 'btn-primary';
-        shuffleBtn.innerHTML =
-            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/></svg><span>Shuffle</span>';
-        shuffleBtn.onclick = () => {
-            const shuffledTracks = [...tracks].sort(() => Math.random() - 0.5);
-            this.player.setQueue(shuffledTracks, 0);
-            this.player.playTrackFromQueue();
-        };
-
-        // Sort button (always available if onSort is provided)
-        let sortBtn = null;
-        if (onSort) {
-            sortBtn = document.createElement('button');
-            sortBtn.id = 'sort-playlist-btn';
-            sortBtn.className = 'btn-secondary';
-            sortBtn.innerHTML =
-                '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg><span>Sort</span>';
-
-            sortBtn.onclick = (e) => {
-                e.stopPropagation();
-                const menu = document.getElementById('sort-menu');
-
-                // Show "Date Added" options only if tracks have addedAt
-                const hasAddedDate = tracks.some((t) => t.addedAt);
-                menu.querySelectorAll('.requires-added-date').forEach((opt) => {
-                    opt.style.display = hasAddedDate ? '' : 'none';
-                });
-
-                // Highlight current sort option
-                const currentSortType = getCurrentSort ? getCurrentSort() : 'custom';
-                menu.querySelectorAll('li').forEach((opt) => {
-                    opt.classList.toggle('sort-active', opt.dataset.sort === currentSortType);
-                });
-
-                const rect = sortBtn.getBoundingClientRect();
-                menu.style.top = `${rect.bottom + 5}px`;
-                menu.style.left = `${rect.left}px`;
-                menu.style.display = 'block';
-
-                const closeMenu = () => {
-                    menu.style.display = 'none';
-                    document.removeEventListener('click', closeMenu);
-                };
-
-                const handleSort = (ev) => {
-                    const li = ev.target.closest('li');
-                    if (li && li.dataset.sort) {
-                        onSort(li.dataset.sort);
-                        closeMenu();
-                    }
-                };
-
-                menu.onclick = handleSort;
-
-                setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        // Shuffle button - always show and attach handler
+        if (shuffleBtn) {
+            shuffleBtn.style.display = '';
+            shuffleBtn.onclick = () => {
+                const shuffledTracks = [...tracks].sort(() => Math.random() - 0.5);
+                this.player.setQueue(shuffledTracks, 0);
+                this.player.playTrackFromQueue();
             };
         }
 
-        // Edit/Delete (Owned Only)
-        if (isOwned) {
-            const editBtn = document.createElement('button');
-            editBtn.id = 'edit-playlist-btn';
-            editBtn.className = 'btn-secondary';
-            editBtn.innerHTML =
-                '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg><span>Edit</span>';
-            fragment.appendChild(editBtn);
+        // Sort button - show if onSort is provided
+        if (sortBtn) {
+            if (onSort) {
+                sortBtn.style.display = '';
+                sortBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    const menu = document.getElementById('sort-menu');
 
-            const deleteBtn = document.createElement('button');
-            deleteBtn.id = 'delete-playlist-btn';
-            deleteBtn.className = 'btn-secondary danger';
-            deleteBtn.innerHTML =
-                '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg><span>Delete</span>';
-            fragment.appendChild(deleteBtn);
+                    // Show "Date Added" options only if tracks have addedAt
+                    const hasAddedDate = tracks.some((t) => t.addedAt);
+                    menu.querySelectorAll('.requires-added-date').forEach((opt) => {
+                        opt.style.display = hasAddedDate ? '' : 'none';
+                    });
+
+                    // Highlight current sort option
+                    const currentSortType = getCurrentSort ? getCurrentSort() : 'custom';
+                    menu.querySelectorAll('li').forEach((opt) => {
+                        opt.classList.toggle('sort-active', opt.dataset.sort === currentSortType);
+                    });
+
+                    const rect = sortBtn.getBoundingClientRect();
+                    menu.style.top = `${rect.bottom + 5}px`;
+                    menu.style.left = `${rect.left}px`;
+                    menu.style.display = 'block';
+
+                    const closeMenu = () => {
+                        menu.style.display = 'none';
+                        document.removeEventListener('click', closeMenu);
+                    };
+
+                    const handleSort = (ev) => {
+                        const li = ev.target.closest('li');
+                        if (li && li.dataset.sort) {
+                            onSort(li.dataset.sort);
+                            closeMenu();
+                        }
+                    };
+
+                    menu.onclick = handleSort;
+
+                    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+                };
+            } else {
+                sortBtn.style.display = 'none';
+            }
         }
 
-        // Share (User Playlists Only)
-        if (showShare || (isOwned && playlist.isPublic)) {
-            const shareBtn = document.createElement('button');
-            shareBtn.id = 'share-playlist-btn';
-            shareBtn.className = 'btn-secondary';
-            shareBtn.innerHTML =
-                '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg><span>Share</span>';
-
-            shareBtn.onclick = () => {
-                const url = getShareUrl(`/userplaylist/${playlist.id || playlist.uuid}`);
-                navigator.clipboard.writeText(url).then(() => alert('Link copied to clipboard!'));
-            };
-            fragment.appendChild(shareBtn);
+        // Edit/Delete buttons - show only if owned
+        if (editBtn) {
+            editBtn.style.display = isOwned ? '' : 'none';
+        }
+        if (deleteBtn) {
+            deleteBtn.style.display = isOwned ? '' : 'none';
         }
 
-        // Insert buttons in the correct order: Play, Shuffle, Download, Sort, Like, Edit/Delete/Share
-        const dlBtn = actionsDiv.querySelector('#download-playlist-btn');
-        const likeBtn = actionsDiv.querySelector('#like-playlist-btn');
-
-        if (dlBtn) {
-            // We want Shuffle first, then Edit/Delete/Share.
-            // But Download is usually first or second.
-            // In renderPlaylistPage: Play, Download, Like.
-            // We want Shuffle after Play? Or after Download?
-            // Previous code: actionsDiv.insertBefore(shuffleBtn, dlBtn); => Shuffle before Download.
-            // Then appended others.
-
-            // Let's just append everything for now to keep it simple, or insert Shuffle specifically.
-            // The Play button is static. Download is static.
-
-            // If we want Shuffle before Download:
-            // fragment has Shuffle, Edit, Delete, Share.
-            // If we insert fragment before Download, all go before Download.
-            // That might change the order.
-            // Previous order: Shuffle (before Download), then Edit/Delete/Share (appended = after Like).
-
-            // Let's split fragment?
-            // Or just use append for all.
-            // The user didn't complain about order, but consistency is good.
-            // "Fix popup buttons" was the request.
-
-            // Let's stick to appending for now to minimize visual layout shifts from previous (where Edit/Delete were appended).
-            // Shuffle was inserted before Download.
-            actionsDiv.insertBefore(shuffleBtn, dlBtn);
-            // Insert Sort after Download, before Like
-            if (sortBtn && likeBtn) {
-                actionsDiv.insertBefore(sortBtn, likeBtn);
-            } else if (sortBtn) {
-                actionsDiv.appendChild(sortBtn);
-            }
-
-            // Append Edit/Delete/Share buttons after Like
-            while (fragment.firstChild) {
-                actionsDiv.appendChild(fragment.firstChild);
-            }
-        } else {
-            // If no Download button, just append everything
-            actionsDiv.appendChild(shuffleBtn);
-            if (sortBtn) actionsDiv.appendChild(sortBtn);
-            while (fragment.firstChild) {
-                actionsDiv.appendChild(fragment.firstChild);
+        // Share button - show if public or showShare is true
+        if (shareBtn) {
+            if (showShare || (isOwned && playlist.isPublic)) {
+                shareBtn.style.display = '';
+                shareBtn.onclick = () => {
+                    const url = getShareUrl(`/userplaylist/${playlist.id || playlist.uuid}`);
+                    navigator.clipboard.writeText(url).then(() => alert('Link copied to clipboard!'));
+                };
+            } else {
+                shareBtn.style.display = 'none';
             }
         }
     }

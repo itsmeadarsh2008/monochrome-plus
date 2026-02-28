@@ -46,6 +46,15 @@
         rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
 
+    <!-- Import map for external libraries -->
+    <script type="importmap">
+    {
+        "imports": {
+            "howler": "https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"
+        }
+    }
+    </script>
+
 </head>
 
 <body>
@@ -1114,8 +1123,7 @@
                                             <g>
                                                 <path
                                                     d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.880390,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"
-                                                    fill="#8E8E96" fill-rule="nonzero"></path>
-                                            </g>
+                                                     fill="#8E8E96" fill-rule="nonzero"></path>
                                             </g>
                                         </svg>
                                         <span>Discord</span>
@@ -1163,40 +1171,43 @@
         <main class="main-content">
             <div id="page-background"></div>
             <header class="main-header">
-                <div class="navigation-controls desktop-only">
-                    <button id="nav-back" class="nav-btn" title="Go Back">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m15 18-6-6 6-6" />
-                        </svg>
-                    </button>
-                    <button id="nav-forward" class="nav-btn" title="Go Forward">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="m9 18 6-6-6-6" />
-                        </svg>
-                    </button>
-                </div>
-                <button class="hamburger-menu" id="hamburger-btn" title="Open navigation">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                </button>
                 <form class="search-bar" id="search-form">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                        class="search-icon">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="search" id="search-input" placeholder="Search for music, people, or profiles..."
-                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-                    <button type="button" class="search-clear-btn btn-icon" title="Clear search" style="display: none">
-                        &times;
-                    </button>
+                    <!-- Navigation controls next to search bar -->
+                    <div class="search-nav-controls">
+                        <button id="nav-back" class="nav-btn" title="Go Back">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m15 18-6-6 6-6" />
+                            </svg>
+                        </button>
+                        <button id="nav-forward" class="nav-btn" title="Go Forward">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m9 18 6-6-6-6" />
+                            </svg>
+                        </button>
+                        <button class="hamburger-menu" id="hamburger-btn" title="Open navigation">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="search-input-wrapper">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="search-icon">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="search" id="search-input" placeholder="Search for music, people, or profiles..."
+                            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                        <button type="button" class="search-clear-btn btn-icon" title="Clear search" style="display: none">
+                            &times;
+                        </button>
+                    </div>
                     <button type="button" id="voice-search-btn" class="btn-icon voice-search-btn" title="Voice Search"
                         style="display: none">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -1207,7 +1218,6 @@
                             <line x1="8" y1="22" x2="16" y2="22" />
                         </svg>
                     </button>
-                    <div id="search-history" class="search-history" style="display: none"></div>
                     <ul id="search-suggestions" class="search-suggestions-list" style="display: none"></ul>
                 </form>
             </header>
@@ -1643,72 +1653,86 @@
             </div>
 
             <div id="page-album" class="page">
-                <header class="detail-header">
-                    <img id="album-detail-image"
-                        src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt=""
-                        class="detail-header-image" />
-                    <div class="detail-header-info">
-                        <h1 class="title" id="album-detail-title"></h1>
-                        <div class="meta" id="album-detail-meta"></div>
-                        <div class="meta" id="album-detail-producer"></div>
-                        <div class="detail-header-actions">
-                            <button id="play-album-btn" class="btn-primary" title="Play Album">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="currentColor">
-                                    <polygon points="7 3 21 12 7 21 7 3"></polygon>
-                                </svg>
-                                <span>Play Album</span>
-                            </button>
-                            <button id="shuffle-album-btn" class="btn-primary" title="Shuffle">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="m18 14 4 4-4 4" />
-                                    <path d="m18 2 4 4-4 4" />
-                                    <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" />
-                                    <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" />
-                                    <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" />
-                                </svg>
-                                <span>Shuffle</span>
-                            </button>
-                            <button id="album-mix-btn" class="btn-primary" style="display: none" title="Mix">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="currentColor">
-                                    <path
-                                        d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                                </svg>
-                                <span>Mix</span>
-                            </button>
-                            <button id="download-album-btn" class="btn-primary" title="Download">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Download</span>
-                            </button>
-                            <button id="add-album-to-playlist-btn" class="btn-secondary" title="Add to Playlist">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                                </svg>
-                                <span>Add to Playlist</span>
-                            </button>
-                            <button id="like-album-btn" class="btn-secondary like-btn" data-action="toggle-like"
-                                data-type="album" title="Save to Favorites">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round" class="heart-icon">
-                                    <path
-                                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
-                                    </path>
-                                </svg>
-                                <span>Save</span>
-                            </button>
+                <header class="album-hero">
+                    <div class="album-hero-cover">
+                        <img id="album-detail-image"
+                            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt=""
+                            class="album-hero-image" />
+                    </div>
+                    <div class="album-hero-content">
+                        <span class="album-hero-label">Album</span>
+                        <h1 class="album-hero-title" id="album-detail-title"></h1>
+                        <div class="album-hero-meta" id="album-detail-meta"></div>
+                        <div class="album-hero-meta" id="album-detail-producer" style="display: none;"></div>
+                        <div class="album-hero-description" id="album-detail-description"></div>
+                        <div class="album-hero-actions">
+                            <!-- Primary Action Group -->
+                            <div class="btn-group btn-group-primary">
+                                <button id="play-album-btn" class="btn-group-item btn-group-item-play" title="Play Album">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                        fill="currentColor">
+                                        <polygon points="7 3 21 12 7 21 7 3"></polygon>
+                                    </svg>
+                                </button>
+                                <button id="shuffle-album-btn" class="btn-group-item" title="Shuffle">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="m18 14 4 4-4 4" />
+                                        <path d="m18 2 4 4-4 4" />
+                                        <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" />
+                                        <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" />
+                                        <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" />
+                                    </svg>
+                                </button>
+                                <button id="album-mix-btn" class="btn-group-item" style="display: none" title="Mix">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="currentColor">
+                                        <path
+                                            d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Secondary Action Group -->
+                            <div class="btn-group btn-group-secondary">
+                                <button id="download-album-btn" class="btn-group-item" title="Download">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                </button>
+                                <button id="add-album-to-playlist-btn" class="btn-group-item" title="Add to Playlist">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                                <button id="like-album-btn" class="btn-group-item like-btn" data-action="toggle-like"
+                                    data-type="album" title="Save to Favorites">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" class="heart-icon">
+                                        <path
+                                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                                        </path>
+                                    </svg>
+                                </button>
+                                <button id="share-album-btn" class="btn-group-item" title="Share" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                                        <polyline points="16 6 12 2 8 6" />
+                                        <line x1="12" y1="2" x2="12" y2="15" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -1741,58 +1765,107 @@
             </div>
 
             <section id="page-playlist" class="page">
-                <header class="detail-header">
-                    <div class="detail-header-cover-container">
+                <header class="playlist-hero">
+                    <div class="playlist-hero-cover">
                         <img id="playlist-detail-image"
                             src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-                            class="detail-header-image" alt="Playlist Cover" />
-                        <div id="playlist-detail-collage" class="detail-header-collage" style="display: none"></div>
+                            class="playlist-hero-image" alt="Playlist Cover" />
+                        <div id="playlist-detail-collage" class="playlist-hero-collage" style="display: none"></div>
                     </div>
-                    <div class="detail-header-info">
-                        <h1 class="title" id="playlist-detail-title"></h1>
-                        <div class="meta" id="playlist-detail-meta"></div>
-                        <div class="meta" id="playlist-detail-description" class="detail-description"></div>
-                        <div class="detail-header-actions">
-                            <button id="play-playlist-btn" class="btn-primary" title="Play">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="currentColor">
-                                    <polygon points="7 3 21 12 7 21 7 3"></polygon>
-                                </svg>
-                                <span>Play</span>
-                            </button>
-                            <button id="shuffle-playlist-btn" class="btn-primary" title="Shuffle">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="m18 14 4 4-4 4" />
-                                    <path d="m18 2 4 4-4 4" />
-                                    <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" />
-                                    <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" />
-                                    <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" />
-                                </svg>
-                                <span>Shuffle</span>
-                            </button>
-                            <button id="download-playlist-btn" class="btn-primary" title="Download">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Download</span>
-                            </button>
-                            <button id="like-playlist-btn" class="btn-secondary like-btn" data-action="toggle-like"
-                                data-type="playlist" title="Save to Favorites">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round" class="heart-icon">
-                                    <path
-                                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
-                                    </path>
-                                </svg>
-                                <span>Save</span>
-                            </button>
+                    <div class="playlist-hero-content">
+                        <span class="playlist-hero-label">Playlist</span>
+                        <h1 class="playlist-hero-title" id="playlist-detail-title"></h1>
+                        <div class="playlist-hero-meta" id="playlist-detail-meta"></div>
+                        <div class="playlist-hero-description" id="playlist-detail-description"></div>
+                        <div class="playlist-hero-actions">
+                            <!-- Primary Action Group -->
+                            <div class="btn-group btn-group-primary">
+                                <button id="play-playlist-btn" class="btn-group-item btn-group-item-play" title="Play">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                                        fill="currentColor">
+                                        <polygon points="7 3 21 12 7 21 7 3"></polygon>
+                                    </svg>
+                                </button>
+                                <button id="shuffle-playlist-btn" class="btn-group-item" title="Shuffle">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="m18 14 4 4-4 4" />
+                                        <path d="m18 2 4 4-4 4" />
+                                        <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" />
+                                        <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" />
+                                        <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" />
+                                    </svg>
+                                </button>
+                                <button id="sort-playlist-btn" class="btn-group-item" title="Sort" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M3 6h18" />
+                                        <path d="M7 12h10" />
+                                        <path d="M10 18h4" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Secondary Action Group -->
+                            <div class="btn-group btn-group-secondary">
+                                <button id="download-playlist-btn" class="btn-group-item" title="Download">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                </button>
+                                <button id="like-playlist-btn" class="btn-group-item like-btn" data-action="toggle-like"
+                                    data-type="playlist" title="Save to Favorites">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round" class="heart-icon">
+                                        <path
+                                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                                        </path>
+                                    </svg>
+                                </button>
+                                <button id="edit-playlist-btn" class="btn-group-item" title="Edit" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                </button>
+                                <button id="delete-playlist-btn" class="btn-group-item" title="Delete" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M3 6h18" />
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                        <line x1="10" y1="11" x2="10" y2="17" />
+                                        <line x1="14" y1="11" x2="14" y2="17" />
+                                    </svg>
+                                </button>
+                                <button id="share-playlist-btn" class="btn-group-item" title="Share" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                                        <polyline points="16 6 12 2 8 6" />
+                                        <line x1="12" y1="2" x2="12" y2="15" />
+                                    </svg>
+                                </button>
+                                <button id="add-playlist-to-playlist-btn" class="btn-group-item" title="Add to Your Library" style="display: none;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -3081,8 +3154,8 @@
                                     <span class="description">How long the crossfade lasts (in seconds)</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                    <input type="range" id="crossfade-duration-slider" min="1" max="12" step="1"
-                                        value="6" style="flex: 1; accent-color: var(--primary);" />
+                                    <input type="range" id="crossfade-duration-slider" min="2" max="20" step="1"
+                                        value="12" style="flex: 1; accent-color: var(--primary);" />
                                     <span id="crossfade-duration-value"
                                         style="min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums;">6s</span>
                                 </div>

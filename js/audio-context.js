@@ -8,7 +8,7 @@ import {
     performanceModeSettings,
     visualizerSettings,
     playbackBehaviorSettings,
-    audioProcessingSettings
+    audioProcessingSettings,
 } from './storage.js';
 
 // Generate frequency array for given number of bands using logarithmic spacing
@@ -372,7 +372,8 @@ class AudioContextManager {
 
         const isPure = typeof audioProcessingSettings !== 'undefined' && audioProcessingSettings.isPure();
         const needsVisualizer = typeof visualizerSettings !== 'undefined' && visualizerSettings.isEnabled();
-        const needsAutoMix = typeof playbackBehaviorSettings !== 'undefined' && playbackBehaviorSettings.isAutoMixEnabled();
+        const needsAutoMix =
+            typeof playbackBehaviorSettings !== 'undefined' && playbackBehaviorSettings.isAutoMixEnabled();
 
         // Pure mode bypass if no features need AudioContext
         if (isPure && !needsVisualizer && !needsAutoMix && !this.isEQEnabled && !this.isMonoAudioEnabled) {
@@ -394,7 +395,13 @@ class AudioContextManager {
             // Zero-gain tap check
             // Fallback to mozCaptureStream for firefox just in case
             const captureFn = audioElement.captureStream || audioElement.mozCaptureStream;
-            if (isPure && !needsAutoMix && !this.isEQEnabled && !this.isMonoAudioEnabled && typeof captureFn === 'function') {
+            if (
+                isPure &&
+                !needsAutoMix &&
+                !this.isEQEnabled &&
+                !this.isMonoAudioEnabled &&
+                typeof captureFn === 'function'
+            ) {
                 const stream = captureFn.call(audioElement);
                 this.source = this.audioContext.createMediaStreamSource(stream);
                 this.isStreamCaptured = true;
@@ -475,7 +482,11 @@ class AudioContextManager {
                 }
             }
 
-            if (this.isStreamCaptured && typeof audioProcessingSettings !== 'undefined' && audioProcessingSettings.isPure()) {
+            if (
+                this.isStreamCaptured &&
+                typeof audioProcessingSettings !== 'undefined' &&
+                audioProcessingSettings.isPure()
+            ) {
                 // ZERO-GAIN Branch for purely Visualizer tap
                 this.source.connect(this.analyser);
                 const zeroGain = this.audioContext.createGain();
@@ -595,6 +606,20 @@ class AudioContextManager {
      */
     getSourceNode() {
         return this.source;
+    }
+
+    /**
+     * Get the primary gain node for AutoMix
+     */
+    getPrimaryGainNode() {
+        return this.primaryGainNode;
+    }
+
+    /**
+     * Get the mix gain node for AutoMix
+     */
+    getMixGainNode() {
+        return this.mixGainNode;
     }
 
     /**

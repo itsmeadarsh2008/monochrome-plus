@@ -1406,14 +1406,14 @@ export const playbackBehaviorSettings = {
     getCrossfadeDuration() {
         try {
             const val = parseFloat(localStorage.getItem(this.CROSSFADE_DURATION_KEY));
-            return Number.isFinite(val) && val >= 1 && val <= 12 ? val : 6;
+            return Number.isFinite(val) && val >= 2 && val <= 20 ? val : 12;
         } catch {
-            return 6;
+            return 12;
         }
     },
 
     setCrossfadeDuration(seconds) {
-        const clamped = Math.max(1, Math.min(12, parseFloat(seconds) || 6));
+        const clamped = Math.max(2, Math.min(20, parseFloat(seconds) || 12));
         localStorage.setItem(this.CROSSFADE_DURATION_KEY, clamped.toString());
     },
 };
