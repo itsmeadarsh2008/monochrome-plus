@@ -5,6 +5,8 @@ import { navigate } from './router.js';
 let artistsData = [];
 let artistsPopularity = new Map(); // name -> popularity score
 let globalPlayer = null;
+let hasLoadAttempted = false; // Track if we've attempted to load data
+let isDataLoadFailed = false; // Track if data loading has permanently failed
 
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
@@ -29,8 +31,9 @@ function cleanSongTitle(title) {
 }
 
 async function loadArtistsPopularity() {
+    if (hasLoadAttempted && isDataLoadFailed) return;
     try {
-        const response = await fetch('https://trends.artistgrid.cx');
+        const response = await fetch('/artistgrid-trends');
         if (!response.ok) return;
         const data = await response.json();
         if (data.results) {
@@ -41,13 +44,16 @@ async function loadArtistsPopularity() {
             });
         }
     } catch (e) {
-        console.log('Could not load popularity data:', e);
+        console.log('[Tracker] Could not load popularity data:', e.message || e);
     }
 }
 
 async function loadArtistsData() {
+    if (hasLoadAttempted && isDataLoadFailed) return;
+    hasLoadAttempted = true;
+
     try {
-        const response = await fetch('https://sheets.artistgrid.cx/artists.ndjson');
+        const response = await fetch('/artistgrid-api/artists.ndjson');
         if (!response.ok) throw new Error('Network response was not ok');
         const text = await response.text();
         artistsData = text
@@ -78,8 +84,13 @@ async function loadArtistsData() {
                 artistBySheetId.set(sheetId, artist);
             }
         });
+
+        isDataLoadFailed = false;
     } catch (e) {
-        console.warn('[Tracker] Could not load Artists List from ArtistGrid (possibly CORS or downtime):', e.message);
+        isDataLoadFailed = true;
+        console.warn('[Tracker] Could not load Artists List from ArtistGrid:', e.message || e);
+        // Set empty data to prevent repeated failed attempts
+        artistsData = [];
     }
 }
 
@@ -91,11 +102,11 @@ function getSheetId(url) {
 
 async function fetchTrackerData(sheetId) {
     try {
-        const response = await fetch(`https://tracker.israeli.ovh/get/${sheetId}`);
+        const response = await fetch(`/tracker-api/get/${sheetId}`);
         if (!response.ok) return null;
         return await response.json();
     } catch (e) {
-        console.error('Failed to fetch tracker data', e);
+        console.error('[Tracker] Failed to fetch tracker data:', e.message || e);
         return null;
     }
 }
@@ -310,7 +321,7 @@ export async function renderTrackerArtistPage(sheetId, container) {
     const downloadBtn = document.getElementById('download-tracker-artist-btn');
 
     const normalizedName = normalizeArtistName(artist.name);
-    imageEl.src = `https://assets.artistgrid.cx/${normalizedName}.webp`;
+    imageEl.src = `/artistgrid-assets/${normalizedName}.webp`;
     imageEl.onerror = function () {
         this.src = 'assets/logo.svg';
     };
@@ -742,7 +753,7 @@ export async function renderUnreleasedPage(container) {
         artistCard.dataset.artistName = artist.name.toLowerCase();
 
         const normalizedName = normalizeArtistName(artist.name);
-        const coverImage = `https://assets.artistgrid.cx/${normalizedName}.webp`;
+        const coverImage = `/artistgrid-assets/${normalizedName}.webp`;
 
         artistCard.innerHTML = `
             <div class="card-image-wrapper">

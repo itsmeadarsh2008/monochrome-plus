@@ -21,6 +21,32 @@ export default defineConfig(({ mode }) => {
             fs: {
                 allow: ['.', 'node_modules'],
             },
+            proxy: {
+                '/artistgrid-api': {
+                    target: 'https://sheets.artistgrid.cx',
+                    changeOrigin: true,
+                    secure: false,
+                    rewrite: (path) => path.replace(/^\/artistgrid-api/, ''),
+                },
+                '/artistgrid-trends': {
+                    target: 'https://trends.artistgrid.cx',
+                    changeOrigin: true,
+                    secure: false,
+                    rewrite: (path) => path.replace(/^\/artistgrid-trends/, ''),
+                },
+                '/artistgrid-assets': {
+                    target: 'https://assets.artistgrid.cx',
+                    changeOrigin: true,
+                    secure: false,
+                    rewrite: (path) => path.replace(/^\/artistgrid-assets/, ''),
+                },
+                '/tracker-api': {
+                    target: 'https://tracker.israeli.ovh',
+                    changeOrigin: true,
+                    secure: false,
+                    rewrite: (path) => path.replace(/^\/tracker-api/, ''),
+                },
+            },
         },
         build: {
             outDir: 'dist',
