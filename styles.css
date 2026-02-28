@@ -2891,45 +2891,65 @@ html.carousel-mode .card-grid>*,
     }
 }
 
+/* World-Class Card Grid - Large square cards */
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: var(--spacing-lg);
 }
 
+/* World-Class Square Card Layout */
 .card {
     display: block;
-    background-color: var(--card);
-    padding: var(--spacing-md);
-    border-radius: var(--radius);
+    background-color: transparent;
+    padding: 0;
+    border-radius: var(--radius-xl);
     transition:
         transform var(--transition-normal),
-        box-shadow var(--transition-normal),
-        background-color var(--transition-normal);
+        box-shadow var(--transition-normal);
     position: relative;
-    border: 1px solid transparent;
+    border: none;
+    cursor: pointer;
+    overflow: hidden;
 }
 
 .card:hover {
-    background-color: var(--secondary);
-    transform: translateY(-6px);
-    box-shadow: var(--shadow-lg);
-    border-color: var(--border);
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px -12px rgb(0, 0, 0, 0.4);
 }
 
-/* Card Image wrapper interactions */
+.card:hover .card-image {
+    transform: scale(1.08);
+}
+
+.card-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 1.5rem;
+    background: linear-gradient(to top, rgb(0, 0, 0, 0.9) 0%, rgb(0, 0, 0, 0.5) 50%, transparent 100%);
+    z-index: 5;
+}
+
+.card-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+}
+
+/* World-Class Card Image - Large square */
 .card-image-wrapper {
     position: relative;
-    margin-bottom: var(--spacing-md);
-    border-radius: var(--radius);
-
-    /* Ensure images inherit standard radius */
+    border-radius: var(--radius-xl);
     overflow: hidden;
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-xl);
     transition: box-shadow var(--transition-normal);
     aspect-ratio: 1;
-
-    /* Enforce square aspect ratio */
+    width: 100%;
 }
 
 .card:hover .card-image-wrapper {
@@ -2956,78 +2976,116 @@ html.carousel-mode .card-grid>*,
     top: 2%;
 }
 
-.card-menu-btn {
+/* World-Class Card Action Buttons - Top right positioning */
+.card-actions {
     position: absolute;
-    left: 2%;
-    top: 2%;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
 }
 
-.card-like-btn,
+.card-action-btn,
 .card-menu-btn,
-.edit-playlist-btn,
-.delete-playlist-btn {
-    background: rgb(0, 0, 0, 0.4) !important;
-    backdrop-filter: blur(8px);
-    border-radius: 50% !important;
-    width: 32px !important;
-    height: 32px !important;
-    padding: 0 !important;
-    display: flex !important;
+.edit-playlist-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0;
-    transform: scale(0.8);
-    transition:
-        transform var(--transition-fast),
-        opacity var(--transition-fast),
-        background-color var(--transition-fast) !important;
-    z-index: 10;
-    color: white !important;
-    border: 1px solid rgb(255, 255, 255, 0.1) !important;
     cursor: pointer;
+    transition: all var(--transition-fast);
+    border: none;
+    background: rgb(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    color: white;
+    opacity: 0;
+    transform: scale(0.9);
 }
 
-.card:hover .card-like-btn,
+.card:hover .card-action-btn,
 .card:hover .card-menu-btn,
-.card-like-btn.active,
-.card:hover .edit-playlist-btn,
-.card:hover .delete-playlist-btn {
+.card:hover .edit-playlist-btn {
     opacity: 1;
     transform: scale(1);
-    transition-delay: 0.05s;
-
-    /* Slight delay for staggered feel */
 }
 
-.card-like-btn:hover,
+.card-action-btn:hover,
 .card-menu-btn:hover,
-.edit-playlist-btn:hover,
-.delete-playlist-btn:hover {
-    background: rgb(0, 0, 0, 0.7) !important;
-    transform: scale(1.1) rotate(5deg) !important;
+.edit-playlist-btn:hover {
+    background: rgb(0, 0, 0, 0.8);
+    transform: scale(1.1);
+}
 
-    /* Playful rotation */
-    border-color: rgb(255, 255, 255, 0.3) !important;
+/* Play Button - World-class styling */
+.card-play-btn {
+    width: 48px;
+    height: 48px;
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+    box-shadow: 0 4px 16px rgb(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+.card:hover .card-play-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.card-play-btn:hover {
+    background: var(--primary) !important;
+    filter: brightness(1.15);
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgb(0, 0, 0, 0.5);
+}
+
+.card-play-btn svg {
+    width: 20px;
+    height: 20px;
+    margin-left: 2px;
+}
+
+/* Card Like Button */
+.card-like-btn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: none;
+    background: rgb(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    color: white;
+    opacity: 0;
+    z-index: 10;
+}
+
+.card:hover .card-like-btn {
+    opacity: 1;
+}
+
+.card-like-btn:hover {
+    background: rgb(0, 0, 0, 0.8);
+    transform: scale(1.1);
 }
 
 .card-like-btn.active {
     color: #ef4444 !important;
+    opacity: 1;
 }
 
-.edit-playlist-btn {
-    position: absolute;
-    top: 2%;
-    right: 2%;
-}
-
+/* Delete button - hide by default in edit modal */
 .delete-playlist-btn {
-    position: absolute;
-    top: 2%;
-    left: 2%;
-}
-
-.delete-playlist-btn:hover {
-    color: #ef4444 !important;
+    display: none;
 }
 
 .card-collage {
@@ -3066,21 +3124,31 @@ html.carousel-mode .card-grid>*,
     right: 0.5rem;
 }
 
+/* World-Class Card Text Overlay */
 .card-title {
-    font-size: clamp(0.95rem, 1.2vw, 1.1rem);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    white-space: nowrap;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 0.25rem 0;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    text-shadow: 0 2px 4px rgb(0, 0, 0, 0.5);
 }
 
 .card-subtitle {
-    font-size: clamp(0.8rem, 1vw, 0.95rem);
-    color: var(--muted-foreground);
-    white-space: nowrap;
+    font-size: 0.9rem;
+    color: rgb(255, 255, 255, 0.8);
+    margin: 0;
+    line-height: 1.4;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px rgb(0, 0, 0, 0.5);
 }
 
 .heart-icon {
@@ -8051,12 +8119,20 @@ img[src=''] {
         white-space: nowrap;
     }
 
-    #page-library .library-header {
-        flex-wrap: wrap;
+    .library-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
     }
 
-    #page-library .library-header button {
-        margin: 0 !important;
+    .library-actions {
+        width: 100%;
+    }
+
+    .library-actions .btn-primary,
+    .library-actions .btn-secondary {
+        flex: 1;
+        justify-content: center;
     }
 
     .detail-header {
@@ -8568,11 +8644,15 @@ img[src=''] {
         margin-bottom: var(--spacing-sm);
     }
 
-    #page-library .library-header button {
-        margin: 0 !important;
+    #page-library .library-actions {
+        width: 100%;
+    }
+
+    #page-library .library-actions .btn-primary,
+    #page-library .library-actions .btn-secondary {
         flex: 1;
-        min-width: auto;
-        white-space: nowrap;
+        justify-content: center;
+        margin: 0 !important;
     }
 
     .detail-header-info .title {
@@ -10085,7 +10165,8 @@ textarea:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow-x: hidden;
+    overflow: visible;
+    padding-bottom: 2rem;
 }
 
 .profile-banner-wrapper {
@@ -10115,21 +10196,21 @@ textarea:focus {
 .profile-card {
     width: calc(100% - 4rem);
     max-width: 900px;
-    margin-top: -120px;
+    margin-top: -80px;
     margin-left: auto;
     margin-right: auto;
     position: relative;
     z-index: 10;
-    background: color-mix(in srgb, var(--card) 60%, transparent);
-    backdrop-filter: blur(12px) saturate(180%);
-    border: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+    background: color-mix(in srgb, var(--card) 80%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     border-radius: var(--radius-2xl);
-    padding: 2.5rem;
+    padding: 0 2.5rem 2.5rem;
     box-shadow:
         0 25px 50px -12px rgb(0, 0, 0, 0.5),
         inset 0 1px 1px rgb(255, 255, 255, 0.05);
     animation: profile-card-slide-up 0.8s var(--ease-out-back) both;
-    overflow-x: hidden;
+    overflow: visible;
 }
 
 @keyframes profile-card-slide-up {
@@ -10154,8 +10235,9 @@ textarea:focus {
 
 .profile-avatar-wrapper {
     position: relative;
-    margin-top: -5rem;
-    margin-bottom: 0.5rem;
+    margin-top: -60px;
+    margin-bottom: 1rem;
+    z-index: 20;
 }
 
 .profile-avatar {
@@ -10240,6 +10322,138 @@ textarea:focus {
     background: white;
     border-radius: 50%;
     animation: presence-glow 1.5s infinite;
+}
+
+/* ==========================================================================
+   LIBRARY PAGE REDESIGN
+   Modern layout with improved visual hierarchy
+   ========================================================================== */
+
+#page-library {
+    padding-top: 1rem;
+}
+
+#page-library .content-section:first-child {
+    margin-bottom: 2.5rem;
+}
+
+.library-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 0 0.5rem;
+}
+
+.library-header h2 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--foreground) 0%, var(--muted-foreground) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.library-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.library-actions .btn-primary,
+.library-actions .btn-secondary {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: var(--radius-lg);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.library-actions .btn-secondary {
+    background: var(--secondary);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+}
+
+.library-actions .btn-secondary:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-foreground);
+}
+
+/* Favorites Section Tabs */
+#page-library .search-tabs {
+    background: var(--secondary);
+    padding: 0.375rem;
+    border-radius: var(--radius-xl);
+    display: inline-flex;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+}
+
+#page-library .search-tab {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+}
+
+#page-library .search-tab:hover {
+    color: var(--foreground);
+    background: var(--background);
+}
+
+#page-library .search-tab.active {
+    color: var(--foreground);
+    background: var(--background);
+    box-shadow: 0 1px 3px rgb(0, 0, 0, 0.1);
+}
+
+/* Library Content Area */
+#page-library .search-tab-content {
+    animation: fade-in 0.3s ease;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Section Titles */
+#page-library .section-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    margin-bottom: 1rem;
+    letter-spacing: -0.01em;
+}
+
+/* Empty States */
+#page-library .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--muted-foreground);
+}
+
+#page-library .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
 }
 
 @keyframes presence-glow {
@@ -10441,13 +10655,13 @@ textarea:focus {
 
     .profile-card {
         width: calc(100% - 1rem);
-        padding: 1.25rem;
-        margin-top: -60px;
+        padding: 0 1.25rem 1.25rem;
+        margin-top: -40px;
         border-radius: var(--radius-xl);
     }
 
     .profile-avatar-wrapper {
-        margin-top: -4rem;
+        margin-top: -50px;
     }
 
     .profile-avatar {
@@ -10535,15 +10749,15 @@ textarea:focus {
 
     .profile-card {
         width: 100%;
-        padding: 1rem;
-        margin-top: -50px;
+        padding: 0 1rem 1rem;
+        margin-top: -35px;
         border-radius: var(--radius-lg);
         border-left: none;
         border-right: none;
     }
 
     .profile-avatar-wrapper {
-        margin-top: -3.5rem;
+        margin-top: -40px;
     }
 
     .profile-avatar {

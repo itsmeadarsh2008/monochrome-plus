@@ -561,37 +561,35 @@ export class UIRenderer {
         extraAttributes = '',
         extraClasses = '',
     }) {
-        const playBtnHTML =
-            type !== 'artist'
-                ? `
-            <button class="play-btn card-play-btn" data-action="play-card" data-type="${type}" data-id="${id}" title="Play">
-                ${SVG_PLAY}
-            </button>
-            <button class="card-menu-btn" data-action="card-menu" data-type="${type}" data-id="${id}" title="Menu">
-                ${SVG_MENU}
-            </button>
-        `
-                : '';
-
-        const cardContent = `
-            <div class="card-info">
-                <h4 class="card-title">${title}</h4>
-                ${subtitle ? `<p class="card-subtitle">${subtitle}</p>` : ''}
-            </div>`;
-
-        // In compact mode, move the play button outside the wrapper to position it on the right side of the card
-        const buttonsInWrapper = !isCompact ? playBtnHTML : '';
-        const buttonsOutside = isCompact ? playBtnHTML : '';
+        const hasActions = type !== 'artist';
+        
+        const playBtnHTML = hasActions
+            ? `<button class="card-action-btn card-play-btn" data-action="play-card" data-type="${type}" data-id="${id}" title="Play">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+               </button>`
+            : '';
+            
+        // Menu button removed - only play button shown
+        const menuBtnHTML = '';
 
         return `
-            <div class="card ${extraClasses} ${isCompact ? 'compact' : ''}" data-${type}-id="${id}" data-href="${href}" style="cursor: pointer;" ${extraAttributes}>
+            <div class="card ${extraClasses} ${isCompact ? 'compact' : ''}" data-${type}-id="${id}" data-href="${href}" ${extraAttributes}>
                 <div class="card-image-wrapper">
                     ${imageHTML}
                     ${actionButtonsHTML}
-                    ${buttonsInWrapper}
                 </div>
-                ${cardContent}
-                ${buttonsOutside}
+                <div class="card-content">
+                    <h4 class="card-title">${title}</h4>
+                    ${subtitle ? `<p class="card-subtitle">${subtitle}</p>` : ''}
+                </div>
+                ${hasActions ? `
+                <div class="card-actions">
+                    ${menuBtnHTML}
+                    ${playBtnHTML}
+                </div>
+                ` : ''}
             </div>
         `;
     }
@@ -5516,3 +5514,4 @@ export class UIRenderer {
         }
     }
 }
+

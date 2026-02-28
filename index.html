@@ -1340,23 +1340,17 @@
                 <section class="content-section">
                     <div class="library-header">
                         <h2>My Playlists</h2>
-                        <button id="create-playlist-btn" class="btn-primary" style="margin: 10px 0">
-                            Create Playlist
-                        </button>
-                        <button id="create-folder-btn" class="btn-primary" style="
-                                    margin: 10px 0 10px 10px;
-                                    background-color: var(--secondary);
-                                    color: var(--foreground);
-                                ">
-                            Create Folder
-                        </button>
+                        <div class="library-actions">
+                            <button id="create-folder-btn" class="btn-secondary">New Folder</button>
+                            <button id="create-playlist-btn" class="btn-primary">Create Playlist</button>
+                        </div>
                     </div>
                     <div class="card-grid" id="my-folders-container"></div>
                     <div class="card-grid" id="my-playlists-container"></div>
                 </section>
 
                 <section class="content-section">
-                    <h2 class="section-title">Favorites</h2>
+                    <h2 class="section-title" style="margin-left: 0.5rem;">Favorites</h2>
                     <div class="search-tabs">
                         <button class="search-tab active" data-tab="tracks">Liked Tracks</button>
                         <button class="search-tab" data-tab="albums">Albums</button>
