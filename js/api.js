@@ -6,7 +6,7 @@ import {
     isTrackUnavailable,
     getExtensionFromBlob,
 } from './utils.js';
-import { trackDateSettings } from './storage.js';
+import { trackDateSettings, audioProcessingSettings } from './storage.js';
 import { APICache } from './cache.js';
 import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
@@ -972,11 +972,13 @@ export class LosslessAPI {
     }
 
     async getTrack(id, quality = 'HI_RES_LOSSLESS') {
-        const cacheKey = `${id}_${quality}`;
+        const isPure = audioProcessingSettings.isPure();
+        const cacheKey = `${id}_${quality}_${isPure ? 'pure' : 'norm'}`;
         const cached = await this.cache.get('track', cacheKey);
         if (cached) return cached;
 
-        const response = await this.fetchWithRetry(`/track/?id=${id}&quality=${quality}`, { type: 'streaming' });
+        const loudnessParam = isPure ? '&loudnessNormalization=false' : '';
+        const response = await this.fetchWithRetry(`/track/?id=${id}&quality=${quality}${loudnessParam}`, { type: 'streaming' });
         const jsonResponse = await response.json();
         const result = this.parseTrackLookup(this.normalizeTrackResponse(jsonResponse));
 

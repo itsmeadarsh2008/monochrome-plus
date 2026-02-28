@@ -2,7 +2,14 @@
 // Shared Audio Context Manager - handles EQ and provides context for visualizer
 // Supports 3-32 parametric EQ bands
 
-import { equalizerSettings, monoAudioSettings, performanceModeSettings } from './storage.js';
+import {
+    equalizerSettings,
+    monoAudioSettings,
+    performanceModeSettings,
+    visualizerSettings,
+    playbackBehaviorSettings,
+    audioProcessingSettings
+} from './storage.js';
 
 // Generate frequency array for given number of bands using logarithmic spacing
 function generateFrequencies(bandCount, minFreq = 20, maxFreq = 20000) {
@@ -101,6 +108,12 @@ class AudioContextManager {
         this.monoMergerNode = null;
         this.audio = null;
         this.currentVolume = 1.0;
+
+        // AutoMix crossfade nodes
+        this.primaryGainNode = null;
+        this.mixSource = null;
+        this.mixGainNode = null;
+        this._mixSourceInitialized = false;
 
         // Band configuration
         this.bandCount = equalizerSettings.getBandCount();
@@ -357,6 +370,16 @@ class AudioContextManager {
             return;
         }
 
+        const isPure = typeof audioProcessingSettings !== 'undefined' && audioProcessingSettings.isPure();
+        const needsVisualizer = typeof visualizerSettings !== 'undefined' && visualizerSettings.isEnabled();
+        const needsAutoMix = typeof playbackBehaviorSettings !== 'undefined' && playbackBehaviorSettings.isAutoMixEnabled();
+
+        // Pure mode bypass if no features need AudioContext
+        if (isPure && !needsVisualizer && !needsAutoMix && !this.isEQEnabled && !this.isMonoAudioEnabled) {
+            console.log('[AudioContext] Bypassing Web Audio entirely for Pure lossless output');
+            return;
+        }
+
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
 
@@ -365,11 +388,22 @@ class AudioContextManager {
 
             this.audioContext = new AudioContext({
                 latencyHint: latencyHint,
-                sampleRate: 48000, // Standard high-quality sample rate
+                // Removed forced 48kHz sampleRate to preserve bit-perfect native sample rate support
             });
 
-            // Create the media element source
-            this.source = this.audioContext.createMediaElementSource(audioElement);
+            // Zero-gain tap check
+            // Fallback to mozCaptureStream for firefox just in case
+            const captureFn = audioElement.captureStream || audioElement.mozCaptureStream;
+            if (isPure && !needsAutoMix && !this.isEQEnabled && !this.isMonoAudioEnabled && typeof captureFn === 'function') {
+                const stream = captureFn.call(audioElement);
+                this.source = this.audioContext.createMediaStreamSource(stream);
+                this.isStreamCaptured = true;
+                console.log('[AudioContext] Using zero-gain captureStream for visualizer tap');
+            } else {
+                // Create the media element source
+                this.source = this.audioContext.createMediaElementSource(audioElement);
+                this.isStreamCaptured = false;
+            }
 
             // Create analyser for visualizer
             this.analyser = this.audioContext.createAnalyser();
@@ -386,6 +420,10 @@ class AudioContextManager {
             // Create volume node
             this.volumeNode = this.audioContext.createGain();
             this.volumeNode.gain.value = this.currentVolume;
+
+            // Create primary gain node for AutoMix crossfade control
+            this.primaryGainNode = this.audioContext.createGain();
+            this.primaryGainNode.gain.value = 1;
 
             // Create mono audio merger node
             this.monoMergerNode = this.audioContext.createChannelMerger(2);
@@ -414,6 +452,20 @@ class AudioContextManager {
                 this.volumeNode.disconnect();
             }
             this.analyser.disconnect();
+            if (this.primaryGainNode) {
+                try {
+                    this.primaryGainNode.disconnect();
+                } catch {
+                    /* ignore */
+                }
+            }
+            if (this._mixSourceInitialized && this.mixGainNode) {
+                try {
+                    this.mixGainNode.disconnect();
+                } catch {
+                    /* ignore */
+                }
+            }
 
             if (this.monoMergerNode) {
                 try {
@@ -421,6 +473,16 @@ class AudioContextManager {
                 } catch {
                     // Ignore if not connected
                 }
+            }
+
+            if (this.isStreamCaptured && typeof audioProcessingSettings !== 'undefined' && audioProcessingSettings.isPure()) {
+                // ZERO-GAIN Branch for purely Visualizer tap
+                this.source.connect(this.analyser);
+                const zeroGain = this.audioContext.createGain();
+                zeroGain.gain.value = 0;
+                this.analyser.connect(zeroGain);
+                zeroGain.connect(this.audioContext.destination);
+                return;
             }
 
             let lastNode = this.source;
@@ -457,15 +519,22 @@ class AudioContextManager {
                 }
                 this.filters[this.filters.length - 1].connect(this.outputNode);
                 this.outputNode.connect(this.analyser);
-                this.analyser.connect(this.volumeNode);
+                this.analyser.connect(this.primaryGainNode);
+                this.primaryGainNode.connect(this.volumeNode);
                 this.volumeNode.connect(this.audioContext.destination);
                 console.log('[AudioContext] EQ connected');
             } else {
-                // EQ disabled: lastNode -> analyser -> volume -> destination
+                // EQ disabled: lastNode -> analyser -> primaryGain -> volume -> destination
                 lastNode.connect(this.analyser);
-                this.analyser.connect(this.volumeNode);
+                this.analyser.connect(this.primaryGainNode);
+                this.primaryGainNode.connect(this.volumeNode);
                 this.volumeNode.connect(this.audioContext.destination);
                 console.log('[AudioContext] EQ bypassed');
+            }
+
+            // Connect mix source if initialized (for AutoMix crossfade)
+            if (this._mixSourceInitialized && this.mixGainNode) {
+                this.mixGainNode.connect(this.volumeNode);
             }
 
             // Notify visualizers that graph has been reconnected
@@ -566,6 +635,93 @@ class AudioContextManager {
      */
     isEQActive() {
         return this.isInitialized && this.isEQEnabled;
+    }
+
+    /**
+     * Initialize a secondary audio source for AutoMix crossfade.
+     * Can only be called once per audio element (MediaElementSourceNode restriction).
+     */
+    initMixAudio(audioElement) {
+        if (!this.audioContext || !this.isInitialized) return false;
+        if (this._mixSourceInitialized) return true;
+
+        try {
+            this.mixSource = this.audioContext.createMediaElementSource(audioElement);
+            this.mixGainNode = this.audioContext.createGain();
+            this.mixGainNode.gain.value = 0;
+            this.mixSource.connect(this.mixGainNode);
+            this.mixGainNode.connect(this.volumeNode);
+            this._mixSourceInitialized = true;
+            console.log('[AudioContext] Mix audio source initialized for AutoMix');
+            return true;
+        } catch (e) {
+            console.warn('[AudioContext] Failed to init mix source:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Schedule an equal-power crossfade between primary and mix audio.
+     * Uses Web Audio API scheduling for smooth, glitch-free transitions.
+     */
+    scheduleCrossfade(duration) {
+        if (!this.primaryGainNode || !this.mixGainNode || !this.audioContext) return;
+
+        const now = this.audioContext.currentTime;
+        const steps = 64;
+        const fadeOutCurve = new Float32Array(steps);
+        const fadeInCurve = new Float32Array(steps);
+
+        for (let i = 0; i < steps; i++) {
+            const t = i / (steps - 1);
+            fadeOutCurve[i] = Math.cos((t * Math.PI) / 2);
+            fadeInCurve[i] = Math.sin((t * Math.PI) / 2);
+        }
+
+        this.primaryGainNode.gain.cancelScheduledValues(now);
+        this.mixGainNode.gain.cancelScheduledValues(now);
+
+        this.primaryGainNode.gain.setValueCurveAtTime(fadeOutCurve, now, duration);
+        this.mixGainNode.gain.setValueCurveAtTime(fadeInCurve, now, duration);
+    }
+
+    /**
+     * Cancel any scheduled crossfade and reset gains to normal.
+     */
+    cancelCrossfade() {
+        if (!this.audioContext) return;
+        const now = this.audioContext.currentTime;
+
+        if (this.primaryGainNode) {
+            this.primaryGainNode.gain.cancelScheduledValues(now);
+            this.primaryGainNode.gain.setValueAtTime(1, now);
+        }
+        if (this.mixGainNode) {
+            this.mixGainNode.gain.cancelScheduledValues(now);
+            this.mixGainNode.gain.setValueAtTime(0, now);
+        }
+    }
+
+    /**
+     * Set the primary audio gain directly (for non-scheduled crossfade control).
+     */
+    setPrimaryGain(value) {
+        if (this.primaryGainNode && this.audioContext) {
+            const now = this.audioContext.currentTime;
+            this.primaryGainNode.gain.cancelScheduledValues(now);
+            this.primaryGainNode.gain.setValueAtTime(Math.max(0, Math.min(1, value)), now);
+        }
+    }
+
+    /**
+     * Set the mix audio gain directly.
+     */
+    setMixGain(value) {
+        if (this.mixGainNode && this.audioContext) {
+            const now = this.audioContext.currentTime;
+            this.mixGainNode.gain.cancelScheduledValues(now);
+            this.mixGainNode.gain.setValueAtTime(Math.max(0, Math.min(1, value)), now);
+        }
     }
 
     /**

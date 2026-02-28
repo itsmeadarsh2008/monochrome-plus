@@ -1,13 +1,19 @@
 {
-    "name": "Monochrome Music",
-    "short_name": "Monochrome",
-    "description": "A minimalist music streaming application",
+    "name": "Monochrome+",
+    "short_name": "Monochrome+",
+    "description": "Hi-Res lossless music. Beyond Apple Music.",
     "start_url": "./",
     "display": "standalone",
-    "display_override": ["window-controls-overlay"],
+    "display_override": [
+        "window-controls-overlay"
+    ],
     "background_color": "#000000",
     "theme_color": "#000000",
     "orientation": "portrait-primary",
+    "launch_handler": {
+        "client_mode": "navigate-existing"
+    },
+    "handle_links": "auto",
     "icons": [
         {
             "src": "assets/appicon.png",
@@ -28,7 +34,10 @@
             "purpose": "maskable"
         }
     ],
-    "categories": ["music", "entertainment"],
+    "categories": [
+        "music",
+        "entertainment"
+    ],
     "shortcuts": [
         {
             "name": "Search",

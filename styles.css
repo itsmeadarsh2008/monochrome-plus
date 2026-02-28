@@ -1178,11 +1178,9 @@ kbd {
 
 .sidebar {
     grid-area: sidebar;
-    background: linear-gradient(
-        165deg,
-        color-mix(in srgb, var(--card) 78%, transparent) 0%,
-        color-mix(in srgb, var(--background) 92%, transparent) 100%
-    );
+    background: linear-gradient(165deg,
+            color-mix(in srgb, var(--card) 78%, transparent) 0%,
+            color-mix(in srgb, var(--background) 92%, transparent) 100%);
     backdrop-filter: blur(26px);
     border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     box-shadow:
@@ -1430,11 +1428,9 @@ kbd {
 }
 
 .sidebar-nav .nav-item a.active {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--primary) 18%, transparent) 0%,
-        color-mix(in srgb, var(--primary) 9%, transparent) 100%
-    );
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--primary) 18%, transparent) 0%,
+            color-mix(in srgb, var(--primary) 9%, transparent) 100%);
     color: var(--primary);
     border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
     box-shadow:
@@ -1472,11 +1468,9 @@ kbd {
     padding: 0.56rem 0.66rem;
     border-radius: 0.9rem;
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-    background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--card) 92%, transparent) 0%,
-        color-mix(in srgb, var(--background) 96%, transparent) 100%
-    );
+    background: linear-gradient(145deg,
+            color-mix(in srgb, var(--card) 92%, transparent) 0%,
+            color-mix(in srgb, var(--background) 96%, transparent) 100%);
     color: var(--foreground);
     text-align: left;
     cursor: pointer;
@@ -1490,11 +1484,9 @@ kbd {
 .nav-btn-account:hover {
     transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
-    background: linear-gradient(
-        145deg,
-        color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
-        color-mix(in srgb, var(--card) 96%, transparent) 100%
-    );
+    background: linear-gradient(145deg,
+            color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
+            color-mix(in srgb, var(--card) 96%, transparent) 100%);
     box-shadow:
         0 8px 18px rgb(0, 0, 0, 0.16),
         inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
@@ -1992,6 +1984,7 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 @keyframes pulse {
+
     0%,
     100% {
         opacity: 1;
@@ -2062,6 +2055,7 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Glow pulse for featured content */
 @keyframes glow-pulse {
+
     0%,
     100% {
         box-shadow: 0 0 20px rgb(var(--accent-rgb, 255, 255, 255), 0.3);
@@ -2074,6 +2068,7 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Float animation for hero elements */
 @keyframes float {
+
     0%,
     100% {
         transform: translate3d(0, 0, 0);
@@ -2111,6 +2106,7 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 @keyframes blink-caret {
+
     0%,
     100% {
         border-color: transparent;
@@ -2374,6 +2370,7 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Hide fade edges on mobile */
 @media (max-width: 768px) {
+
     .carousel-container::before,
     .carousel-container::after {
         display: none;
@@ -2414,8 +2411,8 @@ html.carousel-mode .card-grid::-webkit-scrollbar,
 }
 
 /* Make cards not shrink in carousel mode */
-html.carousel-mode .card-grid > .card,
-.carousel-mode .card-grid > .card {
+html.carousel-mode .card-grid>.card,
+.carousel-mode .card-grid>.card {
     flex-shrink: 0;
     scroll-snap-align: start;
     width: var(--card-min-width);
@@ -2424,8 +2421,8 @@ html.carousel-mode .card-grid > .card,
 }
 
 /* Also handle any direct children that might not have .card class */
-html.carousel-mode .card-grid > *,
-.carousel-mode .card-grid > * {
+html.carousel-mode .card-grid>*,
+.carousel-mode .card-grid>* {
     flex-shrink: 0;
     scroll-snap-align: start;
 }
@@ -2567,6 +2564,7 @@ html.carousel-mode .card-grid > *,
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+
     *,
     *::before,
     *::after {
@@ -2646,6 +2644,7 @@ html.carousel-mode .card-grid > *,
 }
 
 @keyframes ultra-butter-wave {
+
     0%,
     100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
@@ -3087,6 +3086,106 @@ html.carousel-mode .card-grid > *,
     line-height: 1;
 }
 
+.quality-lossless {
+    border: 1px solid var(--secondary);
+    color: var(--muted-foreground);
+    background-color: rgb(var(--highlight-rgb), 0.1);
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.15rem 0.3rem;
+    border-radius: var(--radius-xs);
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+.quality-warning {
+    border: 1px solid #ef4444;
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.1);
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.15rem 0.3rem;
+    border-radius: var(--radius-xs);
+    margin-left: 0.5rem;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+/* ── Search Suggestions Dropdown ────────────────────────────── */
+.search-suggestions-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--background-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    list-style: none;
+    margin: 0;
+    padding: 0.25rem 0;
+    z-index: 3000;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px);
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.85rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--foreground);
+    transition: background 0.15s;
+}
+
+.suggestion-item:hover {
+    background: var(--background-tertiary, rgba(255, 255, 255, 0.06));
+}
+
+.suggestion-icon {
+    font-size: 0.75rem;
+    opacity: 0.55;
+}
+
+.suggestion-sub {
+    font-size: 0.75rem;
+    opacity: 0.5;
+    min-width: 3rem;
+}
+
+/* ── Voice Search Button ─────────────────────────────────────── */
+.voice-search-btn {
+    opacity: 0.6;
+    transition: opacity 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.voice-search-btn:hover {
+    opacity: 1;
+}
+
+.voice-search-btn.listening {
+    color: #ef4444;
+    opacity: 1;
+    animation: voice-pulse 1s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+}
+
 .track-list {
     display: flex;
     flex-direction: column;
@@ -3106,6 +3205,7 @@ html.carousel-mode .card-grid > *,
 }
 
 @media (max-width: 1100px) {
+
     #home-recommended-songs,
     #artist-detail-tracks,
     #playlist-detail-recommended {
@@ -3752,11 +3852,11 @@ select.input {
     margin-bottom: 0;
 }
 
-.sidebar-settings-section .sidebar-settings-section-label + .setting-item {
+.sidebar-settings-section .sidebar-settings-section-label+.setting-item {
     margin-top: var(--spacing-sm);
 }
 
-.sidebar-settings-section .setting-item + .setting-item {
+.sidebar-settings-section .setting-item+.setting-item {
     margin-top: var(--spacing-md);
 }
 
@@ -4112,11 +4212,11 @@ select.input {
     box-shadow: 0 2px 4px rgb(0, 0, 0, 0.2);
 }
 
-input:checked + .slider {
+input:checked+.slider {
     background-color: var(--primary);
 }
 
-input:checked + .slider::before {
+input:checked+.slider::before {
     transform: translateX(16px);
     background-color: var(--primary-foreground);
     box-shadow: -2px 2px 4px rgb(0, 0, 0, 0.1);
@@ -4128,29 +4228,29 @@ input:checked + .slider::before {
     /* Hover scale effect */
 }
 
-.toggle-switch:hover input:checked + .slider::before {
+.toggle-switch:hover input:checked+.slider::before {
     transform: translateX(16px) scale(1.1);
 }
 
-.toggle-switch input:disabled + .slider {
+.toggle-switch input:disabled+.slider {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.toggle-switch input:disabled + .slider::before {
+.toggle-switch input:disabled+.slider::before {
     box-shadow: none;
     transform: translateX(0);
 }
 
-.toggle-switch input:disabled:checked + .slider::before {
+.toggle-switch input:disabled:checked+.slider::before {
     transform: translateX(16px);
 }
 
-.toggle-switch:hover input:disabled + .slider::before {
+.toggle-switch:hover input:disabled+.slider::before {
     transform: translateX(0);
 }
 
-.toggle-switch:hover input:disabled:checked + .slider::before {
+.toggle-switch:hover input:disabled:checked+.slider::before {
     transform: translateX(16px);
 }
 
@@ -4675,7 +4775,6 @@ input:checked + .slider::before {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    animation: fade-in 0.3s ease;
     overflow: hidden;
     background-color: var(--background);
 
@@ -4683,19 +4782,50 @@ input:checked + .slider::before {
     --bg-image: none;
 
     padding-bottom: 0;
+
+    /* Animated entrance */
+    animation: fs-slide-up 0.42s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
+@keyframes fs-slide-up {
+    from {
+        transform: translateY(4vh);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Animated gradient mesh – the key visual upgrade */
 #fullscreen-cover-overlay::before {
     content: '';
     position: absolute;
-    inset: -20px;
+    inset: -30px;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    filter: var(--cover-filter);
-    z-index: -1;
+    /* Deep blur for that pro immersive look */
+    filter: blur(80px) saturate(1.6) brightness(0.45);
+    transform: scale(1.12);
+    z-index: -2;
     background-image: var(--bg-image);
-    transition: background-image var(--transition);
+    transition: background-image 0.6s ease;
+}
+
+/* Gradient mesh overlay for colour gradients */
+#fullscreen-cover-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(ellipse 80% 60% at 15% 110%, rgba(var(--palette-rgb, 99, 102, 241), 0.28) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 85% -10%, rgba(var(--palette-rgb, 99, 102, 241), 0.18) 0%, transparent 55%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.55) 100%);
+    pointer-events: none;
 }
 
 #visualizer-canvas {
@@ -4793,20 +4923,16 @@ input:checked + .slider::before {
     height: var(--vinyl-disc-size, min(48vh, 48vw));
     border-radius: var(--radius-full);
     background:
-        radial-gradient(
-            circle at center,
+        radial-gradient(circle at center,
             transparent 0 53%,
             rgb(255, 255, 255, 0.035) 60%,
             rgb(0, 0, 0, 0.18) 78%,
-            rgb(0, 0, 0, 0.52) 100%
-        ),
-        repeating-radial-gradient(
-            circle at center,
+            rgb(0, 0, 0, 0.52) 100%),
+        repeating-radial-gradient(circle at center,
             rgb(7, 7, 7, 0.95) 0,
             rgb(7, 7, 7, 0.95) 1px,
             rgb(17, 17, 17, 0.95) 2px,
-            rgb(9, 9, 9, 0.95) 3px
-        ),
+            rgb(9, 9, 9, 0.95) 3px),
         linear-gradient(180deg, #111 0%, #060606 100%);
     box-shadow:
         0 24px 60px rgb(0, 0, 0, 0.74),
@@ -4826,8 +4952,7 @@ input:checked + .slider::before {
     inset: 0;
     border-radius: var(--radius-full);
     background:
-        conic-gradient(
-            from 12deg at 50% 50%,
+        conic-gradient(from 12deg at 50% 50%,
             rgb(255, 255, 255, 0) 0deg,
             rgb(255, 255, 255, 0.06) 18deg,
             rgb(255, 255, 255, 0.3) 33deg,
@@ -4838,8 +4963,7 @@ input:checked + .slider::before {
             rgb(255, 255, 255, 0.24) 216deg,
             rgb(255, 255, 255, 0.05) 232deg,
             rgb(255, 255, 255, 0) 250deg,
-            rgb(255, 255, 255, 0) 360deg
-        ),
+            rgb(255, 255, 255, 0) 360deg),
         radial-gradient(circle at center, transparent 0 57%, rgb(0, 0, 0, 0.24) 80%, transparent 100%);
     mix-blend-mode: screen;
     pointer-events: none;
@@ -4858,12 +4982,10 @@ input:checked + .slider::before {
     width: 1.15%;
     height: 1.15%;
     border-radius: var(--radius-full);
-    background: radial-gradient(
-        circle,
-        rgb(255, 255, 255, 0.88) 0%,
-        rgb(200, 200, 200, 0.62) 56%,
-        rgb(120, 120, 120, 0.44) 100%
-    );
+    background: radial-gradient(circle,
+            rgb(255, 255, 255, 0.88) 0%,
+            rgb(200, 200, 200, 0.62) 56%,
+            rgb(120, 120, 120, 0.44) 100%);
     box-shadow:
         0 0 0 1px rgb(255, 255, 255, 0.25),
         0 0 4px rgb(0, 0, 0, 0.45);
@@ -6230,13 +6352,11 @@ input:checked + .slider::before {
 }
 
 .now-playing-bar .cover.rotating::before {
-    background: repeating-radial-gradient(
-        circle at center,
-        rgb(255, 255, 255, 0.06) 0,
-        rgb(255, 255, 255, 0.06) 1px,
-        transparent 2px,
-        transparent 3.5px
-    );
+    background: repeating-radial-gradient(circle at center,
+            rgb(255, 255, 255, 0.06) 0,
+            rgb(255, 255, 255, 0.06) 1px,
+            transparent 2px,
+            transparent 3.5px);
     mix-blend-mode: soft-light;
     opacity: 0.45;
 }
@@ -6563,6 +6683,42 @@ input:checked + .slider::before {
 .now-playing-bar .artist .artist-link:hover {
     color: var(--highlight);
     text-decoration: underline;
+}
+
+.automix-indicator {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--primary);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    margin-top: 2px;
+}
+
+.automix-indicator.active {
+    display: flex;
+    opacity: 1;
+}
+
+.automix-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    animation: automix-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes automix-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
 }
 
 .track-item .artist .artist-link {
@@ -7171,7 +7327,8 @@ img[src=''] {
         grid-template:
             'header' auto
             'main' 1fr
-            'player' auto / 1fr;
+            'player' auto
+            'sidebar' auto / 1fr;
         height: 100vh;
         height: 100dvh;
     }
@@ -7192,33 +7349,77 @@ img[src=''] {
     }
 
     .sidebar {
-        position: fixed;
-        top: 0.4rem;
-        left: 0;
-        height: calc(100% - 0.8rem);
-        width: min(86vw, 340px);
-        border-radius: 0 1rem 1rem 0;
-        border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-        border-left: none;
-        padding-top: max(0.9rem, env(safe-area-inset-top));
-        transform: translateX(-100%);
-        z-index: 2200;
-        transition:
-            transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-            box-shadow 0.3s ease;
+        grid-area: sidebar;
+        position: relative;
+        top: auto;
+        left: auto;
+        height: calc(env(safe-area-inset-bottom, 0px) + 56px);
+        width: 100%;
+        border-radius: 0;
+        border: none;
+        border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+        padding: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: var(--background);
+        transform: none;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
     }
 
     .sidebar.is-open {
-        transform: translateX(0);
-        box-shadow: 0 20px 40px rgb(0, 0, 0, 0.5);
+        box-shadow: none;
+    }
+
+    .sidebar-content {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+    }
+
+    .sidebar-logo,
+    .hamburger-menu,
+    .sidebar-bottom-container {
+        display: none !important;
+    }
+
+    .sidebar-nav.main {
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-around;
+        padding: 0;
+        margin: 0;
+        gap: 0;
+    }
+
+    .sidebar-nav.main .nav-item {
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 6px 4px;
+        gap: 4px;
+        border-radius: 0;
+    }
+
+    .sidebar-nav.main .nav-item.active {
+        background: transparent;
+        color: var(--primary);
+    }
+
+    .sidebar-nav.main .nav-item span {
+        font-size: 0.65rem;
+        margin: 0;
     }
 
     .hamburger-menu {
-        display: flex;
+        display: none;
     }
 
     #sidebar-overlay.is-visible {
-        display: block;
+        display: none;
     }
 
     .search-bar {
@@ -7563,6 +7764,65 @@ img[src=''] {
 
     .karaoke-line.active {
         font-size: 1.75rem;
+    }
+
+    /* ─── Lift Animation System for "World's Most Beautiful Lyrics" ─── */
+
+    /* Parent lines: 3D perspective context */
+    .karaoke-line-enhanced {
+        perspective: 600px;
+        transform-style: preserve-3d;
+        transition:
+            transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+            opacity 0.4s ease,
+            filter 0.4s ease;
+        opacity: 0.38;
+        filter: blur(0.5px);
+        cursor: pointer;
+    }
+
+    /* Active line lifts up and becomes opaque */
+    .karaoke-line-enhanced[data-active='true'],
+    .karaoke-line-enhanced.active {
+        opacity: 1;
+        filter: none;
+        transform: scale(1.03) translateY(-2px);
+    }
+
+    /* Surrounding lines are slightly blurred/dimmed */
+    .karaoke-line-enhanced[data-prev='true'] {
+        opacity: 0.55;
+        filter: blur(0.2px);
+    }
+
+    /* Word-level animations – staggered reveal */
+    .karaoke-word-enhanced {
+        display: inline-block;
+        transition:
+            transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+            opacity 0.35s ease,
+            color 0.35s ease;
+        transition-delay: calc(var(--word-index, 0) * 35ms);
+        transform-origin: bottom center;
+    }
+
+    /* Highlight word when line becomes active */
+    .karaoke-line-enhanced.active .karaoke-word-enhanced,
+    .karaoke-line-enhanced[data-active='true'] .karaoke-word-enhanced {
+        animation: lyric-word-lift 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        animation-delay: calc(var(--word-index, 0) * 40ms);
+    }
+
+    @keyframes lyric-word-lift {
+        0% {
+            transform: translateY(6px) rotateX(12deg);
+            opacity: 0.4;
+        }
+
+        100% {
+            transform: translateY(0) rotateX(0deg);
+            opacity: 1;
+        }
     }
 
     .fullscreen-cover-content {
@@ -8571,11 +8831,9 @@ textarea:focus {
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     background:
         radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 55%),
-        linear-gradient(
-            155deg,
+        linear-gradient(155deg,
             color-mix(in srgb, var(--card) 86%, transparent) 0%,
-            color-mix(in srgb, var(--background) 94%, transparent) 100%
-        );
+            color-mix(in srgb, var(--background) 94%, transparent) 100%);
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
@@ -8588,11 +8846,9 @@ textarea:focus {
 /* Recommended artist cards */
 .card.artist-circular {
     position: relative;
-    background: linear-gradient(
-        165deg,
-        color-mix(in srgb, var(--card) 86%, transparent) 0%,
-        color-mix(in srgb, var(--background) 94%, transparent) 100%
-    );
+    background: linear-gradient(165deg,
+            color-mix(in srgb, var(--card) 86%, transparent) 0%,
+            color-mix(in srgb, var(--background) 94%, transparent) 100%);
     border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
     border-radius: 1rem;
     padding: 0.7rem;
@@ -9781,7 +10037,7 @@ textarea:focus {
     padding: 0.2rem;
 }
 
-.sidebar-account-dropdown .account-dropdown-section + .account-dropdown-section {
+.sidebar-account-dropdown .account-dropdown-section+.account-dropdown-section {
     border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
     padding-top: 0.5rem;
 }

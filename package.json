@@ -1,8 +1,8 @@
 {
-    "name": "monochrome",
+    "name": "monochrome-plus",
     "type": "module",
     "version": "1.0.0",
-    "description": "[<img src=\"https://github.com/SamidyFR/monochrome/blob/main/assets/512.png?raw=true\" alt=\"Monochrome Logo\">](https://monochrome.samidy.com)",
+    "description": "[<img src=\"https://github.com/SamidyFR/monochrome/blob/main/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome.samidy.com)",
     "main": "sw.js",
     "scripts": {
         "dev": "vite",
@@ -54,6 +54,7 @@
         "cookie-session": "^2.1.0",
         "dashjs": "^5.1.1",
         "dotenv": "^16.4.5",
+        "fuse.js": "^7.1.0",
         "jose": "^6.0.11",
         "node-appwrite": "^14.1.0",
         "pocketbase": "^0.26.5"

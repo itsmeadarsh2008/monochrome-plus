@@ -17,7 +17,7 @@ export function initializeDiscordRPC(player) {
             details: getTrackTitle(track),
             state: getTrackArtists(track),
             largeImageKey: coverUrl,
-            largeImageText: track.album?.title || 'Monochrome',
+            largeImageText: track.album?.title || 'Monochrome+',
             smallImageKey: isPaused ? 'pause' : 'play',
             smallImageText: isPaused ? 'Paused' : 'Playing',
             instance: false,
@@ -59,12 +59,12 @@ export function initializeDiscordRPC(player) {
         Neutralino.events
             .broadcast('discord:update', {
                 details: 'Idling',
-                state: 'Monochrome',
+                state: 'Monochrome+',
                 largeImageKey: 'monochrome',
-                largeImageText: 'Monochrome',
+                largeImageText: 'Monochrome+',
                 smallImageKey: 'pause',
                 smallImageText: 'Paused',
             })
-            .catch(() => {});
+            .catch(() => { });
     }
 }

@@ -16,13 +16,14 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Monochrome+ Music</title>
+    <title>Monochrome+</title>
     <meta name="theme-color" content="#000000" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <base href="/" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Monochrome+" />
+    <meta name="application-name" content="Monochrome+" />
     <meta name="description" content="A minimalist music streaming application" />
 
     <!-- Preconnect to critical third-party origins -->
@@ -48,7 +49,7 @@
 </head>
 
 <body>
-    <audio id="audio-player" crossorigin="anonymous"></audio>
+    <audio id="audio-player" crossorigin="anonymous" preload="auto"></audio>
     <div id="context-menu">
         <ul>
             <li data-action="shuffle-play-card" data-type-filter="album,playlist,mix,user-playlist">
@@ -773,7 +774,7 @@
             <div class="missing-tracks-content">
                 <p>
                     Unfortunately, some songs weren't able to be added. This could be an issue with our import
-                    system - try searching for the song and adding it. It could also be due to Monochrome not having
+                    system - try searching for the song and adding it. It could also be due to Monochrome+ not having
                     the song :(
                 </p>
                 <div class="missing-tracks-list">
@@ -1196,7 +1197,18 @@
                     <button type="button" class="search-clear-btn btn-icon" title="Clear search" style="display: none">
                         &times;
                     </button>
+                    <button type="button" id="voice-search-btn" class="btn-icon voice-search-btn" title="Voice Search"
+                        style="display: none">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <line x1="12" y1="19" x2="12" y2="22" />
+                            <line x1="8" y1="22" x2="16" y2="22" />
+                        </svg>
+                    </button>
                     <div id="search-history" class="search-history" style="display: none"></div>
+                    <ul id="search-suggestions" class="search-suggestions-list" style="display: none"></ul>
                 </form>
             </header>
 
@@ -1249,7 +1261,8 @@
                             <div>
                                 <p class="section-eyebrow">Discover</p>
                                 <h2 class="section-title" style="margin-bottom: 0">Recommended Artists</h2>
-                                <p class="section-subtitle">Freshly tuned to your listening profile and auto-refreshed.</p>
+                                <p class="section-subtitle">Freshly tuned to your listening profile and auto-refreshed.
+                                </p>
                             </div>
                         </div>
                         <div class="card-grid recommended-artists-grid" id="home-recommended-artists"></div>
@@ -1482,7 +1495,9 @@
                     </div>
                     <div class="friends-grid" id="friends-grid"></div>
                     <div id="no-friends-message" class="friends-empty-state" style="display: none">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4; margin-bottom: 1rem">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                            style="opacity: 0.4; margin-bottom: 1rem">
                             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                             <circle cx="9" cy="7" r="4" />
                             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -1503,16 +1518,9 @@
                         <h2 class="section-title" style="margin-bottom: 0">Discover People</h2>
                     </div>
                     <div class="friends-discover-panel">
-                        <input
-                            type="search"
-                            id="friends-discover-input"
-                            class="input"
-                            placeholder="Search username or display name"
-                            autocomplete="off"
-                            autocorrect="off"
-                            autocapitalize="off"
-                            spellcheck="false"
-                        />
+                        <input type="search" id="friends-discover-input" class="input"
+                            placeholder="Search username or display name" autocomplete="off" autocorrect="off"
+                            autocapitalize="off" spellcheck="false" />
                         <div id="friends-suggestions-status" class="friends-suggestions-status">
                             Type at least 2 characters to find people.
                         </div>
@@ -1556,18 +1564,25 @@
                     <div class="playlist-detail-info">
                         <h1 id="collab-playlist-title"></h1>
                         <p id="collab-playlist-meta" style="color: var(--muted-foreground)"></p>
-                        <div class="playlist-detail-actions" style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                        <div class="playlist-detail-actions"
+                            style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
                             <button class="btn-primary" id="collab-play-btn">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                    fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
                                 <span>Play</span>
                             </button>
                             <button class="btn-secondary" id="collab-shuffle-btn">Shuffle</button>
-                            <button class="btn-secondary" id="collab-delete-btn" style="color: var(--danger, #ef4444)">Delete Playlist</button>
+                            <button class="btn-secondary" id="collab-delete-btn"
+                                style="color: var(--danger, #ef4444)">Delete Playlist</button>
                         </div>
                     </div>
                 </div>
                 <div class="track-list" id="collab-playlist-tracks"></div>
-                <div id="collab-playlist-empty" style="display: none; text-align: center; padding: 3rem; color: var(--muted-foreground)">
+                <div id="collab-playlist-empty"
+                    style="display: none; text-align: center; padding: 3rem; color: var(--muted-foreground)">
                     <p>No tracks yet. Add tracks from the context menu.</p>
                 </div>
             </div>
@@ -2368,7 +2383,8 @@
                             <div class="setting-item">
                                 <div class="info">
                                     <span class="label">Lyrics Haptic Sync</span>
-                                    <span class="description">Vibrate with synced lyric timing on supported phones</span>
+                                    <span class="description">Vibrate with synced lyric timing on supported
+                                        phones</span>
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="lyrics-haptic-sync-toggle" checked />
@@ -3011,6 +3027,13 @@
                             </div>
                             <div class="setting-item">
                                 <div class="info">
+                                    <span class="label">Lossless on Mobile (LDAC)</span>
+                                    <span class="description">Guide for enabling 24-bit 96kHz over Bluetooth</span>
+                                </div>
+                                <button id="show-ldac-guide-btn" class="btn-secondary">Setup Guide</button>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
                                     <span class="label">Album release year</span>
                                     <span class="description">Show original album year instead of track/remaster
                                         date</span>
@@ -3044,7 +3067,8 @@
                             <div class="setting-item">
                                 <div class="info">
                                     <span class="label">Crossfade</span>
-                                    <span class="description">Smoothly blend between tracks with an audio crossfade transition</span>
+                                    <span class="description">Smoothly blend between tracks with an audio crossfade
+                                        transition</span>
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="crossfade-toggle" />
@@ -3057,9 +3081,10 @@
                                     <span class="description">How long the crossfade lasts (in seconds)</span>
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                    <input type="range" id="crossfade-duration-slider" min="1" max="12" step="1" value="6"
-                                        style="flex: 1; accent-color: var(--primary);" />
-                                    <span id="crossfade-duration-value" style="min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums;">6s</span>
+                                    <input type="range" id="crossfade-duration-slider" min="1" max="12" step="1"
+                                        value="6" style="flex: 1; accent-color: var(--primary);" />
+                                    <span id="crossfade-duration-value"
+                                        style="min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums;">6s</span>
                                 </div>
                             </div>
                             <div class="setting-item">
@@ -3071,6 +3096,17 @@
                                     <option value="off">Off</option>
                                     <option value="track">Track</option>
                                     <option value="album">Album</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Audio Processing</span>
+                                    <span class="description">Pure bypasses processing for bit-perfect lossless playback
+                                        without EQ or normalize</span>
+                                </div>
+                                <select id="audio-processing-mode">
+                                    <option value="normalized">Normalized (Default)</option>
+                                    <option value="pure">Pure</option>
                                 </select>
                             </div>
                             <div class="setting-item">
@@ -3679,6 +3715,7 @@
                     <div class="title">Select a song</div>
                     <div class="album"></div>
                     <div class="artist"></div>
+                    <div class="automix-indicator" id="automix-indicator"><span class="automix-dot"></span> Mixing</div>
                 </div>
             </div>
             <div class="player-controls">
@@ -3823,6 +3860,50 @@
             </div>
         </footer>
     </div>
+
+    <!-- LDAC & Lossless Mobile Info Modal -->
+    <div class="overlay" id="ldac-modal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px">
+            <button class="close-btn" id="close-ldac-modal">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12"></path>
+                </svg>
+            </button>
+            <div class="modal-header">
+                <h3 style="margin: 0">Lossless Audio on Mobile</h3>
+            </div>
+            <div class="modal-body" style="padding-top: 1rem;">
+                <p>Monochrome+ streams pure bit-perfect Lossless and Hi-Res audio directly to your device.</p>
+                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin: 1rem 0;">
+                    <h4 style="margin-top: 0">Android users (Bluetooth LDAC/aptX)</h4>
+                    <p style="font-size: 0.9rem; margin-bottom: 0.5rem">By default, Android downsamples high-resolution
+                        Bluetooth audio to save battery. To enable true 24-bit 96kHz playback:</p>
+                    <ol style="font-size: 0.9rem; padding-left: 1.5rem; margin-bottom: 0;">
+                        <li>Enable <strong>Developer Options</strong> in Android Settings.</li>
+                        <li>Search for "Bluetooth Audio Codec" and select <strong>LDAC</strong>.</li>
+                        <li>Set "Bluetooth Audio Sample Rate" to <strong>96.0 kHz</strong>.</li>
+                        <li>Set "Bluetooth Audio Bits Per Sample" to <strong>24 bits</strong> or <strong>32
+                                bits</strong>.</li>
+                        <li>Set "LDAC Playback Quality" to <strong>Optimized for Audio Quality (990kbps)</strong>.</li>
+                    </ol>
+                </div>
+                <div style="background: rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px; margin: 1rem 0;">
+                    <h4 style="margin-top: 0">iOS users</h4>
+                    <p style="font-size: 0.9rem; margin-bottom: 0">Apple devices do not support high-resolution
+                        Bluetooth codecs like LDAC. To experience true lossless audio on an iPhone or iPad, you must use
+                        a wired USB DAC (Digital-to-Analog Converter).</p>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--muted-foreground); margin-top: 1rem;">When the "Pure" Audio
+                    Processing setting is enabled, Monochrome+ completely bypasses the browser's audio processing
+                    pipeline, delivering the untouched FLAC bitstream directly to your device's audio HAL.</p>
+            </div>
+            <div class="modal-footer" style="text-align: right; margin-top: 1rem;">
+                <button id="ldac-modal-ok-btn" class="btn-primary">Got it</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="/js/app.js"></script>
 </body>
 

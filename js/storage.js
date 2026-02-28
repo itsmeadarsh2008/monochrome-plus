@@ -2824,3 +2824,23 @@ export const responsiveSettings = {
         this.setSettings(settings);
     },
 };
+
+export const audioProcessingSettings = {
+    STORAGE_KEY: 'audio-processing-mode',
+
+    getMode() {
+        try {
+            return localStorage.getItem(this.STORAGE_KEY) || 'normalized';
+        } catch {
+            return 'normalized';
+        }
+    },
+
+    setMode(mode) {
+        localStorage.setItem(this.STORAGE_KEY, mode);
+    },
+
+    isPure() {
+        return this.getMode() === 'pure';
+    }
+};

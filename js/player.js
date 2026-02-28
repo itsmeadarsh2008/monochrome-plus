@@ -18,6 +18,7 @@ import {
     audioEffectsSettings,
     playbackBehaviorSettings,
     performanceModeSettings,
+    audioProcessingSettings,
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
 
@@ -45,6 +46,24 @@ export class Player {
         this._autoMixRequest = null;
         this._autoMixLastPopulateAt = 0;
         this._autoMixLastSeedSignature = '';
+
+        // AutoMix DJ transition state
+        this._mixAudio = document.createElement('audio');
+        this._mixAudio.preload = 'auto';
+        this._mixSourceReady = false;
+        this._autoMixTransitionActive = false;
+        this._autoMixAborted = false;
+
+        // BPM estimation
+        this._beatTimestamps = [];
+        this._estimatedBPM = 0;
+        this._trackBPMs = new Map();
+        this._lastBeatEnergy = 0;
+        this._beatEnergyAvg = 0;
+
+        // Trailing silence detection
+        this._silenceStart = 0;
+        this._silenceDetected = false;
 
         // Sleep timer properties
         this.sleepTimer = null;
@@ -106,10 +125,39 @@ export class Player {
                 return;
             }
 
-            this.ensureAutoMixQueue().catch(() => {});
+            this.ensureAutoMixQueue().catch(() => { });
 
-            // Crossfade: start fading out early and trigger next track
+            // BPM detection for AutoMix
+            if (playbackBehaviorSettings.isAutoMixEnabled()) {
+                this._detectBeat();
+                this._detectTrailingSilence();
+            }
+
+            // AutoMix DJ-style transition (when AutoMix is enabled)
             if (
+                playbackBehaviorSettings.isAutoMixEnabled() &&
+                this.repeatMode !== REPEAT_MODE.ONE &&
+                !this._crossfadeInProgress &&
+                !this._gaplessTransitionInProgress &&
+                !this._autoMixTransitionActive
+            ) {
+                const duration = this.audio.duration;
+                const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
+                if (Number.isFinite(duration) && duration > crossfadeDuration + 1) {
+                    const remaining = duration - this.audio.currentTime;
+                    // Trigger earlier if trailing silence detected
+                    const triggerPoint = this._silenceDetected
+                        ? Math.max(crossfadeDuration, duration - this._silenceStart)
+                        : crossfadeDuration;
+                    if (remaining <= triggerPoint && remaining > triggerPoint - 0.2) {
+                        this._crossfadeInProgress = true;
+                        this._startAutoMixTransition(crossfadeDuration);
+                    }
+                }
+            }
+            // Basic crossfade (fallback when AutoMix is OFF)
+            else if (
+                !playbackBehaviorSettings.isAutoMixEnabled() &&
                 playbackBehaviorSettings.isCrossfadeEnabled() &&
                 this.repeatMode !== REPEAT_MODE.ONE &&
                 !this._crossfadeInProgress &&
@@ -286,6 +334,349 @@ export class Player {
             this._crossfadeFadeTimer = null;
         }
         this._crossfadeInProgress = false;
+
+        // Cancel AutoMix transition
+        if (this._autoMixTransitionActive) {
+            this._autoMixAborted = true;
+            this._autoMixTransitionActive = false;
+            this._mixAudio.pause();
+            try {
+                this._mixAudio.removeAttribute('src');
+                this._mixAudio.load();
+            } catch {
+                /* ignore */
+            }
+            if (audioContextManager.isReady()) {
+                audioContextManager.cancelCrossfade();
+            }
+            this._hideMixingIndicator();
+        }
+    }
+
+    _detectBeat() {
+        if (!audioContextManager.isReady()) return;
+        const analyser = audioContextManager.getAnalyser();
+        if (!analyser) return;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        const bassEnergy = (dataArray[0] + dataArray[1] + dataArray[2] + dataArray[3]) / (4 * 255);
+        this._beatEnergyAvg = this._beatEnergyAvg * 0.95 + bassEnergy * 0.05;
+
+        const threshold = Math.max(0.3, this._beatEnergyAvg * 1.5);
+        const now = performance.now();
+
+        if (bassEnergy > threshold && bassEnergy > this._lastBeatEnergy + 0.05) {
+            if (
+                this._beatTimestamps.length === 0 ||
+                now - this._beatTimestamps[this._beatTimestamps.length - 1] > 200
+            ) {
+                this._beatTimestamps.push(now);
+                if (this._beatTimestamps.length > 30) this._beatTimestamps.shift();
+
+                if (this._beatTimestamps.length >= 4) {
+                    const intervals = [];
+                    for (let i = 1; i < this._beatTimestamps.length; i++) {
+                        intervals.push(this._beatTimestamps[i] - this._beatTimestamps[i - 1]);
+                    }
+                    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+                    const bpm = 60000 / avgInterval;
+                    if (bpm >= 60 && bpm <= 200) {
+                        this._estimatedBPM = bpm;
+                        if (this.currentTrack?.id) {
+                            this._trackBPMs.set(String(this.currentTrack.id), bpm);
+                        }
+                    }
+                }
+            }
+        }
+        this._lastBeatEnergy = bassEnergy;
+    }
+
+    _detectTrailingSilence() {
+        if (!audioContextManager.isReady() || this._silenceDetected) return;
+        const analyser = audioContextManager.getAnalyser();
+        if (!analyser) return;
+
+        const duration = this.audio.duration;
+        if (!Number.isFinite(duration) || duration < 10) return;
+
+        const remaining = duration - this.audio.currentTime;
+        if (remaining > 30) return;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+
+        let totalEnergy = 0;
+        for (let i = 0; i < dataArray.length; i++) totalEnergy += dataArray[i];
+        const avgEnergy = totalEnergy / (dataArray.length * 255);
+
+        if (avgEnergy < 0.01) {
+            if (this._silenceStart === 0) {
+                this._silenceStart = this.audio.currentTime;
+            }
+        } else {
+            this._silenceStart = 0;
+        }
+
+        if (this._silenceStart > 0 && this.audio.currentTime - this._silenceStart > 0.5) {
+            this._silenceDetected = true;
+        }
+    }
+
+    async _startAutoMixTransition(duration) {
+        if (this._autoMixTransitionActive) return;
+        this._autoMixTransitionActive = true;
+        this._autoMixAborted = false;
+        this._showMixingIndicator();
+
+        const currentQueue = this.getCurrentQueue();
+        const nextIndex = this.currentQueueIndex + 1;
+
+        if (nextIndex >= currentQueue.length) {
+            this._autoMixTransitionActive = false;
+            this._crossfadeInProgress = false;
+            this._hideMixingIndicator();
+            return;
+        }
+
+        const nextTrack = currentQueue[nextIndex];
+
+        try {
+            let streamUrl;
+            if (this.preloadCache.has(nextTrack.id)) {
+                streamUrl = this.preloadCache.get(nextTrack.id);
+            } else {
+                streamUrl = await this.api.getStreamUrl(nextTrack.id, this.quality);
+            }
+            if (this._autoMixAborted) return;
+
+            if (!streamUrl || streamUrl.startsWith('blob:')) {
+                this._autoMixTransitionActive = false;
+                this._hideMixingIndicator();
+                this._startCrossfadeOut(duration);
+                return;
+            }
+
+            if (!this._mixSourceReady && audioContextManager.isReady()) {
+                this._mixSourceReady = audioContextManager.initMixAudio(this._mixAudio);
+            }
+
+            this._mixAudio.src = streamUrl;
+            this._mixAudio.preload = 'auto';
+
+            const currentBPM = this._estimatedBPM;
+            const nextBPM = this._trackBPMs.get(String(nextTrack.id));
+            let tempoRatio = 1.0;
+
+            if (currentBPM >= 60 && currentBPM <= 200 && nextBPM >= 60 && nextBPM <= 200) {
+                const ratio = currentBPM / nextBPM;
+                if (ratio >= 0.92 && ratio <= 1.08 && Math.abs(ratio - 1.0) > 0.01) {
+                    tempoRatio = ratio;
+                    this._mixAudio.playbackRate = tempoRatio;
+                    this._mixAudio.preservesPitch = true;
+                }
+            }
+
+            await new Promise((resolve, reject) => {
+                const cleanup = () => {
+                    this._mixAudio.removeEventListener('canplay', onReady);
+                    this._mixAudio.removeEventListener('error', onErr);
+                };
+                const onReady = () => {
+                    cleanup();
+                    resolve();
+                };
+                const onErr = (e) => {
+                    cleanup();
+                    reject(e);
+                };
+                this._mixAudio.addEventListener('canplay', onReady);
+                this._mixAudio.addEventListener('error', onErr);
+                setTimeout(() => {
+                    cleanup();
+                    reject(new Error('Mix audio load timeout'));
+                }, 8000);
+            });
+            if (this._autoMixAborted) return;
+
+            if (this._mixSourceReady) {
+                audioContextManager.setMixGain(0);
+            } else {
+                this._mixAudio.volume = 0;
+            }
+            await this._mixAudio.play();
+            if (this._autoMixAborted) return;
+
+            if (this._mixSourceReady) {
+                audioContextManager.scheduleCrossfade(duration);
+            } else {
+                const fadeInterval = 50;
+                const totalSteps = Math.ceil((duration * 1000) / fadeInterval);
+                let step = 0;
+                await new Promise((resolve) => {
+                    this._crossfadeFadeTimer = setInterval(() => {
+                        step++;
+                        const t = Math.min(1, step / totalSteps);
+                        const gainOut = Math.cos((t * Math.PI) / 2);
+                        const gainIn = Math.sin((t * Math.PI) / 2);
+                        this.audio.volume = gainOut * this.userVolume;
+                        this._mixAudio.volume = gainIn * this.userVolume;
+                        if (step >= totalSteps) {
+                            clearInterval(this._crossfadeFadeTimer);
+                            this._crossfadeFadeTimer = null;
+                            resolve();
+                        }
+                    }, fadeInterval);
+                });
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, this._mixSourceReady ? duration * 1000 : 0));
+            if (this._autoMixAborted) return;
+
+            this.audio.pause();
+            this.audio.src = streamUrl;
+            this.audio.preload = 'auto';
+
+            try {
+                await new Promise((resolve, reject) => {
+                    const onReady = () => {
+                        this.audio.removeEventListener('canplay', onReady);
+                        this.audio.removeEventListener('error', onErr);
+                        resolve();
+                    };
+                    const onErr = () => {
+                        this.audio.removeEventListener('canplay', onReady);
+                        this.audio.removeEventListener('error', onErr);
+                        reject();
+                    };
+                    this.audio.addEventListener('canplay', onReady);
+                    this.audio.addEventListener('error', onErr);
+                    setTimeout(() => {
+                        this.audio.removeEventListener('canplay', onReady);
+                        this.audio.removeEventListener('error', onErr);
+                        reject(new Error('swap timeout'));
+                    }, 5000);
+                });
+                if (this._autoMixAborted) return;
+
+                this.audio.currentTime = this._mixAudio.currentTime;
+                if (tempoRatio !== 1.0) {
+                    this.audio.playbackRate = tempoRatio;
+                    this.audio.preservesPitch = true;
+                }
+
+                if (this._mixSourceReady) {
+                    audioContextManager.setPrimaryGain(1);
+                    audioContextManager.setMixGain(0);
+                } else {
+                    this.audio.volume = this.userVolume;
+                }
+
+                await this.audio.play();
+            } catch {
+                // Swap failed - primary audio couldn't load the same URL
+            }
+
+            this._mixAudio.pause();
+            try {
+                this._mixAudio.removeAttribute('src');
+                this._mixAudio.load();
+            } catch {
+                /* ignore */
+            }
+
+            this.audio.playbackRate = audioEffectsSettings.getSpeed();
+            this.audio.preservesPitch = false;
+
+            this.currentQueueIndex = nextIndex;
+            this.currentTrack = nextTrack;
+            this._gaplessTransitionInProgress = false;
+            this._crossfadeInProgress = false;
+
+            this._beatTimestamps = [];
+            this._estimatedBPM = nextBPM || 0;
+            this._silenceStart = 0;
+            this._silenceDetected = false;
+
+            this._updateTrackInfoUI(nextTrack);
+            this.updateMediaSession(nextTrack);
+            this.currentRgValues = null;
+            this.applyReplayGain();
+            this.applyAudioEffects();
+            this.saveQueueState();
+            this.preloadNextTracks();
+            this.ensureAutoMixQueue().catch(() => { });
+        } catch (error) {
+            console.warn('[AutoMix] Transition failed, falling back:', error);
+            this._mixAudio.pause();
+            try {
+                this._mixAudio.removeAttribute('src');
+                this._mixAudio.load();
+            } catch {
+                /* ignore */
+            }
+            if (this._mixSourceReady) {
+                audioContextManager.cancelCrossfade();
+            }
+            this._crossfadeInProgress = false;
+            this._gaplessTransitionInProgress = true;
+            this.playNext();
+        } finally {
+            this._autoMixTransitionActive = false;
+            this._hideMixingIndicator();
+        }
+    }
+
+    _updateTrackInfoUI(track) {
+        const trackTitle = getTrackTitle(track);
+        const trackArtistsHTML = getTrackArtistsHTML(track);
+        const yearDisplay = getTrackYearDisplay(track);
+
+        const coverEl = document.querySelector('.now-playing-bar .cover');
+        const titleEl = document.querySelector('.now-playing-bar .title');
+        const albumEl = document.querySelector('.now-playing-bar .album');
+        const artistEl = document.querySelector('.now-playing-bar .artist');
+
+        if (coverEl) coverEl.src = this.api.getCoverUrl(track.album?.cover);
+        if (titleEl) titleEl.innerHTML = `${escapeHtml(trackTitle)} ${createQualityBadgeHTML(track)}`;
+        if (albumEl) {
+            const albumTitle = track.album?.title || '';
+            if (albumTitle && albumTitle !== trackTitle) {
+                albumEl.textContent = albumTitle;
+                albumEl.style.display = 'block';
+            } else {
+                albumEl.textContent = '';
+                albumEl.style.display = 'none';
+            }
+        }
+        if (artistEl) artistEl.innerHTML = trackArtistsHTML + yearDisplay;
+
+        if (!yearDisplay && track.album?.id) {
+            this.loadAlbumYear(track, trackArtistsHTML, artistEl);
+        }
+
+        const mixBtn = document.getElementById('now-playing-mix-btn');
+        if (mixBtn) {
+            mixBtn.style.display = track.mixes && track.mixes.TRACK_MIX ? 'flex' : 'none';
+        }
+
+        const totalDurationEl = document.getElementById('total-duration');
+        if (totalDurationEl) totalDurationEl.textContent = formatTime(track.duration);
+
+        document.title = `${trackTitle} • ${getTrackArtists(track)}`;
+        this.updatePlayingTrackIndicator();
+    }
+
+    _showMixingIndicator() {
+        const el = document.getElementById('automix-indicator');
+        if (el) el.classList.add('active');
+    }
+
+    _hideMixingIndicator() {
+        const el = document.getElementById('automix-indicator');
+        if (el) el.classList.remove('active');
     }
 
     handleTrackEnded() {
@@ -544,7 +935,7 @@ export class Player {
                 // Warm connection/cache
                 // For Blob URLs (DASH), this head request is not needed and can cause errors.
                 if (!streamUrl.startsWith('blob:')) {
-                    fetch(streamUrl, { method: 'HEAD', signal: this.preloadAbortController.signal }).catch(() => {});
+                    fetch(streamUrl, { method: 'HEAD', signal: this.preloadAbortController.signal }).catch(() => { });
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
@@ -631,6 +1022,13 @@ export class Player {
         this.saveQueueState();
 
         this.currentTrack = track;
+
+        // Reset BPM/silence state for the new track
+        this._beatTimestamps = [];
+        this._lastBeatEnergy = 0;
+        this._beatEnergyAvg = 0;
+        this._silenceStart = 0;
+        this._silenceDetected = false;
 
         const trackTitle = getTrackTitle(track);
         const trackArtistsHTML = getTrackArtistsHTML(track);
@@ -797,14 +1195,29 @@ export class Player {
                     const trackData = await this.api.getTrack(track.id, this.quality);
 
                     if (trackData && trackData.info) {
-                        this.currentRgValues = {
-                            trackReplayGain: trackData.info.trackReplayGain,
-                            trackPeakAmplitude: trackData.info.trackPeakAmplitude,
-                            albumReplayGain: trackData.info.albumReplayGain,
-                            albumPeakAmplitude: trackData.info.albumPeakAmplitude,
-                        };
+                        track.streamedQuality = trackData.info.audioQuality;
+
+                        // Update UI badge
+                        const titleEl = document.querySelector('.now-playing-bar .title');
+                        if (titleEl) {
+                            titleEl.innerHTML = `${escapeHtml(getTrackTitle(track))} ${createQualityBadgeHTML(track)}`;
+                        }
+
+                        if (!audioProcessingSettings.isPure()) {
+                            this.audio.removeAttribute('data-pure-mode');
+                            this.currentRgValues = {
+                                trackReplayGain: trackData.info.trackReplayGain,
+                                trackPeakAmplitude: trackData.info.trackPeakAmplitude,
+                                albumReplayGain: trackData.info.albumReplayGain,
+                                albumPeakAmplitude: trackData.info.albumPeakAmplitude,
+                            };
+                        } else {
+                            this.audio.setAttribute('data-pure-mode', 'true');
+                            this.currentRgValues = null;
+                        }
                     } else {
                         this.currentRgValues = null;
+                        this.audio.removeAttribute('data-pure-mode');
                     }
                     this.applyReplayGain();
 
@@ -870,7 +1283,7 @@ export class Player {
             }
 
             this.preloadNextTracks();
-            this.ensureAutoMixQueue().catch(() => {});
+            this.ensureAutoMixQueue().catch(() => { });
         } catch (error) {
             console.error(`Could not play track: ${trackTitle}`, error);
             this._gaplessTransitionInProgress = false;
@@ -1192,7 +1605,7 @@ export class Player {
                     }
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     }
 
     updatePlayingTrackIndicator() {

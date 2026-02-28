@@ -1,6 +1,6 @@
 import { getCoverBlob } from './utils.js';
 
-const VENDOR_STRING = 'Monochrome';
+const VENDOR_STRING = 'Monochrome+';
 const DEFAULT_TITLE = 'Unknown Title';
 const DEFAULT_ARTIST = 'Unknown Artist';
 const DEFAULT_ALBUM = 'Unknown Album';

@@ -1,9 +1,9 @@
 {
     "applicationId": "com.monochrome.app",
-    "applicationName": "Monochrome",
+    "applicationName": "Monochrome+",
     "applicationIcon": "public/assets/appicon.png",
-    "author": "Monochrome",
-    "description": "Monochrome - Lossless music streaming",
+    "author": "Monochrome+",
+    "description": "Monochrome+ - Lossless music streaming",
     "version": "1.0.0",
     "defaultMode": "window",
     "documentRoot": "/",
@@ -14,7 +14,7 @@
     "tokenSecurity": "none",
     "modes": {
         "window": {
-            "title": "Monochrome (DEV)",
+            "title": "Monochrome+ (DEV)",
             "icon": "public/assets/appicon.png",
             "width": 1280,
             "height": 800,

@@ -37,6 +37,7 @@ import {
     performanceModeSettings,
     animationSettings,
     responsiveSettings,
+    audioProcessingSettings,
 } from './storage.js';
 import { audioContextManager, EQ_PRESETS } from './audio-context.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
@@ -850,6 +851,36 @@ export function initializeSettings(scrobbler, player, api, ui) {
         replayGainMode.addEventListener('change', (e) => {
             replayGainSettings.setMode(e.target.value);
             player.applyReplayGain();
+        });
+    }
+
+    // Audio Processing Mode
+    const audioProcessingMode = document.getElementById('audio-processing-mode');
+    if (audioProcessingMode) {
+        audioProcessingMode.value = audioProcessingSettings.getMode();
+        audioProcessingMode.addEventListener('change', (e) => {
+            audioProcessingSettings.setMode(e.target.value);
+            if (audioContextManager.isInitialized && audioProcessingSettings.isPure()) {
+                console.log('[Settings] Switched to Pure Mode. Will apply on next track or app reload.');
+            }
+        });
+    }
+
+    // LDAC / Lossless Info Modal
+    const showLdacBtn = document.getElementById('show-ldac-guide-btn');
+    const ldacModal = document.getElementById('ldac-modal');
+    const closeLdacBtn = document.getElementById('close-ldac-modal');
+    const ldacOkBtn = document.getElementById('ldac-modal-ok-btn');
+
+    if (showLdacBtn && ldacModal) {
+        showLdacBtn.addEventListener('click', () => {
+            ldacModal.style.display = 'flex';
+        });
+        const closeLdac = () => { ldacModal.style.display = 'none'; };
+        if (closeLdacBtn) closeLdacBtn.addEventListener('click', closeLdac);
+        if (ldacOkBtn) ldacOkBtn.addEventListener('click', closeLdac);
+        ldacModal.addEventListener('click', (e) => {
+            if (e.target === ldacModal) closeLdac();
         });
     }
 

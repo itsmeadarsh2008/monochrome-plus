@@ -180,9 +180,23 @@ export const normalizeQualityToken = (value) => {
 export const createQualityBadgeHTML = (track) => {
     if (!qualityBadgeSettings.isEnabled()) return '';
 
+    // If we have verified actual streamed quality
+    if (track.streamedQuality) {
+        if (track.streamedQuality === 'HI_RES_LOSSLESS') {
+            return '<span class="quality-badge quality-hires" title="True Hi-Res Lossless">MAX</span>';
+        } else if (track.streamedQuality === 'LOSSLESS') {
+            return '<span class="quality-badge quality-lossless" title="True Lossless">HIFI</span>';
+        } else {
+            return '<span class="quality-badge quality-warning" title="Quality degraded or track not available in lossless">SD</span>';
+        }
+    }
+
+    // Fallback to purely derived expected quality before playback
     const quality = deriveTrackQuality(track);
     if (quality === 'HI_RES_LOSSLESS') {
-        return '<span class="quality-badge quality-hires" title="Hi-Res Lossless">HD</span>';
+        return '<span class="quality-badge quality-hires" title="Expected Hi-Res">HD</span>';
+    } else if (quality === 'LOSSLESS') {
+        return '<span class="quality-badge quality-lossless" title="Expected Lossless">HIFI</span>';
     }
     return '';
 };

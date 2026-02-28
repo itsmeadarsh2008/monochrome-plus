@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
             exclude: ['pocketbase'],
         },
         server: {
+            historyApiFallback: true,
             fs: {
                 allow: ['.', 'node_modules'],
             },

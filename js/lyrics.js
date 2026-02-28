@@ -1230,6 +1230,30 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         container.lyricsCleanup = cleanup;
         container.lyricsManager = lyricsManager;
 
+        // Tap-to-seek: clicking any lyric line seeks audio to that line's time
+        const tapToSeekRoot = amLyrics.shadowRoot || amLyrics;
+        tapToSeekRoot.addEventListener('click', (e) => {
+            const line = e.target.closest('p, .line, .lyric-line, .lrc-line');
+            if (!line) return;
+            // Look for a time attribute or data-time set by am-lyrics
+            const timeAttr = line.getAttribute('data-time') || line.getAttribute('time');
+            if (timeAttr !== null) {
+                const seekSec = parseFloat(timeAttr) / 1000;
+                if (!isNaN(seekSec) && audioPlayer) {
+                    audioPlayer.currentTime = seekSec;
+                }
+                return;
+            }
+            // Fallback: find matched line index from lyricsManager.syncedLyrics
+            const syncedLines = lyricsManager.syncedLyrics || [];
+            const root = amLyrics.shadowRoot || amLyrics;
+            const allLines = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
+            const idx = allLines.indexOf(line);
+            if (idx >= 0 && syncedLines[idx] && audioPlayer) {
+                audioPlayer.currentTime = syncedLines[idx].time;
+            }
+        });
+
         return amLyrics;
     } catch (error) {
         console.error('Failed to load lyrics:', error);
