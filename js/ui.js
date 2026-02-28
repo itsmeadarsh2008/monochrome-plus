@@ -562,7 +562,7 @@ export class UIRenderer {
         extraClasses = '',
     }) {
         const hasActions = type !== 'artist';
-        
+
         const playBtnHTML = hasActions
             ? `<button class="card-action-btn card-play-btn" data-action="play-card" data-type="${type}" data-id="${id}" title="Play">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -570,7 +570,7 @@ export class UIRenderer {
                 </svg>
                </button>`
             : '';
-            
+
         // Menu button removed - only play button shown
         const menuBtnHTML = '';
 
@@ -584,12 +584,16 @@ export class UIRenderer {
                     <h4 class="card-title">${title}</h4>
                     ${subtitle ? `<p class="card-subtitle">${subtitle}</p>` : ''}
                 </div>
-                ${hasActions ? `
+                ${
+                    hasActions
+                        ? `
                 <div class="card-actions">
                     ${menuBtnHTML}
                     ${playBtnHTML}
                 </div>
-                ` : ''}
+                `
+                        : ''
+                }
             </div>
         `;
     }
@@ -3122,8 +3126,10 @@ export class UIRenderer {
         imageEl.style.backgroundColor = 'var(--muted)';
         titleEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
         metaEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
-        if (prodEl) prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
-        if (descEl) descEl.innerHTML = '<div class="skeleton" style="height: 14px; width: 300px; max-width: 90%;"></div>';
+        if (prodEl)
+            prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+        if (descEl)
+            descEl.innerHTML = '<div class="skeleton" style="height: 14px; width: 300px; max-width: 90%;"></div>';
         tracklistContainer.innerHTML = `
             <div class="track-list-header">
                 <span style="width: 40px; text-align: center;">#</span>
@@ -4802,20 +4808,47 @@ export class UIRenderer {
             if (collabPlaylists && collabPlaylists.length > 0) {
                 collabPlaylistsSection.style.display = 'block';
                 collabPlaylistsGrid.innerHTML = collabPlaylists
-                    .map(
-                        (playlist) => `
+                    .map((playlist) => {
+                        const trackCount = playlist.tracks?.length || 0;
+                        const memberCount = playlist.members?.length || 0;
+                        const totalDuration = calculateTotalDuration(playlist.tracks || []);
+                        return `
                             <div class="card collab-playlist-card" data-id="${playlist.id}">
                                 <div class="card-image">
                                     <img src="${playlist.cover || '/assets/appicon.png'}" alt="${escapeHtml(playlist.name)}">
+                                    <div class="card-play-overlay">
+                                        <button class="card-play-btn" title="Play">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                                <polygon points="7 3 21 12 7 21 7 3"></polygon>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="card-info">
                                     <div class="card-title">${escapeHtml(playlist.name)}</div>
-                                    <div class="card-meta">${playlist.members?.length || 0} members</div>
+                                    <div class="card-meta">${trackCount} tracks • ${memberCount} members${totalDuration ? ` • ${formatDuration(totalDuration)}` : ''}</div>
                                 </div>
                             </div>
-                        `
-                    )
+                        `;
+                    })
                     .join('');
+
+                // Add play button handlers for collab playlist cards
+                collabPlaylistsGrid.querySelectorAll('.collab-playlist-card').forEach((card, index) => {
+                    const playBtn = card.querySelector('.card-play-btn');
+                    if (playBtn) {
+                        playBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            const playlist = collabPlaylists[index];
+                            const tracks = playlist.tracks || [];
+                            if (tracks.length > 0 && window.monochromePlayer) {
+                                window.monochromePlayer.setQueue(tracks, 0);
+                                window.monochromePlayer.playTrackFromQueue();
+                            }
+                        };
+                    }
+                });
+
                 if (noCollabPlaylistsMessage) noCollabPlaylistsMessage.style.display = 'none';
             } else {
                 collabPlaylistsGrid.innerHTML = '';
@@ -5029,17 +5062,27 @@ export class UIRenderer {
     async renderCollabPlaylistPage(playlistId) {
         this.showPage('collabplaylist');
 
+        const imageEl = document.getElementById('collab-playlist-image');
+        const collageEl = document.getElementById('collab-playlist-collage');
         const titleEl = document.getElementById('collab-playlist-title');
         const metaEl = document.getElementById('collab-playlist-meta');
-        const coverEl = document.getElementById('collab-playlist-cover');
+        const descEl = document.getElementById('collab-playlist-description');
         const tracksContainer = document.getElementById('collab-playlist-tracks');
         const emptyEl = document.getElementById('collab-playlist-empty');
         const playBtn = document.getElementById('collab-play-btn');
         const shuffleBtn = document.getElementById('collab-shuffle-btn');
         const deleteBtn = document.getElementById('collab-delete-btn');
 
-        if (titleEl) titleEl.textContent = 'Loading...';
-        if (metaEl) metaEl.textContent = '';
+        // Set loading state
+        if (imageEl) {
+            imageEl.src = '';
+            imageEl.style.backgroundColor = 'var(--muted)';
+        }
+        if (titleEl)
+            titleEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
+        if (metaEl)
+            metaEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+        if (descEl) descEl.textContent = '';
         if (tracksContainer) tracksContainer.innerHTML = '';
 
         const playlist = await db.getCollaborativePlaylist(playlistId);
@@ -5049,33 +5092,102 @@ export class UIRenderer {
             return;
         }
 
-        if (titleEl) titleEl.textContent = playlist.name;
-        if (metaEl)
-            metaEl.textContent = `${playlist.tracks?.length || 0} tracks · ${playlist.members?.length || 0} members`;
-        if (coverEl) coverEl.src = playlist.cover || '/assets/appicon.png';
+        // Set title and adjust font size like regular playlists
+        if (titleEl) {
+            titleEl.textContent = playlist.name;
+            titleEl.className = 'playlist-hero-title';
+            this.adjustTitleFontSize(titleEl, playlist.name);
+        }
 
+        // Set meta information
         const tracks = playlist.tracks || [];
+        const totalDuration = calculateTotalDuration(tracks);
+        if (metaEl) {
+            metaEl.textContent = `${tracks.length} tracks • ${formatDuration(totalDuration)} • ${playlist.members?.length || 0} members`;
+        }
+
+        // Set description if available, otherwise show creation info
+        if (descEl) {
+            if (playlist.description) {
+                descEl.textContent = playlist.description;
+                descEl.style.display = '';
+            } else {
+                const createdDate = playlist.createdAt ? new Date(playlist.createdAt).toLocaleDateString() : 'Unknown';
+                descEl.textContent = `Created on ${createdDate} • Collaborative playlist with ${playlist.members?.length || 0} members`;
+                descEl.style.display = '';
+            }
+        }
+
+        // Handle cover image or collage
+        if (playlist.cover) {
+            if (imageEl) {
+                imageEl.src = playlist.cover;
+                imageEl.style.display = 'block';
+            }
+            if (collageEl) collageEl.style.display = 'none';
+            this.setPageBackground(playlist.cover);
+            this.extractAndApplyColor(playlist.cover);
+        } else {
+            // Create collage from track covers
+            const tracksWithCovers = tracks.filter((t) => t.album && t.album.cover);
+            const uniqueCovers = [];
+            const seen = new Set();
+            for (const t of tracksWithCovers) {
+                if (!seen.has(t.album.cover)) {
+                    seen.add(t.album.cover);
+                    uniqueCovers.push(t.album.cover);
+                    if (uniqueCovers.length >= 4) break;
+                }
+            }
+
+            if (uniqueCovers.length > 0 && collageEl) {
+                if (imageEl) imageEl.style.display = 'none';
+                collageEl.style.display = 'grid';
+                collageEl.className = 'playlist-hero-collage';
+                collageEl.innerHTML = '';
+                const imagesToRender = [];
+                for (let i = 0; i < 4; i++) {
+                    imagesToRender.push(uniqueCovers[i % uniqueCovers.length]);
+                }
+                imagesToRender.forEach((cover) => {
+                    const img = document.createElement('img');
+                    img.src = this.api.getCoverUrl(cover);
+                    collageEl.appendChild(img);
+                });
+            } else {
+                if (imageEl) {
+                    imageEl.src = '/assets/appicon.png';
+                    imageEl.style.display = 'block';
+                }
+                if (collageEl) collageEl.style.display = 'none';
+            }
+            this.setPageBackground(null);
+            this.resetVibrantColor();
+        }
+
+        // Render tracks
         if (tracks.length > 0) {
             if (emptyEl) emptyEl.style.display = 'none';
+            tracksContainer.innerHTML = `
+                <div class="track-list-header">
+                    <span style="width: 40px; text-align: center;">#</span>
+                    <span>Title</span>
+                    <span class="duration-header">Duration</span>
+                    <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
+                </div>
+            `;
             this.renderListWithTracks(tracksContainer, tracks, true);
+
+            // Add is-editable class to fix grid layout for remove buttons
+            tracksContainer.classList.add('is-editable');
 
             // Add remove buttons to each track
             tracksContainer.querySelectorAll('.track-item').forEach((item) => {
                 const removeBtn = document.createElement('button');
-                removeBtn.className = 'btn-icon collab-remove-track-btn';
+                removeBtn.className = 'track-action-btn remove-from-playlist-btn';
                 removeBtn.title = 'Remove from playlist';
                 removeBtn.innerHTML =
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>';
-                removeBtn.style.cssText =
-                    'color: var(--muted-foreground); margin-left: 0.25rem; opacity: 0.6; transition: opacity 0.2s;';
-                removeBtn.onmouseenter = () => {
-                    removeBtn.style.opacity = '1';
-                    removeBtn.style.color = 'var(--danger, #ef4444)';
-                };
-                removeBtn.onmouseleave = () => {
-                    removeBtn.style.opacity = '0.6';
-                    removeBtn.style.color = 'var(--muted-foreground)';
-                };
+                    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
 
                 const trackId = item.dataset.trackId;
                 removeBtn.onclick = async (e) => {
@@ -5088,13 +5200,19 @@ export class UIRenderer {
 
                 const actionsEl = item.querySelector('.track-item-actions');
                 if (actionsEl) {
-                    actionsEl.prepend(removeBtn);
+                    const menuBtn = actionsEl.querySelector('.track-menu-btn');
+                    if (menuBtn) {
+                        actionsEl.insertBefore(removeBtn, menuBtn);
+                    } else {
+                        actionsEl.appendChild(removeBtn);
+                    }
                 }
             });
         } else {
             if (emptyEl) emptyEl.style.display = 'block';
         }
 
+        // Button handlers
         if (playBtn) {
             playBtn.onclick = () => {
                 if (tracks.length > 0 && window.monochromePlayer) {
@@ -5458,7 +5576,7 @@ export class UIRenderer {
         }
 
         try {
-            const { track } = await this.api.getTrack(trackId, provider);
+            const { track } = await this.api.getTrack(trackId, undefined, provider);
 
             const coverUrl = this.api.getCoverUrl(track.album?.cover);
             imageEl.src = coverUrl;
@@ -5514,4 +5632,3 @@ export class UIRenderer {
         }
     }
 }
-

@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Preload profile data on app load if user is logged in
     if (authManager.user) {
-        syncManager.getUserData().catch(() => { });
+        syncManager.getUserData().catch(() => {});
     }
 
     // Apply carousel mode on initial load
@@ -327,13 +327,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
         try {
             const devices = await navigator.mediaDevices.enumerateDevices();
-            const hasLdac = devices.some(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('ldac'));
+            const hasLdac = devices.some((d) => d.kind === 'audiooutput' && d.label.toLowerCase().includes('ldac'));
             if (hasLdac) {
                 const { audioProcessingSettings } = await import('./storage.js');
                 if (!audioProcessingSettings.isPure()) {
                     console.log('[LDAC/Lossless] LDAC device detected. Showing recommendation.');
                     const { showNotification } = await loadDownloadsModule();
-                    showNotification('LDAC device detected! Consider enabling Pure Mode in Audio Settings for bit-perfect output.');
+                    showNotification(
+                        'LDAC device detected! Consider enabling Pure Mode in Audio Settings for bit-perfect output.'
+                    );
                 }
             }
         } catch (err) {
@@ -516,7 +518,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('playlist-public-toggle')?.addEventListener('change', async (e) => {
         const shareBtn = document.getElementById('playlist-share-btn');
         if (e.target.checked) {
-            await authManager.initialized.catch(() => { });
+            await authManager.initialized.catch(() => {});
             if (!authManager.user) {
                 e.target.checked = false;
                 if (shareBtn) shareBtn.style.display = 'none';
@@ -549,18 +551,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     let touchStartY = 0;
     const nowPlayingBar = document.querySelector('.now-playing-bar');
     if (nowPlayingBar) {
-        nowPlayingBar.addEventListener('touchstart', e => {
-            touchStartY = e.changedTouches[0].screenY;
-        }, { passive: true });
-        nowPlayingBar.addEventListener('touchend', e => {
-            const touchEndY = e.changedTouches[0].screenY;
-            if (touchStartY - touchEndY > 50) { // Swipe UP
-                // Avoid accidental clicks on controls
-                if (!e.target.closest('button') && !e.target.closest('.progress-bar')) {
-                    document.querySelector('.now-playing-bar .cover')?.click();
+        nowPlayingBar.addEventListener(
+            'touchstart',
+            (e) => {
+                touchStartY = e.changedTouches[0].screenY;
+            },
+            { passive: true }
+        );
+        nowPlayingBar.addEventListener(
+            'touchend',
+            (e) => {
+                const touchEndY = e.changedTouches[0].screenY;
+                if (touchStartY - touchEndY > 50) {
+                    // Swipe UP
+                    // Avoid accidental clicks on controls
+                    if (!e.target.closest('button') && !e.target.closest('.progress-bar')) {
+                        document.querySelector('.now-playing-bar .cover')?.click();
+                    }
                 }
-            }
-        }, { passive: true });
+            },
+            { passive: true }
+        );
     }
 
     const fsOverlay = document.getElementById('fullscreen-cover-overlay');
@@ -593,35 +604,48 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         };
 
-        fsOverlay.addEventListener('touchstart', e => {
-            // Skip scrollable or interactive inner elements
-            if (!e.target.closest('.lyrics-scroll-container') && !e.target.closest('.fs-volume-bar') && !e.target.closest('.progress-bar')) {
-                fsSwipeStartX = e.changedTouches[0].screenX;
-                fsSwipeStartY = e.changedTouches[0].screenY;
-                touchStartY = e.changedTouches[0].screenY;
-            } else {
-                fsSwipeStartX = null;
-                touchStartY = null;
-            }
-        }, { passive: true });
-
-        fsOverlay.addEventListener('touchend', e => {
-            if (touchStartY === null && fsSwipeStartX === null) return;
-            const touchEndY = e.changedTouches[0].screenY;
-            const touchEndX = e.changedTouches[0].screenX;
-            const deltaY = touchEndY - (touchStartY ?? touchEndY);
-            const deltaX = touchEndX - (fsSwipeStartX ?? touchEndX);
-
-            // Prioritise swipe down (dismiss) over horizontal
-            if (Math.abs(deltaY) > Math.abs(deltaX)) {
-                if (deltaY > 60) { // Swipe DOWN – close
-                    document.getElementById('close-fullscreen-cover-btn')?.click();
+        fsOverlay.addEventListener(
+            'touchstart',
+            (e) => {
+                // Skip scrollable or interactive inner elements
+                if (
+                    !e.target.closest('.lyrics-scroll-container') &&
+                    !e.target.closest('.fs-volume-bar') &&
+                    !e.target.closest('.progress-bar')
+                ) {
+                    fsSwipeStartX = e.changedTouches[0].screenX;
+                    fsSwipeStartY = e.changedTouches[0].screenY;
+                    touchStartY = e.changedTouches[0].screenY;
+                } else {
+                    fsSwipeStartX = null;
+                    touchStartY = null;
                 }
-            } else if (Math.abs(deltaX) > 60 && fsSwipeStartX !== null) {
-                // Swipe LEFT = next mode, RIGHT = prev mode
-                cycleFsMode(deltaX < 0 ? 1 : -1);
-            }
-        }, { passive: true });
+            },
+            { passive: true }
+        );
+
+        fsOverlay.addEventListener(
+            'touchend',
+            (e) => {
+                if (touchStartY === null && fsSwipeStartX === null) return;
+                const touchEndY = e.changedTouches[0].screenY;
+                const touchEndX = e.changedTouches[0].screenX;
+                const deltaY = touchEndY - (touchStartY ?? touchEndY);
+                const deltaX = touchEndX - (fsSwipeStartX ?? touchEndX);
+
+                // Prioritise swipe down (dismiss) over horizontal
+                if (Math.abs(deltaY) > Math.abs(deltaX)) {
+                    if (deltaY > 60) {
+                        // Swipe DOWN – close
+                        document.getElementById('close-fullscreen-cover-btn')?.click();
+                    }
+                } else if (Math.abs(deltaX) > 60 && fsSwipeStartX !== null) {
+                    // Swipe LEFT = next mode, RIGHT = prev mode
+                    cycleFsMode(deltaX < 0 ? 1 : -1);
+                }
+            },
+            { passive: true }
+        );
     }
 
     document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
@@ -1020,6 +1044,46 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
+        // Collaborative playlist download handler
+        if (e.target.closest('#collab-download-btn')) {
+            const btn = e.target.closest('#collab-download-btn');
+            if (btn.disabled) return;
+
+            const playlistId = window.location.pathname.split('/')[2];
+            if (!playlistId) return;
+
+            btn.disabled = true;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML =
+                '<svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>';
+
+            try {
+                const playlist = await db.getCollaborativePlaylist(playlistId);
+                if (!playlist) {
+                    alert('Playlist not found');
+                    return;
+                }
+
+                const playlistData = { ...playlist, title: playlist.name };
+                const tracks = playlist.tracks || [];
+
+                const { downloadPlaylistAsZip } = await loadDownloadsModule();
+                await downloadPlaylistAsZip(
+                    playlistData,
+                    tracks,
+                    api,
+                    downloadQualitySettings.getQuality(),
+                    lyricsManager
+                );
+            } catch (error) {
+                console.error('Collaborative playlist download failed:', error);
+                alert('Failed to download playlist: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHTML;
+            }
+        }
+
         if (e.target.closest('#create-playlist-btn')) {
             const modal = document.getElementById('playlist-modal');
             document.getElementById('playlist-modal-title').textContent = 'Create Playlist';
@@ -1119,7 +1183,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const handlePublicStatus = async (playlist) => {
                     playlist.isPublic = isPublic;
                     if (isPublic) {
-                        await authManager.initialized.catch(() => { });
+                        await authManager.initialized.catch(() => {});
                         if (!authManager.user) {
                             playlist.isPublic = false;
                             const { showNotification } = await loadDownloadsModule();
@@ -1666,7 +1730,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (navigator.share) {
                                 try {
                                     await navigator.share({ title: playlist.name, url });
-                                } catch { /* user cancelled */ }
+                                } catch {
+                                    /* user cancelled */
+                                }
                             } else {
                                 await navigator.clipboard.writeText(url);
                                 const { showNotification } = await loadDownloadsModule();
@@ -1738,7 +1804,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (navigator.share) {
                                 try {
                                     await navigator.share({ title: playlist.name, url });
-                                } catch { /* user cancelled */ }
+                                } catch {
+                                    /* user cancelled */
+                                }
                             } else {
                                 await navigator.clipboard.writeText(url);
                                 const { showNotification } = await loadDownloadsModule();
@@ -2242,7 +2310,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const liked = (await db.getFavorites('track')) || [];
             searchEngine.buildLocalIndex(liked);
-        } catch { /* silently skip if db is unavailable */ }
+        } catch {
+            /* silently skip if db is unavailable */
+        }
     });
 
     // Setup clear button for search bar
@@ -2257,18 +2327,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchInput.closest('.search-bar')?.appendChild(suggestionsEl);
     }
 
-    const hideSuggestions = () => { suggestionsEl.style.display = 'none'; };
+    const hideSuggestions = () => {
+        suggestionsEl.style.display = 'none';
+    };
     const showSuggestions = (items, isHistory = false) => {
-        if (!items || items.length === 0) { hideSuggestions(); return; }
-        suggestionsEl.innerHTML = items.map(item => {
-            const label = typeof item === 'string' ? item : (item.title || '');
-            const sub = isHistory ? '<span class="suggestion-icon">🕐</span>' : `<span class="suggestion-sub">${item.artist?.name || ''}</span>`;
-            return `<li class="suggestion-item" data-query="${label}">${sub} <span>${label}</span></li>`;
-        }).join('');
+        if (!items || items.length === 0) {
+            hideSuggestions();
+            return;
+        }
+        suggestionsEl.innerHTML = items
+            .map((item) => {
+                const label = typeof item === 'string' ? item : item.title || '';
+                const sub = isHistory
+                    ? '<span class="suggestion-icon">🕐</span>'
+                    : `<span class="suggestion-sub">${item.artist?.name || ''}</span>`;
+                return `<li class="suggestion-item" data-query="${label}">${sub} <span>${label}</span></li>`;
+            })
+            .join('');
         suggestionsEl.style.display = 'block';
     };
 
-    suggestionsEl.addEventListener('click', e => {
+    suggestionsEl.addEventListener('click', (e) => {
         const item = e.target.closest('.suggestion-item');
         if (!item) return;
         const q = item.dataset.query;
@@ -2286,7 +2365,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
-        if (query.length < 2) { hideSuggestions(); return; }
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
         // Show instant local results as suggestions
         const local = searchEngine.searchLocal(query);
         showSuggestions(local.slice(0, 6));

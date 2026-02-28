@@ -395,7 +395,9 @@ const syncManager = {
 
         if (this._userRecordCache && this._userRecordCache.username === username) {
             console.log('[Appwrite Sync] Returning cached profile for:', username);
-            return this._mapProfileRecord(this._userRecordCache);
+            const profile = this._mapProfileRecord(this._userRecordCache);
+            console.log('[Appwrite Sync] Cached profile has', profile.favorite_albums?.length || 0, 'favorite albums');
+            return profile;
         }
 
         console.log('[Appwrite Sync] Fetching profile for:', username);
@@ -416,7 +418,9 @@ const syncManager = {
 
             const record = res.documents[0];
             console.log('[Appwrite Sync] Profile found:', record.$id);
-            return this._mapProfileRecord(record);
+            const profile = this._mapProfileRecord(record);
+            console.log('[Appwrite Sync] Fetched profile has', profile.favorite_albums?.length || 0, 'favorite albums');
+            return profile;
         } catch (error) {
             console.error('[Appwrite Sync] Failed to fetch profile:', error);
             return null;
@@ -429,7 +433,9 @@ const syncManager = {
 
         const updateData = { ...data };
         if (Object.prototype.hasOwnProperty.call(updateData, 'favorite_albums')) {
-            updateData.favorite_albums = JSON.stringify(this._normalizeFavoriteAlbums(updateData.favorite_albums));
+            const normalizedAlbums = this._normalizeFavoriteAlbums(updateData.favorite_albums);
+            console.log('[Appwrite Sync] Normalized favorite albums:', normalizedAlbums.length, 'albums');
+            updateData.favorite_albums = JSON.stringify(normalizedAlbums);
         }
 
         for (const key of Object.keys(updateData)) {
@@ -446,6 +452,10 @@ const syncManager = {
                 { label: 'update profile' }
             );
             this._userRecordCache = updated;
+            // Also update _profileCache if it exists to ensure consistency
+            if (this._profileCache) {
+                this._profileCache = this._mapProfileRecord(updated);
+            }
             console.log('[Appwrite Sync] Profile updated successfully');
             return updated;
         } catch (error) {

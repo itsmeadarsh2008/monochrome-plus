@@ -4,12 +4,25 @@ export const apiSettings = {
     INSTANCES_URL: '/instances.json',
     defaultInstances: { api: [], streaming: [] },
     instancesLoaded: false,
+    _loadingPromise: null,
 
     async loadInstancesFromGitHub() {
+        // If already loaded, return immediately
         if (this.instancesLoaded) {
             return this.defaultInstances;
         }
 
+        // If loading is already in progress, return the existing promise
+        if (this._loadingPromise) {
+            return this._loadingPromise;
+        }
+
+        // Start loading and store the promise
+        this._loadingPromise = this._doLoadInstances();
+        return this._loadingPromise;
+    },
+
+    async _doLoadInstances() {
         try {
             const response = await fetch(this.INSTANCES_URL);
             if (!response.ok) throw new Error('Failed to fetch instances');
@@ -85,6 +98,11 @@ export const apiSettings = {
     },
 
     async getInstances(type = 'api', _sortBySpeed = false) {
+        // Ensure instances are loaded before returning
+        if (!this.instancesLoaded) {
+            await this.loadInstancesFromGitHub();
+        }
+
         let instancesObj;
 
         const stored = localStorage.getItem(this.STORAGE_KEY);
@@ -2842,5 +2860,5 @@ export const audioProcessingSettings = {
 
     isPure() {
         return this.getMode() === 'pure';
-    }
+    },
 };

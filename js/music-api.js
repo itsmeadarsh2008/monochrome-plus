@@ -52,6 +52,7 @@ export class MusicAPI {
         const p = provider || this.getProviderFromId(id) || this.getCurrentProvider();
         const api = this.getAPI(p);
         const cleanId = this.stripProviderPrefix(id);
+        // Pass quality parameter correctly to the underlying API
         return api.getTrack(cleanId, quality);
     }
 
