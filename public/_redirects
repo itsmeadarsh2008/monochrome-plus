@@ -1,1 +1,5 @@
 /* /index.html 200
+/artistgrid-api/*  https://sheets.artistgrid.cx/:splat  200
+/artistgrid-trends  https://trends.artistgrid.cx/  200
+/artistgrid-assets/*  https://assets.artistgrid.cx/:splat  200
+/tracker-api/*  https://tracker.israeli.ovh/:splat  200
