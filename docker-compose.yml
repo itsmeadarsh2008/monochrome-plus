@@ -6,9 +6,9 @@ services:
             dockerfile: Dockerfile
         container_name: monochrome
         ports:
-            - '${MONOCHROME_PORT:-3000}:4173'
+            - "${MONOCHROME_PORT:-3000}:4173"
         environment:
-            AUTH_ENABLED: ${AUTH_ENABLED:-false}
+            AUTH_ENABLED: ${AUTH_ENABLED:-true}
             AUTH_SECRET: ${AUTH_SECRET:-}
             FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-monochrome-database}
             FIREBASE_CONFIG: ${FIREBASE_CONFIG:-}
@@ -18,7 +18,15 @@ services:
         networks:
             - monochrome-network
         healthcheck:
-            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4173/health']
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:4173/health",
+                ]
             interval: 30s
             timeout: 3s
             retries: 3
@@ -36,14 +44,22 @@ services:
             PB_ADMIN_PASSWORD: ${PB_ADMIN_PASSWORD:-changeme}
             TZ: ${TZ:-UTC}
         ports:
-            - '${POCKETBASE_PORT:-8090}:8090'
+            - "${POCKETBASE_PORT:-8090}:8090"
         volumes:
             - pb_data:/pb_data
             - pb_public:/pb_public
             - pb_hooks:/pb_hooks
         command: serve --http=0.0.0.0:8090
         healthcheck:
-            test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:8090/api/health']
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:8090/api/health",
+                ]
             interval: 30s
             timeout: 10s
             retries: 3
@@ -60,7 +76,7 @@ services:
         profiles:
             - dev
         ports:
-            - '${MONOCHROME_DEV_PORT:-5173}:5173'
+            - "${MONOCHROME_DEV_PORT:-5173}:5173"
         volumes:
             - .:/app
             - /app/node_modules

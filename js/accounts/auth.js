@@ -1,5 +1,5 @@
 // js/accounts/auth.js
-import { client, account } from '../lib/appwrite.js';
+import { account } from '../lib/appwrite.js';
 import { ID } from 'appwrite';
 
 export class AuthManager {
@@ -7,6 +7,14 @@ export class AuthManager {
         this.user = null;
         this.authListeners = [];
         this.initialized = this.init();
+    }
+
+    async _refreshUser() {
+        const user = await account.get();
+        this.user = user;
+        this.updateUI(user);
+        this.authListeners.forEach((listener) => listener(user));
+        return user;
     }
 
     async init() {
@@ -20,7 +28,7 @@ export class AuthManager {
             );
             this.updateUI(user);
             this.authListeners.forEach((listener) => listener(user));
-        } catch (error) {
+        } catch {
             console.log('[Appwrite] Info: No active session found on initialization');
             this.user = null; // Explicitly null
             this.updateUI(null);
@@ -34,6 +42,17 @@ export class AuthManager {
         callback(this.user);
     }
 
+    async signInWithGoogle() {
+        try {
+            const redirectUrl = window.location.origin;
+            await account.createOAuth2Session('google', redirectUrl, redirectUrl);
+            console.log('[Appwrite] Google login initiated...');
+        } catch (error) {
+            console.error('[Appwrite] ✗ Google login failed:', error);
+            throw error;
+        }
+    }
+
     async signInWithDiscord() {
         try {
             // Use current URL as redirect
@@ -42,23 +61,18 @@ export class AuthManager {
             console.log('[Appwrite] Discord login initiated...');
         } catch (error) {
             console.error('[Appwrite] ✗ Discord login failed:', error);
-            alert(`Discord login failed: ${error.message}`);
             throw error;
         }
     }
 
     async signInWithEmail(email, password) {
         try {
-            const result = await account.createEmailPasswordSession(email, password);
-            const user = await account.get();
-            this.user = user;
+            await account.createEmailPasswordSession(email, password);
+            const user = await this._refreshUser();
             console.log('[Appwrite] ✓ Email login successful:', user.email);
-            this.updateUI(user);
-            this.authListeners.forEach((listener) => listener(user));
             return user;
         } catch (error) {
             console.error('Email Login failed:', error);
-            alert(`Login failed: ${error.message}`);
             throw error;
         }
     }
@@ -70,7 +84,6 @@ export class AuthManager {
             return await this.signInWithEmail(email, password);
         } catch (error) {
             console.error('Sign Up failed:', error);
-            alert(`Sign Up failed: ${error.message}`);
             throw error;
         }
     }
@@ -79,10 +92,9 @@ export class AuthManager {
         try {
             const redirectUrl = window.location.origin + '/reset-password';
             await account.createRecovery(email, redirectUrl);
-            alert(`Password reset instructions sent to ${email}`);
+            return true;
         } catch (error) {
             console.error('Password reset failed:', error);
-            alert(`Failed to send reset email: ${error.message}`);
             throw error;
         }
     }
@@ -105,56 +117,62 @@ export class AuthManager {
     }
 
     updateUI(user) {
-        const connectBtn = document.getElementById('discord-connect-btn');
+        const connectBtn = document.getElementById('auth-signout-btn');
         const clearDataBtn = document.getElementById('firebase-clear-cloud-btn');
         const statusText = document.getElementById('auth-status');
-        const emailContainer = document.getElementById('email-auth-container');
-        const emailToggleBtn = document.getElementById('toggle-email-auth-btn');
+        const authMethodsContainer = document.getElementById('auth-buttons-container');
+        const authPanel = document.getElementById('auth-panel');
+        const userBadge = document.getElementById('auth-user-pill');
+        const viewProfileBtn = document.getElementById('view-my-profile-btn');
 
-        if (!connectBtn) return; // UI might not be rendered yet
+        if (!statusText) return; // UI might not be rendered yet
 
         if (!user) {
-            connectBtn.textContent = 'Connect with Discord';
-            connectBtn.classList.remove('danger');
-            connectBtn.onclick = () => this.signInWithDiscord();
-
+            if (connectBtn) {
+                connectBtn.style.display = 'none';
+                connectBtn.classList.remove('danger');
+                connectBtn.onclick = null;
+            }
             if (clearDataBtn) clearDataBtn.style.display = 'none';
-            if (emailToggleBtn) emailToggleBtn.style.display = 'inline-block';
-            if (statusText) statusText.textContent = 'Sync your library across devices';
+            if (statusText) statusText.textContent = 'Authentication required to sync and personalize your experience.';
+            if (authMethodsContainer) authMethodsContainer.style.display = '';
+            if (authPanel) authPanel.classList.remove('signed-in');
+            if (userBadge) userBadge.style.display = 'none';
+            if (viewProfileBtn) viewProfileBtn.style.display = 'none';
         } else {
-            connectBtn.textContent = 'Sign Out';
-            connectBtn.classList.add('danger');
-            connectBtn.onclick = () => this.signOut();
+            if (connectBtn) {
+                connectBtn.textContent = 'Sign Out';
+                connectBtn.style.display = 'inline-flex';
+                connectBtn.classList.add('danger');
+                connectBtn.onclick = () => this.signOut();
+            }
 
             if (clearDataBtn) clearDataBtn.style.display = 'block';
-            if (emailContainer) emailContainer.style.display = 'none';
-            if (emailToggleBtn) emailToggleBtn.style.display = 'none';
-
-            if (statusText) statusText.textContent = `Signed in as ${user.email || user.name}`;
+            if (authMethodsContainer) authMethodsContainer.style.display = 'none';
+            if (authPanel) authPanel.classList.add('signed-in');
+            if (userBadge) {
+                userBadge.style.display = 'inline-flex';
+                userBadge.textContent = user.email || user.phone || user.name || user.$id;
+            }
+            if (viewProfileBtn) viewProfileBtn.style.display = 'inline-flex';
+            if (statusText)
+                statusText.textContent = `Signed in as ${user.email || user.phone || user.name || user.$id}`;
         }
 
         // Auth gate active: strip down to status + sign out only
         if (window.__AUTH_GATE__) {
-            connectBtn.textContent = 'Sign Out';
-            connectBtn.classList.add('danger');
-            connectBtn.onclick = () => this.signOut();
-            if (clearDataBtn) clearDataBtn.style.display = 'none';
-            if (emailContainer) emailContainer.style.display = 'none';
-            if (emailToggleBtn) emailToggleBtn.style.display = 'none';
-            if (statusText) statusText.textContent = user ? `Signed in as ${user.email || user.name}` : 'Signed in';
-
-            // Account page: clean up unnecessary text
-            const accountPage = document.getElementById('page-account');
-            if (accountPage) {
-                const title = accountPage.querySelector('.section-title');
-                if (title) title.textContent = 'Account';
-                // Hide description + privacy paragraphs, keep only status
-                accountPage.querySelectorAll('.account-content > p, .account-content > div').forEach((el) => {
-                    if (el.id !== 'firebase-status' && el.id !== 'auth-buttons-container') {
-                        el.style.display = 'none';
-                    }
-                });
+            if (connectBtn) {
+                connectBtn.textContent = 'Sign Out';
+                connectBtn.classList.add('danger');
+                connectBtn.style.display = user ? 'inline-flex' : 'none';
+                connectBtn.onclick = () => this.signOut();
             }
+            if (clearDataBtn) clearDataBtn.style.display = 'none';
+            if (authMethodsContainer) authMethodsContainer.style.display = user ? 'none' : '';
+            if (statusText)
+                statusText.textContent = user
+                    ? `Signed in as ${user.email || user.phone || user.name || user.$id}`
+                    : 'Authentication required to sync and personalize your experience.';
             return;
         }
     }

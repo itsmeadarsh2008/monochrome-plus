@@ -1,10 +1,10 @@
 # Global Auth Gate
 
-This document explains the optional server-side login gate and what it implies for your site.
+This document explains the server-side login gate and what it implies for your site.
 
 ## Overview
 
-- When enabled, all HTML routes require login.
+- By default, all HTML routes require login.
 - Login uses Firebase Auth (Google or email) and exchanges a Firebase ID token for a server session.
 - The session is stored in a signed cookie and checked on every request.
 
@@ -25,7 +25,7 @@ This document explains the optional server-side login gate and what it implies f
 
 ## Configuration
 
-- `AUTH_ENABLED=true` enables the gate (default is false).
+- `AUTH_ENABLED` controls the gate (default is true).
 - `AUTH_SECRET` is required when the gate is enabled. It signs the session cookie.
 - `AUTH_GOOGLE_ENABLED` toggles Google sign-in on `/login` (default true).
 - `AUTH_EMAIL_ENABLED` toggles email/password sign-in on `/login` (default true).
@@ -45,7 +45,7 @@ This document explains the optional server-side login gate and what it implies f
 ## Enable (Docker)
 
 1. `cp .env.example .env`
-2. Set `AUTH_ENABLED=true` and `AUTH_SECRET=...`
+2. Set `AUTH_SECRET=...` (gate is already enabled by default)
 3. Optionally set `FIREBASE_CONFIG` and `FIREBASE_PROJECT_ID`
 4. `docker compose up -d`
 5. Visit `http://localhost:3000`

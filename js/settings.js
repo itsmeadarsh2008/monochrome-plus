@@ -61,85 +61,113 @@ export function initializeSettings(scrobbler, player, api, ui) {
     // Initialize account system UI & Settings
     authManager.updateUI(authManager.user);
 
-    // Email Auth UI Logic
-    const toggleEmailBtn = document.getElementById('toggle-email-auth-btn');
-    const cancelEmailBtn = document.getElementById('cancel-email-auth-btn');
-    const authModal = document.getElementById('email-auth-modal');
-    const authButtonsContainer = document.getElementById('auth-buttons-container');
-    const emailInput = document.getElementById('auth-email');
-    const passwordInput = document.getElementById('auth-password');
-    const signInBtn = document.getElementById('email-signin-btn');
-    const signUpBtn = document.getElementById('email-signup-btn');
-    const resetPasswordBtn = document.getElementById('reset-password-btn');
+    // Auth Card UI Logic
+    const feedback = document.getElementById('auth-panel-feedback');
+    const authPanel = document.getElementById('auth-panel');
+    const authTitle = document.getElementById('auth-title');
+    const authSubtitle = document.getElementById('auth-subtitle');
+    const authEmailForm = document.getElementById('auth-email-form');
+    const authPrimaryBtn = document.getElementById('auth-primary-btn');
+    const authSwitchLabel = document.getElementById('auth-switch-label');
+    const authSwitchModeBtn = document.getElementById('auth-switch-mode-btn');
+    const forgotPasswordBtn = document.getElementById('email-password-reset-btn');
+    let authMode = 'signup';
 
-    if (toggleEmailBtn && authModal) {
-        toggleEmailBtn.addEventListener('click', () => {
-            authModal.classList.add('active');
-        });
-    }
+    const setFeedback = (message, type = 'info') => {
+        if (!feedback) return;
+        feedback.textContent = message;
+        feedback.dataset.type = type;
+        feedback.style.display = message ? 'block' : 'none';
+    };
 
-    if (cancelEmailBtn && authModal) {
-        cancelEmailBtn.addEventListener('click', () => {
-            authModal.classList.remove('active');
-        });
+    const withUiError = (error) => {
+        const message = error?.message || 'Authentication failed. Please try again.';
+        setFeedback(message, 'error');
+    };
 
-        authModal.querySelector('.modal-overlay').addEventListener('click', () => {
-            authModal.classList.remove('active');
-        });
-    }
+    const renderAuthMode = () => {
+        const isSignup = authMode === 'signup';
+        if (authPanel) authPanel.dataset.mode = authMode;
+        if (authTitle) authTitle.textContent = isSignup ? 'Create your account' : 'Welcome back';
+        if (authSubtitle) {
+            authSubtitle.textContent = isSignup
+                ? 'Welcome! Please fill in the details to get started.'
+                : 'Sign in to access your synced library and profile.';
+        }
+        if (authPrimaryBtn) authPrimaryBtn.textContent = isSignup ? 'Continue' : 'Sign in';
+        if (authSwitchLabel)
+            authSwitchLabel.textContent = isSignup ? 'Already have an account?' : "Don't have an account?";
+        if (authSwitchModeBtn) authSwitchModeBtn.textContent = isSignup ? 'Sign in' : 'Sign up';
+        if (forgotPasswordBtn) forgotPasswordBtn.style.display = isSignup ? 'none' : 'inline-flex';
+    };
 
-    if (signInBtn) {
-        signInBtn.addEventListener('click', async () => {
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            if (!email || !password) {
-                alert('Please enter both email and password.');
-                return;
-            }
-            try {
-                await authManager.signInWithEmail(email, password);
-                authModal.classList.remove('active');
-                emailInput.value = '';
-                passwordInput.value = '';
-            } catch {
-                // Error handled in authManager
-            }
-        });
-    }
+    authSwitchModeBtn?.addEventListener('click', () => {
+        authMode = authMode === 'signup' ? 'signin' : 'signup';
+        setFeedback('', 'info');
+        renderAuthMode();
+    });
 
-    if (signUpBtn) {
-        signUpBtn.addEventListener('click', async () => {
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            if (!email || !password) {
-                alert('Please enter both email and password.');
-                return;
-            }
-            try {
+    authEmailForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = document.getElementById('auth-email-password-email')?.value?.trim();
+        const password = document.getElementById('auth-email-password-password')?.value || '';
+        if (!email || !password) {
+            setFeedback('Enter both email and password.', 'error');
+            return;
+        }
+        try {
+            if (authMode === 'signup') {
                 await authManager.signUpWithEmail(email, password);
-                authModal.classList.remove('active');
-                emailInput.value = '';
-                passwordInput.value = '';
-            } catch {
-                // Error handled in authManager
+                setFeedback('Account created and signed in.', 'success');
+            } else {
+                await authManager.signInWithEmail(email, password);
+                setFeedback('Signed in successfully.', 'success');
             }
-        });
-    }
+        } catch (error) {
+            withUiError(error);
+        }
+    });
 
-    if (resetPasswordBtn) {
-        resetPasswordBtn.addEventListener('click', async () => {
-            const email = emailInput.value;
-            if (!email) {
-                alert('Please enter your email address to reset your password.');
-                return;
-            }
-            try {
-                await authManager.sendPasswordReset(email);
-            } catch {
-                /* ignore */
-            }
-        });
-    }
+    renderAuthMode();
+
+    document.getElementById('email-password-reset-btn')?.addEventListener('click', async () => {
+        const email = document.getElementById('auth-email-password-email')?.value?.trim();
+        if (!email) {
+            setFeedback('Enter an email address first.', 'error');
+            return;
+        }
+        try {
+            await authManager.sendPasswordReset(email);
+            setFeedback('Password reset instructions sent.', 'success');
+        } catch (error) {
+            withUiError(error);
+        }
+    });
+
+    document.getElementById('auth-discord-btn')?.addEventListener('click', async () => {
+        try {
+            await authManager.signInWithDiscord();
+        } catch (error) {
+            withUiError(error);
+        }
+    });
+
+    document.getElementById('auth-google-btn')?.addEventListener('click', async () => {
+        try {
+            await authManager.signInWithGoogle();
+        } catch (error) {
+            withUiError(error);
+        }
+    });
+
+    document.getElementById('auth-signout-btn')?.addEventListener('click', async () => {
+        try {
+            await authManager.signOut();
+            setFeedback('Signed out successfully.', 'success');
+        } catch (error) {
+            withUiError(error);
+        }
+    });
 
     const lastfmConnectBtn = document.getElementById('lastfm-connect-btn');
     const lastfmStatus = document.getElementById('lastfm-status');

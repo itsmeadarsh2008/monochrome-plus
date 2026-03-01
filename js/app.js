@@ -278,6 +278,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Ensure Auth UI is updated
     authManager.updateUI(authManager.user);
 
+    const enforceAuthLock = () => {
+        const onAccountPage = window.location.pathname === '/account' || window.location.pathname === '/account/';
+        const isAuthenticated = !!authManager.user;
+        document.body.classList.toggle('auth-locked', !isAuthenticated);
+
+        if (!isAuthenticated && !onAccountPage) {
+            navigate('/account');
+            return false;
+        }
+        return true;
+    };
+
+    authManager.onAuthStateChanged(() => {
+        enforceAuthLock();
+    });
+
     // Preload profile data on app load if user is logged in
     if (authManager.user) {
         syncManager.getUserData().catch(() => {});
@@ -2525,6 +2541,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const router = createRouter(ui);
 
     const handleRouteChange = async (event) => {
+        if (!enforceAuthLock()) {
+            return;
+        }
+
         const overlay = document.getElementById('fullscreen-cover-overlay');
         const isFullscreenOpen = overlay && getComputedStyle(overlay).display === 'flex';
 
@@ -2833,24 +2853,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!user) {
                 headerAccountDropdown.innerHTML = `
                     <div class="account-dropdown-section">
-                        <button class="btn-primary" id="header-email-auth">Sign in with Email</button>
-                        <button class="btn-secondary" id="header-discord-auth">Continue with Discord</button>
-                    </div>
-                    <div class="account-dropdown-section">
-                        <button class="btn-secondary" id="header-open-account">Open Account Page</button>
+                        <button class="btn-primary" id="header-open-account">Open Authentication Panel</button>
                     </div>
                 `;
 
-                document.getElementById('header-email-auth').onclick = () => {
-                    const authModal = document.getElementById('email-auth-modal');
-                    if (authModal) authModal.classList.add('active');
-                    document.getElementById('auth-email')?.focus();
-                    closeAccountDropdown();
-                };
-                document.getElementById('header-discord-auth').onclick = () => {
-                    closeAccountDropdown();
-                    authManager.signInWithDiscord();
-                };
                 document.getElementById('header-open-account').onclick = () => {
                     navigate('/account');
                     closeAccountDropdown();
