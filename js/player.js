@@ -806,6 +806,7 @@ export class Player {
         const artistEl = document.querySelector('.now-playing-bar .artist');
 
         if (coverEl) coverEl.src = this.api.getCoverUrl(track.album?.cover);
+        this._updateLyricsMobileBackground(track);
         if (titleEl) titleEl.innerHTML = `${escapeHtml(trackTitle)} ${createQualityBadgeHTML(track)}`;
         if (albumEl) {
             const albumTitle = track.album?.title || '';
@@ -833,6 +834,20 @@ export class Player {
 
         document.title = `${trackTitle} • ${getTrackArtists(track)}`;
         this.updatePlayingTrackIndicator();
+    }
+
+    _updateLyricsMobileBackground(track) {
+        const sidePanel = document.getElementById('side-panel');
+        if (!sidePanel) return;
+
+        const coverId = track?.album?.cover;
+        if (!coverId) {
+            sidePanel.style.removeProperty('--lyrics-mobile-bg-image');
+            return;
+        }
+
+        const coverUrl = this.api.getCoverUrl(coverId, '640');
+        sidePanel.style.setProperty('--lyrics-mobile-bg-image', `url("${coverUrl}")`);
     }
 
     _showMixingIndicator() {
@@ -946,6 +961,7 @@ export class Player {
                 const artistEl = document.querySelector('.now-playing-bar .artist');
 
                 if (coverEl) coverEl.src = this.api.getCoverUrl(track.album?.cover);
+                this._updateLyricsMobileBackground(track);
                 if (titleEl) {
                     const qualityBadge = createQualityBadgeHTML(track);
                     titleEl.innerHTML = `${escapeHtml(trackTitle)} ${qualityBadge}`;
@@ -1201,6 +1217,7 @@ export class Player {
         const yearDisplay = getTrackYearDisplay(track);
 
         document.querySelector('.now-playing-bar .cover').src = this.api.getCoverUrl(track.album?.cover);
+        this._updateLyricsMobileBackground(track);
         document.querySelector('.now-playing-bar .title').innerHTML =
             `${escapeHtml(trackTitle)} ${createQualityBadgeHTML(track)}`;
         const albumEl = document.querySelector('.now-playing-bar .album');

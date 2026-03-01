@@ -1295,6 +1295,8 @@ const syncManager = {
                 if (!cloudData) return false;
 
                 const cloudLibrary = cloudData.library || {};
+                const cloudUserPlaylists = Object.values(cloudData.userPlaylists || {});
+                const cloudUserFolders = Object.values(cloudData.userFolders || {});
                 const didImport = await database.importData(
                     {
                         favorites_tracks: Object.values(cloudLibrary.tracks || {}),
@@ -1303,6 +1305,8 @@ const syncManager = {
                         favorites_playlists: Object.values(cloudLibrary.playlists || {}),
                         favorites_mixes: Object.values(cloudLibrary.mixes || {}),
                         history_tracks: cloudData.history || [],
+                        user_playlists: cloudUserPlaylists,
+                        user_folders: cloudUserFolders,
                     },
                     false
                 );
@@ -1433,7 +1437,9 @@ const syncManager = {
         try {
             const userData = await this.getUserData();
             if (userData?.profile?.privacy?.listening === 'private') return;
-        } catch {}
+        } catch (_error) {
+            // Ignore transient profile lookup failures and proceed with best effort status sync.
+        }
 
         const statusData = {
             text: `${track.title} - ${getTrackArtists(track)}`,
@@ -1505,7 +1511,9 @@ const syncManager = {
             const cloudLibrary = cloudData.library || {};
             const hasCloudData =
                 Object.values(cloudLibrary).some((value) => value && Object.keys(value).length > 0) ||
-                (cloudData.history?.length || 0) > 0;
+                (cloudData.history?.length || 0) > 0 ||
+                Object.keys(cloudData.userPlaylists || {}).length > 0 ||
+                Object.keys(cloudData.userFolders || {}).length > 0;
 
             if (!hasLocalData && hasCloudData) {
                 await this.pullCloudData({ syncPublicPlaylists: true });
@@ -1557,11 +1565,27 @@ const syncManager = {
                     })
                 );
                 const playlists = localData.user_playlists || [];
+                const folders = localData.user_folders || [];
 
                 const publicPlaylists = {};
                 const publicPlaylistIds = new Set();
                 const publicPlaylistDocuments = [];
+                const cloudPlaylistMetadata = {};
                 for (const playlist of playlists) {
+                    if (!playlist?.id) continue;
+
+                    cloudPlaylistMetadata[playlist.id] = {
+                        id: playlist.id,
+                        name: playlist.name || 'Untitled Playlist',
+                        cover: playlist.cover || null,
+                        description: playlist.description || '',
+                        numberOfTracks: Array.isArray(playlist.tracks)
+                            ? playlist.tracks.length
+                            : playlist.numberOfTracks || 0,
+                        isPublic: !!playlist.isPublic,
+                        updatedAt: playlist.updatedAt || Date.now(),
+                    };
+
                     if (!playlist?.isPublic) continue;
                     publicPlaylistIds.add(playlist.id);
                     publicPlaylistDocuments.push(playlist);
@@ -1575,6 +1599,18 @@ const syncManager = {
                     };
                 }
 
+                const cloudFolderMetadata = {};
+                for (const folder of folders) {
+                    if (!folder?.id) continue;
+                    cloudFolderMetadata[folder.id] = {
+                        id: folder.id,
+                        name: folder.name || 'Folder',
+                        cover: folder.cover || '',
+                        playlists: Array.isArray(folder.playlists) ? folder.playlists : [],
+                        updatedAt: folder.updatedAt || Date.now(),
+                    };
+                }
+
                 const favoriteAlbums = this._normalizeFavoriteAlbums(localData.favorites_albums || []).slice(0, 20);
 
                 const updated = await this._withRetry(
@@ -1582,7 +1618,8 @@ const syncManager = {
                         databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, {
                             library: JSON.stringify(library),
                             history: JSON.stringify(history),
-                            user_playlists: JSON.stringify(publicPlaylists),
+                            user_playlists: JSON.stringify(cloudPlaylistMetadata),
+                            user_folders: JSON.stringify(cloudFolderMetadata),
                             favorite_albums: JSON.stringify(favoriteAlbums),
                         }),
                     { label: 'periodic sync' }

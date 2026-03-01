@@ -128,10 +128,11 @@
             <button id="toggle-fullscreen-lyrics-btn" class="fullscreen-lyrics-toggle" title="Toggle Lyrics">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="22" />
-                    <line x1="8" y1="22" x2="16" y2="22" />
+                    <path d="M4 6h16" />
+                    <path d="M4 12h10" />
+                    <path d="M4 18h8" />
+                    <path d="M17 10v8" />
+                    <circle cx="17" cy="18" r="2" />
                 </svg>
             </button>
             <div class="fullscreen-main-view">
@@ -1207,21 +1208,7 @@
                         </svg>
                         <input type="search" id="search-input" placeholder="Search for music, people, or profiles..."
                             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-                        <button type="button" class="search-clear-btn btn-icon" title="Clear search"
-                            style="display: none">
-                            &times;
-                        </button>
                     </div>
-                    <button type="button" id="voice-search-btn" class="btn-icon voice-search-btn" title="Voice Search"
-                        style="display: none">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <line x1="12" y1="19" x2="12" y2="22" />
-                            <line x1="8" y1="22" x2="16" y2="22" />
-                        </svg>
-                    </button>
                     <ul id="search-suggestions" class="search-suggestions-list" style="display: none"></ul>
                 </form>
             </header>
@@ -1921,9 +1908,6 @@
                     <input type="search" id="track-list-search-input" placeholder="Search tracks..."
                         class="track-list-search-input" autocomplete="off" autocorrect="off" autocapitalize="off"
                         spellcheck="false" />
-                    <button type="button" class="search-clear-btn btn-icon" title="Clear search" style="display: none">
-                        &times;
-                    </button>
                 </form>
                 <div id="playlist-detail-tracklist" class="track-list"></div>
 
@@ -2292,9 +2276,6 @@
                     <input type="search" id="settings-search-input" placeholder="Search settings..."
                         class="track-list-search-input" autocomplete="off" autocorrect="off" autocapitalize="off"
                         spellcheck="false" />
-                    <button type="button" class="search-clear-btn btn-icon" title="Clear search" style="display: none">
-                        ×
-                    </button>
                 </form>
                 <div class="settings-tabs">
                     <button class="settings-tab active" data-tab="appearance">Appearance</button>
@@ -3682,7 +3663,7 @@
                             <div class="setting-item">
                                 <div class="info">
                                     <span class="label">Clear Cloud Data</span>
-                                    <span class="description">Delete all your data from the cloud (cannot be
+                                    <span class="description">Delete all synced Appwrite Cloud data (cannot be
                                         undone)</span>
                                 </div>
                                 <button id="firebase-clear-cloud-btn" class="btn-secondary danger">
@@ -3784,7 +3765,7 @@
                 <h2 class="section-title" style="text-align: center">Sign Up / Sign In</h2>
                 <div class="account-content">
                     <p style="text-align: center" class="account-description">
-                        Make an account to allow syncing your library between devices.
+                        Make an account to sync your library, playlists, folders, and profile data via Appwrite Cloud.
                     </p>
                     <div class="account-buttons" id="auth-buttons-container" style="
                                 display: flex;
@@ -3802,7 +3783,7 @@
                     </div>
 
                     <p id="auth-status" style="text-align: center; padding-top: 15px; color: #8b8b93">
-                        Sync your library across devices
+                        Sync your music data across devices with Appwrite Cloud
                     </p>
                     <script>
                         if (window.authManager && window.authManager.user) {
@@ -3825,7 +3806,9 @@
 
         <footer class="now-playing-bar">
             <div class="track-info">
-                <img src="/assets/appicon.png" alt="Current Track Cover" class="cover" />
+                <div class="cover-shell">
+                    <img src="/assets/appicon.png" alt="Current Track Cover" class="cover" />
+                </div>
                 <div class="details">
                     <div class="title">Select a song</div>
                     <div class="album"></div>
@@ -3902,16 +3885,6 @@
                             fill="currentColor">
                             <path
                                 d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-                        </svg>
-                    </button>
-                    <button id="toggle-lyrics-btn" title="Lyrics" style="display: none">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="lucide lucide-mic">
-                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <line x1="12" y1="19" x2="12" y2="22" />
-                            <line x1="8" y1="22" x2="16" y2="22" />
                         </svg>
                     </button>
                     <button id="download-current-btn" title="Download current track" class="desktop-only">

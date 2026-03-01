@@ -1794,16 +1794,6 @@ kbd {
     box-shadow: 0 0 0 3px rgb(var(--highlight-rgb) / 0.2);
 }
 
-.search-clear-btn {
-    position: absolute;
-    right: 0.25rem;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 1.5rem;
-    line-height: 1;
-    z-index: 1;
-}
-
 /* Main header search: navigation controls next to search bar, clear button outside input. */
 #search-form {
     display: flex;
@@ -1852,14 +1842,7 @@ kbd {
 
 .search-input-wrapper input {
     width: 100%;
-    padding-right: 2rem;
-}
-
-.search-input-wrapper .search-clear-btn {
-    position: absolute;
-    right: 0.5rem;
-    top: 50%;
-    transform: translateY(-50%);
+    padding-right: 0.75rem;
 }
 
 body.has-page-background .search-bar input {
@@ -2672,7 +2655,7 @@ html.carousel-mode .card-grid>*,
 }
 
 .animations-ultra .card,
-.animations-ultra .now-playing-bar .cover,
+.animations-ultra .now-playing-bar .cover-shell,
 .animations-ultra #vinyl-disc-container.rotating-disc {
     transform: translateZ(0);
     backface-visibility: hidden;
@@ -2682,11 +2665,11 @@ html.carousel-mode .card-grid>*,
     transform: translate3d(0, -12px, 0) scale3d(1.025, 1.025, 1);
 }
 
-.animations-ultra .now-playing-bar .cover:not(.rotating, :hover) {
+.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
     animation: ultra-butter-wave var(--motion-wave-duration, 6s) cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
-.thermal-adaptive.animations-ultra .now-playing-bar .cover:not(.rotating, :hover) {
+.thermal-adaptive.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
     animation-duration: calc(var(--motion-wave-duration, 6s) * 1.2);
 }
 
@@ -3270,35 +3253,6 @@ html.carousel-mode .card-grid>*,
     font-size: 0.75rem;
     opacity: 0.5;
     min-width: 3rem;
-}
-
-/* ── Voice Search Button ─────────────────────────────────────── */
-.voice-search-btn {
-    opacity: 0.6;
-    transition: opacity 0.15s, color 0.15s;
-    flex-shrink: 0;
-}
-
-.voice-search-btn:hover {
-    opacity: 1;
-}
-
-.voice-search-btn.listening {
-    color: #ef4444;
-    opacity: 1;
-    animation: voice-pulse 1s ease-in-out infinite;
-}
-
-@keyframes voice-pulse {
-
-    0%,
-    100% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.2);
-    }
 }
 
 .track-list {
@@ -4853,13 +4807,19 @@ input:checked+.slider::before {
     min-width: 0;
 }
 
-.track-info .cover {
+.track-info .cover-shell {
     width: 56px;
     height: 56px;
     border-radius: var(--radius-sm);
     background-color: var(--muted);
-    object-fit: cover;
     flex-shrink: 0;
+}
+
+.track-info .cover-shell .cover {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
 }
 
 .track-info .details {
@@ -5467,6 +5427,7 @@ input:checked+.slider::before {
 }
 
 #fullscreen-cover-image {
+    transition: width 0.6s cubic-bezier(0.25, 1, 0.5, 1), height 0.6s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.6s cubic-bezier(0.25, 1, 0.5, 1), max-width 0.6s ease, max-height 0.6s ease, box-shadow 0.6s ease;
     max-width: 55vw;
     max-height: 45vh;
     border-radius: var(--radius);
@@ -5485,7 +5446,10 @@ input:checked+.slider::before {
     justify-content: center;
     z-index: 1;
     margin-bottom: var(--space-4);
-    transition: all var(--duration-normal) var(--ease-in-out);
+    transition:
+        width var(--duration-normal) var(--ease-in-out),
+        height var(--duration-normal) var(--ease-in-out),
+        margin var(--duration-normal) var(--ease-in-out);
 }
 
 #vinyl-disc-container.disc-scrub-enabled {
@@ -5505,116 +5469,141 @@ input:checked+.slider::before {
 }
 
 #vinyl-disc-container.disc-scrubbing,
-#vinyl-disc-container.disc-scrubbing::before {
+#vinyl-disc-container.disc-scrubbing::before,
+#vinyl-disc-container.disc-scrubbing::after {
     animation-play-state: paused !important;
 }
 
-/* Fullscreen rotating disc effect - vinyl record */
+/* Fullscreen rotating disc effect - hyper-realistic vinyl */
 #vinyl-disc-container.rotating-disc {
+    --vinyl-rotation-duration: 4s;
     width: var(--vinyl-disc-size, min(48vh, 48vw));
     height: var(--vinyl-disc-size, min(48vh, 48vw));
     border-radius: var(--radius-full);
-    background:
-        radial-gradient(circle at center,
-            transparent 0 53%,
-            rgb(255, 255, 255, 0.035) 60%,
-            rgb(0, 0, 0, 0.18) 78%,
-            rgb(0, 0, 0, 0.52) 100%),
-        repeating-radial-gradient(circle at center,
-            rgb(7, 7, 7, 0.95) 0,
-            rgb(7, 7, 7, 0.95) 1px,
-            rgb(17, 17, 17, 0.95) 2px,
-            rgb(9, 9, 9, 0.95) 3px),
-        linear-gradient(180deg, #111 0%, #060606 100%);
-    box-shadow:
-        0 24px 60px rgb(0, 0, 0, 0.74),
-        inset 0 0 0 1px rgb(255, 255, 255, 0.1),
-        inset 0 0 18px rgb(0, 0, 0, 0.86);
-    animation: rotate-disc-fullscreen 4s linear infinite;
+    transition: none;
+    will-change: transform, filter;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    transform-style: preserve-3d;
+    contain: layout style paint;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+
+    background:
+        radial-gradient(circle at center, 
+            rgb(12, 12, 12) 0%, 
+            rgb(12, 12, 12) 16%, 
+            rgb(8, 8, 8) 16.5%,
+            rgb(14, 14, 14) 18%, 
+            transparent 19%
+        ),
+        repeating-radial-gradient(
+            circle at center,
+            rgb(15, 15, 15) 0px,
+            rgb(24, 24, 24) 1.5px,
+            rgb(6, 6, 6) 3px
+        );
+
+    box-shadow:
+        inset 0 0 0 2px rgb(25, 25, 25),
+        inset 0 0 10px 4px rgb(0, 0, 0, 0.9),
+        0 20px 50px rgb(0, 0, 0, 0.7),
+        0 8px 24px rgb(0, 0, 0, 0.4);
 }
 
-/* Light reflections (anisotropic highlights) on the vinyl */
+#vinyl-disc-container.rotating-disc.spin-reverse {
+    filter: saturate(0.95) brightness(0.97);
+}
+
 #vinyl-disc-container.rotating-disc::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: var(--radius-full);
     background:
-        conic-gradient(from 12deg at 50% 50%,
-            rgb(255, 255, 255, 0) 0deg,
-            rgb(255, 255, 255, 0.06) 18deg,
-            rgb(255, 255, 255, 0.3) 33deg,
-            rgb(255, 255, 255, 0.08) 45deg,
-            rgb(255, 255, 255, 0) 62deg,
-            rgb(255, 255, 255, 0) 185deg,
-            rgb(255, 255, 255, 0.08) 204deg,
-            rgb(255, 255, 255, 0.24) 216deg,
-            rgb(255, 255, 255, 0.05) 232deg,
-            rgb(255, 255, 255, 0) 250deg,
-            rgb(255, 255, 255, 0) 360deg),
-        radial-gradient(circle at center, transparent 0 57%, rgb(0, 0, 0, 0.24) 80%, transparent 100%);
+        conic-gradient(
+            from -45deg at 50% 50%,
+            transparent 0deg,
+            rgba(255, 255, 255, 0.05) 30deg,
+            rgba(255, 255, 255, 0.15) 45deg,
+            rgba(255, 255, 255, 0.05) 60deg,
+            transparent 100deg,
+            transparent 180deg,
+            rgba(255, 255, 255, 0.05) 210deg,
+            rgba(255, 255, 255, 0.15) 225deg,
+            rgba(255, 255, 255, 0.05) 240deg,
+            transparent 280deg,
+            transparent 360deg
+        );
     mix-blend-mode: screen;
+    filter: blur(3px) contrast(1.2);
     pointer-events: none;
     z-index: 2;
-    animation: rotate-disc-fullscreen 4s linear infinite reverse;
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
 }
 
-#vinyl-disc-container.rotating-disc.paused::before {
-    animation-play-state: paused;
+#vinyl-disc-container.rotating-disc.spin-reverse::before {
+    opacity: 0.92;
 }
 
-/* The spindle hole in the very center */
 #vinyl-disc-container.rotating-disc::after {
     content: '';
     position: absolute;
-    width: 1.15%;
-    height: 1.15%;
+    inset: 0;
     border-radius: var(--radius-full);
-    background: radial-gradient(circle,
-            rgb(255, 255, 255, 0.88) 0%,
-            rgb(200, 200, 200, 0.62) 56%,
-            rgb(120, 120, 120, 0.44) 100%);
-    box-shadow:
-        0 0 0 1px rgb(255, 255, 255, 0.25),
-        0 0 4px rgb(0, 0, 0, 0.45);
-    z-index: 3;
     pointer-events: none;
+    z-index: 4;
+    background:
+        radial-gradient(circle at center, 
+            rgb(20, 20, 20) 0%, 
+            rgb(60, 60, 60) 0.5%, 
+            rgb(15, 15, 15) 0.8%, 
+            transparent 1%
+        ),
+        radial-gradient(circle at center, 
+            transparent 15.5%, 
+            rgba(0, 0, 0, 0.5) 16%, 
+            transparent 16.5%
+        );
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+}
+
+/* Paused state - stops all animations */
+#vinyl-disc-container.rotating-disc.paused,
+#vinyl-disc-container.rotating-disc.paused::before,
+#vinyl-disc-container.rotating-disc.paused::after {
+    animation-play-state: paused;
+}
+
+/* No spindle dot overlay on the center artwork */
+#vinyl-disc-container.rotating-disc .spindle-hole {
+    display: none;
 }
 
 /* Album art inside vinyl disc - becomes the label */
 #vinyl-disc-container.rotating-disc #fullscreen-cover-image {
-    width: 34%;
-    height: 34%;
+    width: 32%;
+    height: 32%;
     max-width: none;
     max-height: none;
     border-radius: var(--radius-full);
-    box-shadow:
-        0 0 0 5px rgb(15, 15, 15, 0.95),
-        0 0 0 6px rgb(220, 220, 220, 0.14),
-        0 0 20px rgb(0, 0, 0, 0.9),
-        inset 0 0 15px rgb(0, 0, 0, 0.4);
+    box-shadow: 
+        0 0 0 4px rgb(20, 20, 20),
+        0 0 0 6px rgb(8, 8, 8),
+        0 4px 12px rgba(0, 0, 0, 0.5);
     object-fit: cover;
-    z-index: 1;
+    z-index: 3;
     margin-bottom: 0;
     position: absolute;
-}
-
-#vinyl-disc-container.rotating-disc.paused {
-    animation-play-state: paused;
-}
-
-@keyframes rotate-disc-fullscreen {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
 }
 
 .fullscreen-track-info {
@@ -6908,7 +6897,7 @@ input:checked+.slider::before {
 /* Mobile adjustments */
 
 /* Clickable album cover indicator */
-.now-playing-bar .cover {
+.now-playing-bar .cover-shell {
     cursor: pointer;
     transition:
         transform var(--transition-fast),
@@ -6919,72 +6908,43 @@ input:checked+.slider::before {
     isolation: isolate;
 }
 
-.now-playing-bar .cover:hover {
+.now-playing-bar .cover-shell:hover {
     transform: translateY(-2px) scale(1.03);
     box-shadow: 0 9px 20px rgb(0, 0, 0, 0.36);
 }
 
+.now-playing-bar .cover-shell .cover {
+    transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1), height 0.4s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.4s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.4s ease;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
+}
+
 /* Rotating album cover */
-.now-playing-bar .cover.rotating {
-    border-radius: 50%;
-    animation: rotate-disc 3s linear infinite;
-    box-shadow:
-        0 0 0 2px rgb(255, 255, 255, 0.08),
-        0 0 24px rgb(0, 0, 0, 0.4),
-        inset 0 0 28px rgb(0, 0, 0, 0.25);
+.now-playing-bar .cover-shell.rotating {
+    --mini-cover-rotation-duration: 12s;
 }
 
-.now-playing-bar .cover.rotating::before,
-.now-playing-bar .cover.rotating::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-full);
-    pointer-events: none;
+.now-playing-bar .cover-shell.rotating .cover {
+    animation: rotate-disc var(--mini-cover-rotation-duration) linear infinite;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
 }
 
-.now-playing-bar .cover.rotating::before {
-    background: repeating-radial-gradient(circle at center,
-            rgb(255, 255, 255, 0.06) 0,
-            rgb(255, 255, 255, 0.06) 1px,
-            transparent 2px,
-            transparent 3.5px);
-    mix-blend-mode: soft-light;
-    opacity: 0.45;
+.now-playing-bar .cover-shell.rotating::before,
+.now-playing-bar .cover-shell.rotating::after {
+    content: none;
 }
 
-.now-playing-bar .cover.rotating::after {
-    background:
-        radial-gradient(circle at 24% 22%, rgb(255, 255, 255, 0.28) 0, transparent 34%),
-        radial-gradient(circle at 50% 50%, transparent 0 47%, rgb(0, 0, 0, 0.28) 76%, rgb(0, 0, 0, 0.46) 100%);
-}
-
-.now-playing-bar .cover.rotating.paused {
+.now-playing-bar .cover-shell.rotating.paused {
     animation-play-state: paused;
 }
 
-@keyframes rotate-disc {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-/* Friends Page Styles */
-
-/* Friends Hero */
-.friends-hero {
-    padding: 2.5rem 0 1.5rem;
-}
-
-.friends-hero-title {
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: -0.025em;
-    margin-bottom: 0.35rem;
+.now-playing-bar .cover-shell.rotating.paused .cover {
+    animation-play-state: paused;
 }
 
 .friends-hero-subtitle {
@@ -7456,6 +7416,41 @@ img[src=''] {
     transition:
         all 0.2s ease,
         right 0.3s ease;
+}
+
+:root[data-theme='white'] #fullscreen-cover-overlay {
+    background: linear-gradient(180deg, #f6f7fa 0%, #eceff5 100%);
+}
+
+:root[data-theme='white'] #fullscreen-cover-overlay::before {
+    filter: blur(72px) saturate(1.15) brightness(0.92);
+}
+
+:root[data-theme='white'] #fullscreen-cover-overlay::after {
+    background:
+        radial-gradient(ellipse 80% 60% at 15% 110%, rgba(var(--palette-rgb, 99, 102, 241), 0.16) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 85% -10%, rgba(var(--palette-rgb, 99, 102, 241), 0.12) 0%, transparent 55%),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 0%, rgba(232, 236, 244, 0.8) 100%);
+}
+
+:root[data-theme='white'] .fullscreen-track-info {
+    background-color: color-mix(in srgb, var(--card) 85%, transparent);
+    box-shadow: 0 8px 24px rgb(17, 24, 39, 0.14);
+}
+
+:root[data-theme='white'] .fullscreen-lyrics-toggle,
+:root[data-theme='white'] #close-fullscreen-cover-btn {
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    color: var(--foreground);
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+:root[data-theme='white'] .fullscreen-progress-container .progress-bar {
+    background: rgb(17, 24, 39, 0.16);
+}
+
+:root[data-theme='white'] .fullscreen-progress-container .progress-fill {
+    background: color-mix(in srgb, var(--foreground) 84%, transparent);
 }
 
 .fullscreen-lyrics-toggle:hover {
@@ -8245,7 +8240,7 @@ img[src=''] {
         gap: var(--spacing-sm);
     }
 
-    .track-info .cover {
+    .track-info .cover-shell {
         width: 48px;
         height: 48px;
     }
@@ -8443,6 +8438,48 @@ img[src=''] {
         width: 100vw;
         max-width: 100vw;
         bottom: 0;
+    }
+
+    .side-panel[data-view='lyrics'] {
+        position: relative;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--background) 84%, transparent);
+        backdrop-filter: none;
+        border-left: none;
+    }
+
+    .side-panel[data-view='lyrics']::before {
+        content: '';
+        position: absolute;
+        inset: -24px;
+        background-image: var(--lyrics-mobile-bg-image, none);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        filter: blur(42px) saturate(1.25) brightness(0.45);
+        transform: scale(1.12);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .side-panel[data-view='lyrics']::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgb(0, 0, 0, 0.35) 0%, rgb(0, 0, 0, 0.7) 100%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .side-panel[data-view='lyrics'] .panel-header,
+    .side-panel[data-view='lyrics'] .panel-content {
+        position: relative;
+        z-index: 1;
+        background: transparent;
+    }
+
+    .side-panel[data-view='lyrics'] .panel-header {
+        border-bottom-color: rgb(255, 255, 255, 0.14);
     }
 
     .panel-content {
@@ -10160,55 +10197,61 @@ textarea:focus {
 
 .profile-header-container {
     position: relative;
-    margin-bottom: 3rem;
+    margin-bottom: 2.25rem;
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     overflow: visible;
-    padding-bottom: 2rem;
+    padding-bottom: 1.5rem;
 }
 
 .profile-banner-wrapper {
     width: 100%;
-    height: 320px;
+    height: 340px;
     position: relative;
     overflow: hidden;
-    border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
-    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    border-radius: var(--radius-2xl);
+    border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .profile-banner {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, var(--secondary) 0%, var(--background) 100%);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 16%, var(--background)) 0%, var(--background) 55%);
     background-size: cover;
     background-position: center;
-    transition: transform var(--duration-slow) var(--ease-out);
+    transition: transform var(--duration-slow) var(--ease-out), filter var(--duration-normal) var(--ease-out);
+    filter: saturate(1.08) contrast(1.04);
 }
 
 .profile-banner-overlay {
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at center, transparent 0%, rgb(0, 0, 0, 0.4) 100%);
+    background:
+        linear-gradient(180deg, rgb(6, 8, 16, 0.08) 0%, rgb(6, 8, 16, 0.42) 52%, rgb(5, 6, 12, 0.86) 100%),
+        radial-gradient(circle at 18% 20%, rgb(var(--palette-rgb, 99, 102, 241), 0.16) 0%, transparent 38%),
+        radial-gradient(circle at 85% 16%, rgb(var(--palette-rgb, 99, 102, 241), 0.11) 0%, transparent 34%);
 }
 
 .profile-card {
     width: calc(100% - 4rem);
-    max-width: 900px;
-    margin-top: -80px;
+    max-width: 960px;
+    margin-top: -96px;
     margin-left: auto;
     margin-right: auto;
     position: relative;
     z-index: 10;
-    background: color-mix(in srgb, var(--card) 80%, transparent);
-    backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    background:
+        linear-gradient(160deg, color-mix(in srgb, var(--card) 88%, transparent) 0%, color-mix(in srgb, var(--card) 72%, transparent) 100%);
+    backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
     border-radius: var(--radius-2xl);
-    padding: 0 2.5rem 2.5rem;
+    padding: 0 2.5rem 2rem;
     box-shadow:
-        0 25px 50px -12px rgb(0, 0, 0, 0.5),
-        inset 0 1px 1px rgb(255, 255, 255, 0.05);
+        0 28px 64px -26px rgb(0, 0, 0, 0.72),
+        0 12px 24px rgb(0, 0, 0, 0.26),
+        inset 0 1px 0 rgb(255, 255, 255, 0.05);
     animation: profile-card-slide-up 0.8s var(--ease-out-back) both;
     overflow: visible;
 }
@@ -10230,38 +10273,43 @@ textarea:focus {
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 1.5rem;
+    gap: 1.1rem;
 }
 
 .profile-avatar-wrapper {
     position: relative;
-    margin-top: -60px;
-    margin-bottom: 1rem;
+    margin-top: -68px;
+    margin-bottom: 0.75rem;
     z-index: 20;
 }
 
 .profile-avatar {
-    width: 160px;
-    height: 160px;
+    width: 164px;
+    height: 164px;
     border-radius: 50%;
-    border: 4px solid var(--background);
+    border: 3px solid color-mix(in srgb, var(--border) 55%, transparent);
     background-color: var(--secondary);
     object-fit: cover;
-    box-shadow: var(--shadow-2xl);
-    transition: transform var(--duration-normal) var(--ease-spring);
+    box-shadow:
+        0 16px 34px rgb(0, 0, 0, 0.45),
+        0 0 0 8px rgb(0, 0, 0, 0.18);
+    transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-out);
 }
 
 .profile-avatar:hover {
-    transform: scale(1.05) rotate(2deg);
+    transform: translateY(-2px) scale(1.03);
+    box-shadow:
+        0 22px 42px rgb(0, 0, 0, 0.52),
+        0 0 0 10px rgb(0, 0, 0, 0.22);
 }
 
 .profile-avatar-ring {
     position: absolute;
-    inset: -8px;
+    inset: -7px;
     border-radius: 50%;
-    border: 2px solid var(--primary);
-    opacity: 0.2;
-    animation: profile-pulse 4s infinite;
+    border: 1.5px solid color-mix(in srgb, var(--primary) 54%, transparent);
+    opacity: 0.34;
+    animation: profile-pulse 3.6s ease-in-out infinite;
 }
 
 @keyframes profile-pulse {
@@ -10286,11 +10334,9 @@ textarea:focus {
     position: absolute;
     bottom: 5px;
     right: 5px;
-    background: #10b981;
-
-    /* Presence Green */
+    background: linear-gradient(135deg, #14b8a6 0%, #10b981 100%);
     color: white;
-    padding: 2px 8px;
+    padding: 2px 9px;
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -10298,9 +10344,9 @@ textarea:focus {
     font-size: 0.65rem;
     font-weight: 800;
     letter-spacing: 0.05em;
-    box-shadow: 0 0 15px rgb(16, 185, 129, 0.4);
+    box-shadow: 0 10px 20px rgb(16, 185, 129, 0.36);
     z-index: 15;
-    border: 2px solid var(--background);
+    border: 2px solid color-mix(in srgb, var(--background) 92%, transparent);
     animation: presence-fade-in 0.3s ease;
 }
 
@@ -10498,14 +10544,14 @@ textarea:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
 }
 
 .profile-display-name {
-    font-size: clamp(2rem, 5vw, 3.5rem);
-    font-weight: 800;
+    font-size: clamp(2rem, 5vw, 3.35rem);
+    font-weight: 850;
     letter-spacing: -0.02em;
-    background: linear-gradient(to bottom, var(--foreground), color-mix(in srgb, var(--foreground) 70%, transparent));
+    background: linear-gradient(180deg, var(--foreground) 0%, color-mix(in srgb, var(--foreground) 72%, transparent) 100%);
     background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0;
@@ -10516,26 +10562,27 @@ textarea:focus {
     font-size: clamp(1rem, 2vw, 1.25rem);
     color: var(--muted-foreground);
     font-weight: 500;
-    opacity: 0.8;
+    opacity: 0.86;
 }
 
 .profile-status {
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
     color: var(--primary);
-    padding: 0.4rem 1rem;
+    padding: 0.45rem 0.95rem;
     border-radius: var(--radius-full);
     font-size: var(--text-sm);
     font-weight: 600;
-    border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
     margin-top: 0.5rem;
+    box-shadow: inset 0 0 0 1px rgb(255, 255, 255, 0.04);
 }
 
 .profile-bio {
     max-width: 600px;
-    line-height: 1.6;
+    line-height: 1.62;
     font-size: clamp(0.9rem, 1.5vw, 1.1rem);
     color: var(--secondary-foreground);
-    opacity: 0.9;
+    opacity: 0.92;
 }
 
 .profile-meta-footer {
@@ -10543,16 +10590,17 @@ textarea:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2rem;
-    margin-top: 1rem;
-    padding-top: 2rem;
-    border-top: 1px solid color-mix(in srgb, var(--border) 20%, transparent);
+    gap: 1.5rem;
+    margin-top: 0.7rem;
+    padding-top: 1.7rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 26%, transparent);
 }
 
 .profile-links {
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
 .profile-links:empty {
@@ -10563,18 +10611,25 @@ textarea:focus {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    color: var(--muted-foreground);
+    color: color-mix(in srgb, var(--muted-foreground) 92%, var(--foreground));
     font-size: var(--text-sm);
-    font-weight: 500;
-    transition: color var(--duration-fast) var(--ease-out);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--card) 62%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 38%, transparent);
+    padding: 0.5rem 0.85rem;
+    border-radius: var(--radius-full);
+    transition: all var(--duration-fast) var(--ease-out);
 }
 
 .profile-link:hover {
     color: var(--foreground);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    border-color: color-mix(in srgb, var(--border) 66%, transparent);
+    transform: translateY(-1px);
 }
 
 .profile-link svg {
-    opacity: 0.6;
+    opacity: 0.72;
 }
 
 /* Sections */
@@ -10583,19 +10638,26 @@ textarea:focus {
     flex-direction: column;
     align-items: center;
     width: 100%;
-    max-width: 900px;
+    max-width: 1020px;
     margin: 0 auto;
-    padding: 0 2rem 5rem;
+    padding: 0 2rem 4.75rem;
     overflow-x: hidden;
 }
 
 .profile-section {
     width: 100%;
-    margin-bottom: 5rem;
+    margin-bottom: 2rem;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
+    align-items: stretch;
+    text-align: left;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--card) 86%, transparent) 0%, color-mix(in srgb, var(--card) 70%, transparent) 100%);
+    border: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+    border-radius: var(--radius-xl);
+    padding: 1.25rem 1.25rem 1.5rem;
+    box-shadow:
+        0 16px 36px -24px rgb(0, 0, 0, 0.58),
+        inset 0 1px 0 rgb(255, 255, 255, 0.04);
 }
 
 .profile-section .card-grid {
@@ -10604,11 +10666,12 @@ textarea:focus {
 
 .section-header-flex {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
-    margin-bottom: 3rem;
-    text-align: center;
+    margin-bottom: 1rem;
+    text-align: left;
 }
 
 .lastfm-badge {
@@ -10626,11 +10689,11 @@ textarea:focus {
 
 /* Glass Button */
 .btn-glass {
-    background: color-mix(in srgb, var(--foreground) 5%, transparent);
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
     backdrop-filter: blur(6px);
-    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
     color: var(--foreground);
-    padding: 0.6rem 1.2rem;
+    padding: 0.65rem 1.2rem;
     border-radius: var(--radius-lg);
     font-size: var(--text-sm);
     font-weight: 600;
@@ -10639,8 +10702,8 @@ textarea:focus {
 }
 
 .btn-glass:hover {
-    background: color-mix(in srgb, var(--foreground) 10%, transparent);
-    border-color: color-mix(in srgb, var(--border) 60%, transparent);
+    background: color-mix(in srgb, var(--foreground) 14%, transparent);
+    border-color: color-mix(in srgb, var(--border) 72%, transparent);
     transform: translateY(-2px);
 }
 
@@ -10650,23 +10713,23 @@ textarea:focus {
     }
 
     .profile-banner-wrapper {
-        height: 200px;
+        height: 228px;
     }
 
     .profile-card {
-        width: calc(100% - 1rem);
-        padding: 0 1.25rem 1.25rem;
-        margin-top: -40px;
+        width: calc(100% - 1.25rem);
+        padding: 0 1.1rem 1.2rem;
+        margin-top: -52px;
         border-radius: var(--radius-xl);
     }
 
     .profile-avatar-wrapper {
-        margin-top: -50px;
+        margin-top: -56px;
     }
 
     .profile-avatar {
-        width: 100px;
-        height: 100px;
+        width: 110px;
+        height: 110px;
     }
 
     .profile-avatar-ring {
@@ -10717,11 +10780,12 @@ textarea:focus {
     }
 
     .profile-section {
-        margin-bottom: 3rem;
+        margin-bottom: 1.2rem;
+        padding: 1rem 0.95rem 1.15rem;
     }
 
     .section-header-flex {
-        margin-bottom: 1.5rem;
+        margin-bottom: 0.9rem;
     }
 
     .profile-section .card-grid {
@@ -10744,25 +10808,25 @@ textarea:focus {
     }
 
     .profile-banner-wrapper {
-        height: 160px;
+        height: 180px;
     }
 
     .profile-card {
         width: 100%;
         padding: 0 1rem 1rem;
-        margin-top: -35px;
+        margin-top: -44px;
         border-radius: var(--radius-lg);
         border-left: none;
         border-right: none;
     }
 
     .profile-avatar-wrapper {
-        margin-top: -40px;
+        margin-top: -48px;
     }
 
     .profile-avatar {
-        width: 80px;
-        height: 80px;
+        width: 92px;
+        height: 92px;
     }
 
     .profile-display-name {
@@ -10776,6 +10840,11 @@ textarea:focus {
 
     .profile-section .card-grid {
         grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    .profile-section {
+        border-radius: var(--radius-lg);
+        padding: 0.92rem 0.78rem 1rem;
     }
 
     .favorite-album-item .card {
@@ -10954,3 +11023,20 @@ textarea:focus {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
 }
+/* Hide default clear search buttons */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+    display: none;
+    -webkit-appearance: none;
+}
+

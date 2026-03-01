@@ -46,9 +46,13 @@ export function createRouter(ui) {
         };
 
         switch (page) {
-            case 'search':
-                await ui.renderSearchPage(decodeURIComponent(param));
+            case 'search': {
+                const searchSegments = param ? param.split('/') : [];
+                const query = decodeURIComponent(searchSegments[0] || '');
+                const activeTab = decodeURIComponent(searchSegments[1] || 'tracks');
+                await ui.renderSearchPage(query, activeTab);
                 break;
+            }
             case 'album': {
                 const { provider, id } = extractProviderAndId(param);
                 await ui.renderAlbumPage(id, provider);
@@ -91,13 +95,16 @@ export function createRouter(ui) {
                 await ui.renderProfilePage();
                 break;
             case 'library':
-                await ui.renderLibraryPage();
+                await ui.renderLibraryPage(decodeURIComponent(param || 'tracks'));
                 break;
             case 'recent':
                 await ui.renderRecentPage();
                 break;
             case 'friends':
                 await ui.renderFriendsPage(param);
+                break;
+            case 'settings':
+                ui.showPage('settings');
                 break;
             case 'unreleased':
                 if (param) {

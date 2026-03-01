@@ -35,6 +35,7 @@ const collections = [
             { key: 'about', type: 'string', size: 5000, required: false },
             { key: 'website', type: 'string', size: 500, required: false },
             { key: 'lastfm_username', type: 'string', size: 255, required: false },
+            { key: 'profile_data_source', type: 'string', size: 64, required: false },
             { key: 'library', type: 'string', size: 65535, required: false, x_large: true }, // Big JSON
             { key: 'history', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'user_playlists', type: 'string', size: 65535, required: false, x_large: true },

@@ -506,11 +506,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const nextTrack = player.getNextTrack();
                 ui.showFullscreenCover(player.currentTrack, nextTrack, lyricsManager, audioPlayer);
             }
-        } else {
-            // Default to 'album' mode - navigate to album
+        } else if (mode === 'album') {
             if (player.currentTrack.album?.id) {
                 navigate(`/album/${player.currentTrack.album.id}`);
             }
+        } else {
+            const nextTrack = player.getNextTrack();
+            ui.showFullscreenCover(player.currentTrack, nextTrack, lyricsManager, audioPlayer);
         }
     });
 
@@ -2506,60 +2508,56 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    audioPlayer.addEventListener('play', () => {
-        updateTabTitle(player);
+    const syncNowPlayingCoverRotation = () => {
+        const coverEl = document.querySelector('.now-playing-bar .cover-shell');
+        if (!coverEl) return;
 
-        // Handle rotating cover
-        const coverEl = document.querySelector('.now-playing-bar .cover');
-        if (coverEl && rotatingCoverSettings.isEnabled()) {
-            coverEl.classList.add('rotating');
+        if (!rotatingCoverSettings.isEnabled()) {
+            coverEl.classList.remove('rotating', 'paused');
+            return;
+        }
+
+        coverEl.classList.add('rotating');
+        if (audioPlayer.paused) {
+            coverEl.classList.add('paused');
+        } else {
             coverEl.classList.remove('paused');
         }
+    };
 
-        // Handle fullscreen rotating disc
+    const syncFullscreenDiscRotation = () => {
         const vinylContainer = document.getElementById('vinyl-disc-container');
-        if (vinylContainer && rotatingCoverSettings.isEnabled()) {
-            vinylContainer.classList.add('rotating-disc');
+        if (!vinylContainer) return;
+
+        if (!rotatingCoverSettings.isEnabled()) {
+            vinylContainer.classList.remove('rotating-disc', 'paused', 'spin-reverse');
+            return;
+        }
+
+        vinylContainer.classList.add('rotating-disc');
+        vinylContainer.classList.remove('spin-reverse');
+        if (audioPlayer.paused) {
+            vinylContainer.classList.add('paused');
+        } else {
             vinylContainer.classList.remove('paused');
         }
+    };
+
+    audioPlayer.addEventListener('play', () => {
+        updateTabTitle(player);
+        syncNowPlayingCoverRotation();
+        syncFullscreenDiscRotation();
     });
 
     audioPlayer.addEventListener('pause', () => {
-        // Handle rotating cover - pause animation
-        const coverEl = document.querySelector('.now-playing-bar .cover');
-        if (coverEl && rotatingCoverSettings.isEnabled()) {
-            coverEl.classList.add('paused');
-        }
-
-        // Handle fullscreen rotating disc - pause animation
-        const vinylContainer = document.getElementById('vinyl-disc-container');
-        if (vinylContainer && rotatingCoverSettings.isEnabled()) {
-            vinylContainer.classList.add('paused');
-        }
+        syncNowPlayingCoverRotation();
+        syncFullscreenDiscRotation();
     });
 
     // Listen for rotating cover setting changes
-    window.addEventListener('rotating-cover-changed', (e) => {
-        const coverEl = document.querySelector('.now-playing-bar .cover');
-        if (coverEl) {
-            if (e.detail.enabled && !audioPlayer.paused) {
-                coverEl.classList.add('rotating');
-                coverEl.classList.remove('paused');
-            } else if (!e.detail.enabled) {
-                coverEl.classList.remove('rotating', 'paused');
-            }
-        }
-
-        // Handle fullscreen rotating disc
-        const vinylContainer = document.getElementById('vinyl-disc-container');
-        if (vinylContainer) {
-            if (e.detail.enabled && !audioPlayer.paused) {
-                vinylContainer.classList.add('rotating-disc');
-                vinylContainer.classList.remove('paused');
-            } else if (!e.detail.enabled) {
-                vinylContainer.classList.remove('rotating-disc', 'paused');
-            }
-        }
+    window.addEventListener('rotating-cover-changed', () => {
+        syncNowPlayingCoverRotation();
+        syncFullscreenDiscRotation();
     });
 
     // PWA Update Logic

@@ -115,11 +115,53 @@ export class QobuzAPI {
     }
 
     // Get track details
-    async getTrack(_id) {
-        // Qobuz doesn't have a direct track endpoint
-        // Track metadata comes from search/album endpoints
-        // For playback, use getStreamUrl directly
-        throw new Error('Qobuz getTrack not implemented - use getStreamUrl for playback');
+    async getTrack(id) {
+        try {
+            const cleanId = String(id).replace(/^q:/, '');
+            const data = await this.fetchWithRetry(`/get-music?q=${encodeURIComponent(cleanId)}&offset=0&limit=20`);
+
+            if (!data.success || !data.data) {
+                throw new Error('Track not found');
+            }
+
+            const trackItems = data.data.tracks?.items || [];
+            const rawTrack =
+                trackItems.find((item) => String(item?.id) === String(cleanId)) ||
+                trackItems.find((item) => String(item?.id) === String(cleanId).replace(/^q:/, '')) ||
+                null;
+
+            if (!rawTrack) {
+                throw new Error('Track not found');
+            }
+
+            let albumData = rawTrack.album || null;
+            if (rawTrack.album?.id) {
+                try {
+                    const albumResponse = await this.fetchWithRetry(
+                        `/get-album?album_id=${encodeURIComponent(rawTrack.album.id)}`
+                    );
+                    if (albumResponse?.success && albumResponse?.data) {
+                        albumData = albumResponse.data;
+                    }
+                } catch {
+                    // Keep fallback album data from track payload
+                }
+            }
+
+            const track = this.transformTrack(rawTrack, albumData);
+
+            return {
+                track,
+                info: {
+                    audioQuality: track.audioQuality,
+                    provider: 'qobuz',
+                },
+                originalTrackUrl: null,
+            };
+        } catch (error) {
+            console.error('Qobuz getTrack failed:', error);
+            throw error;
+        }
     }
 
     // Get album details

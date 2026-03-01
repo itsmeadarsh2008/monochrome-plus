@@ -876,7 +876,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
         showLdacBtn.addEventListener('click', () => {
             ldacModal.classList.add('active');
         });
-        const closeLdac = () => { ldacModal.classList.remove('active'); };
+        const closeLdac = () => {
+            ldacModal.classList.remove('active');
+        };
         if (closeLdacBtn) closeLdacBtn.addEventListener('click', closeLdac);
         if (ldacOkBtn) ldacOkBtn.addEventListener('click', closeLdac);
         ldacModal.addEventListener('click', (e) => {
@@ -3385,29 +3387,9 @@ function setupSettingsSearch() {
     const searchInput = document.getElementById('settings-search-input');
     if (!searchInput) return;
 
-    // Setup clear button
-    const clearBtn = searchInput.parentElement.querySelector('.search-clear-btn');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            searchInput.dispatchEvent(new Event('input'));
-            searchInput.focus();
-        });
-    }
-
-    // Show/hide clear button based on input
-    const updateClearButton = () => {
-        if (clearBtn) {
-            clearBtn.style.display = searchInput.value ? 'flex' : 'none';
-        }
-    };
-
     searchInput.addEventListener('input', () => {
-        updateClearButton();
         filterSettings(searchInput.value.toLowerCase().trim());
     });
-
-    searchInput.addEventListener('focus', updateClearButton);
 }
 
 function filterSettings(query) {

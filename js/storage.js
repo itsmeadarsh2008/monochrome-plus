@@ -418,17 +418,36 @@ export const lastFMStorage = {
 
 export const nowPlayingSettings = {
     STORAGE_KEY: 'now-playing-mode',
+    VALID_MODES: new Set(['cover', 'lyrics', 'album']),
+
+    normalizeMode(mode) {
+        if (typeof mode !== 'string') return 'cover';
+
+        const normalized = mode.trim().toLowerCase();
+        if (normalized === 'fullscreen' || normalized === 'full-screen' || normalized === 'full_screen') {
+            return 'cover';
+        }
+
+        return this.VALID_MODES.has(normalized) ? normalized : 'cover';
+    },
 
     getMode() {
         try {
-            return localStorage.getItem(this.STORAGE_KEY) || 'cover';
+            const rawMode = localStorage.getItem(this.STORAGE_KEY);
+            const mode = this.normalizeMode(rawMode);
+
+            if (rawMode !== mode) {
+                localStorage.setItem(this.STORAGE_KEY, mode);
+            }
+
+            return mode;
         } catch {
             return 'cover';
         }
     },
 
     setMode(mode) {
-        localStorage.setItem(this.STORAGE_KEY, mode);
+        localStorage.setItem(this.STORAGE_KEY, this.normalizeMode(mode));
     },
 };
 

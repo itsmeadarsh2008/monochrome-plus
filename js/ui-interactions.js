@@ -447,6 +447,23 @@ export function initializeUIInteractions(player, api, ui) {
             const prefix = page.id === 'page-library' ? 'library-tab-' : 'search-tab-';
             const contentId = `${prefix}${tab.dataset.tab}`;
             document.getElementById(contentId)?.classList.add('active');
+
+            const currentPath = window.location.pathname;
+            if (page.id === 'page-library') {
+                const nextPath = `/library/${encodeURIComponent(tab.dataset.tab || 'tracks')}`;
+                if (currentPath !== nextPath) {
+                    window.history.replaceState({}, '', nextPath);
+                }
+            } else if (page.id === 'page-search') {
+                const segments = currentPath.split('/').filter(Boolean);
+                const encodedQuery = segments[0] === 'search' ? segments[1] || '' : '';
+                const nextPath = encodedQuery
+                    ? `/search/${encodedQuery}/${encodeURIComponent(tab.dataset.tab || 'tracks')}`
+                    : '/search';
+                if (currentPath !== nextPath) {
+                    window.history.replaceState({}, '', nextPath);
+                }
+            }
         });
     });
 
@@ -465,6 +482,11 @@ export function initializeUIInteractions(player, api, ui) {
             import('./storage.js').then(({ settingsUiState }) => {
                 settingsUiState.setActiveTab(tab.dataset.tab);
             });
+
+            const nextPath = `/settings/${encodeURIComponent(tab.dataset.tab || 'appearance')}`;
+            if (window.location.pathname !== nextPath) {
+                window.history.replaceState({}, '', nextPath);
+            }
         });
     });
 

@@ -118,6 +118,8 @@ export class UIRenderer {
         this.fullscreenDiscScrubCleanup = null;
         this._fullscreenAudioPlayer = null;
         this._fullscreenDiscResizeHandler = null;
+        this._fullscreenDiscRotationRaf = null;
+        this._fullscreenDiscMotionState = null;
 
         // Listen for dynamic color reset events
         window.addEventListener('reset-dynamic-color', () => {
@@ -859,27 +861,9 @@ export class UIRenderer {
         if (!inputElement) return;
 
         const clearBtn = inputElement.parentElement?.querySelector(clearBtnSelector);
-        if (!clearBtn) return;
-
-        // Remove old listener if exists
-        const oldListener = clearBtn._clearListener;
-        if (oldListener) clearBtn.removeEventListener('click', oldListener);
-
-        // Toggle visibility based on input value
-        const toggleVisibility = () => {
-            clearBtn.style.display = inputElement.value.trim() ? 'flex' : 'none';
-        };
-
-        // Clear input on click
-        const clearListener = () => {
-            inputElement.value = '';
-            inputElement.dispatchEvent(new Event('input'));
-            inputElement.focus();
-        };
-
-        inputElement.addEventListener('input', toggleVisibility);
-        clearBtn._clearListener = clearListener;
-        clearBtn.addEventListener('click', clearListener);
+        if (clearBtn) {
+            clearBtn.remove();
+        }
     }
 
     setupTracklistSearch(
@@ -1022,18 +1006,25 @@ export class UIRenderer {
 
         this.updateFullscreenMetadata(track, nextTrack);
 
-        // Apply rotating disc effect if enabled
+        // Apply fullscreen rotating disc effect based on rotating cover setting.
         const vinylContainer = document.getElementById('vinyl-disc-container');
-        if (fullscreenCover && vinylContainer && rotatingCoverSettings.isEnabled()) {
-            vinylContainer.classList.add('rotating-disc');
-            if (audioPlayer && !audioPlayer.paused) {
-                vinylContainer.classList.remove('paused');
+        const shouldRotateDisc = rotatingCoverSettings.isEnabled();
+        if (fullscreenCover && vinylContainer) {
+            vinylContainer.classList.remove('spin-reverse');
+            if (shouldRotateDisc) {
+                vinylContainer.classList.add('rotating-disc');
+                if (audioPlayer && !audioPlayer.paused) {
+                    vinylContainer.classList.remove('paused');
+                } else {
+                    vinylContainer.classList.add('paused');
+                }
             } else {
-                vinylContainer.classList.add('paused');
+                vinylContainer.classList.remove('rotating-disc', 'paused');
             }
         }
 
         this._fullscreenAudioPlayer = audioPlayer;
+        this.startFullscreenDiscRotationSync(audioPlayer);
 
         if (nextTrack) {
             nextTrackEl.classList.remove('animate-in');
@@ -1062,11 +1053,15 @@ export class UIRenderer {
         const playerBar = document.querySelector('.now-playing-bar');
         if (playerBar) playerBar.style.display = 'none';
 
-        this.setupFullscreenControls(audioPlayer);
-
         overlay.style.display = 'flex';
         this.startAdaptiveFullscreenDiscSizing();
         this.refreshFullscreenDiscScrubbing();
+
+        try {
+            this.setupFullscreenControls(audioPlayer);
+        } catch (error) {
+            console.warn('Failed to initialize fullscreen controls:', error);
+        }
 
         const startVisualizer = () => {
             if (!visualizerSettings.isEnabled()) {
@@ -1119,12 +1114,13 @@ export class UIRenderer {
             this.fullscreenDiscScrubCleanup = null;
         }
         this.stopAdaptiveFullscreenDiscSizing();
+        this.stopFullscreenDiscRotationSync();
         this._fullscreenAudioPlayer = null;
 
-        // Remove rotating disc class
+        // Remove rotating disc classes
         const vinylContainer = document.getElementById('vinyl-disc-container');
         if (vinylContainer) {
-            vinylContainer.classList.remove('rotating-disc', 'paused');
+            vinylContainer.classList.remove('rotating-disc', 'paused', 'spin-reverse');
         }
 
         const playerBar = document.querySelector('.now-playing-bar');
@@ -1220,6 +1216,118 @@ export class UIRenderer {
         this.fullscreenDiscScrubCleanup = this.setupFullscreenDiscScrubbing(this._fullscreenAudioPlayer);
     }
 
+    /*
+     * Fullscreen DJ disc motion uses a playback-synced RAF loop.
+     * Scrub/inertia temporarily take control and hand back with preserved phase.
+     */
+
+    startFullscreenDiscRotationSync(_audioPlayer) {
+        const audioPlayer = _audioPlayer || this._fullscreenAudioPlayer;
+        const vinylContainer = document.getElementById('vinyl-disc-container');
+        if (!audioPlayer || !vinylContainer) return;
+
+        this.stopFullscreenDiscRotationSync();
+
+        const parseSecondsPerDegree = () => {
+            const durationVar = getComputedStyle(vinylContainer).getPropertyValue('--vinyl-rotation-duration').trim();
+            if (durationVar.endsWith('s')) {
+                const secondsPerRevolution = parseFloat(durationVar.slice(0, -1));
+                if (Number.isFinite(secondsPerRevolution) && secondsPerRevolution > 0) {
+                    return secondsPerRevolution / 360;
+                }
+            }
+
+            return 2.45 / 360;
+        };
+
+        const getCurrentRotationDegrees = () => {
+            const computedTransform = getComputedStyle(vinylContainer).transform;
+            if (!computedTransform || computedTransform === 'none') return 0;
+
+            const matrixValues = computedTransform.match(/matrix\(([^)]+)\)/);
+            if (matrixValues?.[1]) {
+                const [a, b] = matrixValues[1].split(',').map((value) => parseFloat(value.trim()));
+                if (Number.isFinite(a) && Number.isFinite(b)) {
+                    return (Math.atan2(b, a) * 180) / Math.PI;
+                }
+            }
+
+            const matrix3dValues = computedTransform.match(/matrix3d\(([^)]+)\)/);
+            if (matrix3dValues?.[1]) {
+                const values = matrix3dValues[1].split(',').map((value) => parseFloat(value.trim()));
+                const a = values[0];
+                const b = values[1];
+                if (Number.isFinite(a) && Number.isFinite(b)) {
+                    return (Math.atan2(b, a) * 180) / Math.PI;
+                }
+            }
+
+            return 0;
+        };
+
+        let motionState = this._fullscreenDiscMotionState;
+        if (!motionState) {
+            motionState = {
+                phaseOffsetDeg: 0,
+                hasPhase: false,
+                rotationDeg: 0,
+                isUserControlling: false,
+                isInertiaActive: false,
+                secondsPerDegree: parseSecondsPerDegree(),
+            };
+            this._fullscreenDiscMotionState = motionState;
+        }
+
+        motionState.secondsPerDegree = parseSecondsPerDegree();
+
+        const tick = () => {
+            if (!this.isFullscreenCoverOpen()) {
+                this._fullscreenDiscRotationRaf = null;
+                return;
+            }
+
+            if (!rotatingCoverSettings.isEnabled()) {
+                vinylContainer.style.transform = '';
+                vinylContainer.classList.remove('spin-reverse');
+                motionState.hasPhase = false;
+                this._fullscreenDiscRotationRaf = requestAnimationFrame(tick);
+                return;
+            }
+
+            if (!motionState.isUserControlling && !motionState.isInertiaActive) {
+                const safeCurrentTime = Number.isFinite(audioPlayer.currentTime) ? audioPlayer.currentTime : 0;
+
+                if (!motionState.hasPhase) {
+                    const currentRotation = getCurrentRotationDegrees();
+                    motionState.rotationDeg = currentRotation;
+                    motionState.phaseOffsetDeg = currentRotation - safeCurrentTime / motionState.secondsPerDegree;
+                    motionState.hasPhase = true;
+                }
+
+                const nextRotation = motionState.phaseOffsetDeg + safeCurrentTime / motionState.secondsPerDegree;
+                motionState.rotationDeg = nextRotation;
+                vinylContainer.style.transform = `rotate(${nextRotation.toFixed(2)}deg)`;
+                vinylContainer.classList.remove('spin-reverse');
+            }
+
+            this._fullscreenDiscRotationRaf = requestAnimationFrame(tick);
+        };
+
+        this._fullscreenDiscRotationRaf = requestAnimationFrame(tick);
+    }
+
+    stopFullscreenDiscRotationSync() {
+        if (this._fullscreenDiscRotationRaf) {
+            cancelAnimationFrame(this._fullscreenDiscRotationRaf);
+            this._fullscreenDiscRotationRaf = null;
+        }
+
+        if (this._fullscreenDiscMotionState) {
+            this._fullscreenDiscMotionState.isUserControlling = false;
+            this._fullscreenDiscMotionState.isInertiaActive = false;
+        }
+    }
+
     setupFullscreenDiscScrubbing(audioPlayer) {
         const vinylContainer = document.getElementById('vinyl-disc-container');
         const fullscreenCover = document.getElementById('fullscreen-cover-image');
@@ -1228,8 +1336,7 @@ export class UIRenderer {
         const isEnabled = rotatingCoverSettings.isEnabled() && rotatingCoverSettings.isDiscScratchEnabled();
 
         const resetDiscScrubState = () => {
-            vinylContainer.classList.remove('disc-scrub-enabled', 'disc-scrubbing');
-            vinylContainer.style.removeProperty('transform');
+            vinylContainer.classList.remove('disc-scrub-enabled', 'disc-scrubbing', 'spin-reverse');
             fullscreenCover.style.removeProperty('pointer-events');
         };
 
@@ -1242,20 +1349,45 @@ export class UIRenderer {
         // Prevent fullscreen close-on-cover-click while scrubbing is enabled.
         fullscreenCover.style.pointerEvents = 'none';
 
-        const SECONDS_PER_DEGREE = 0.05;
+        let motionState = this._fullscreenDiscMotionState;
+        if (!motionState) {
+            motionState = {
+                phaseOffsetDeg: 0,
+                hasPhase: false,
+                rotationDeg: 0,
+                isUserControlling: false,
+                isInertiaActive: false,
+                secondsPerDegree: 2.45 / 360,
+            };
+            this._fullscreenDiscMotionState = motionState;
+        }
+
+        if (!(Number.isFinite(motionState.secondsPerDegree) && motionState.secondsPerDegree > 0)) {
+            motionState.secondsPerDegree = 2.45 / 360;
+        }
+
+        const SECONDS_PER_DEGREE = motionState.secondsPerDegree;
+        const SCRUB_LERP = 0.34;
+        const INERTIA_DECAY = 0.9;
+        const INERTIA_STOP_THRESHOLD = 0.08;
         let dragging = false;
         let activePointerId = null;
         let lastAngle = 0;
-        let visualRotation = 0;
+        let targetRotation = 0;
+        let renderedRotation = 0;
+        let angularVelocity = 0;
+        let lastPointerTime = 0;
         let pendingSeekSeconds = 0;
         let seekRafId = null;
+        let scrubVisualRafId = null;
+        let inertiaRafId = null;
 
         const getCurrentRotationDegrees = () => {
             const computedTransform = getComputedStyle(vinylContainer).transform;
             if (!computedTransform || computedTransform === 'none') return 0;
 
             const matrixValues = computedTransform.match(/matrix\(([^)]+)\)/);
-            if (matrixValues && matrixValues[1]) {
+            if (matrixValues?.[1]) {
                 const [a, b] = matrixValues[1].split(',').map((value) => parseFloat(value.trim()));
                 if (Number.isFinite(a) && Number.isFinite(b)) {
                     return (Math.atan2(b, a) * 180) / Math.PI;
@@ -1263,7 +1395,7 @@ export class UIRenderer {
             }
 
             const matrix3dValues = computedTransform.match(/matrix3d\(([^)]+)\)/);
-            if (matrix3dValues && matrix3dValues[1]) {
+            if (matrix3dValues?.[1]) {
                 const values = matrix3dValues[1].split(',').map((value) => parseFloat(value.trim()));
                 const a = values[0];
                 const b = values[1];
@@ -1314,23 +1446,103 @@ export class UIRenderer {
             seekRafId = requestAnimationFrame(flushPendingSeek);
         };
 
-        const stopDragging = () => {
-            if (!dragging) return;
-            dragging = false;
+        const startScrubVisualLoop = () => {
+            if (scrubVisualRafId) return;
 
+            const tick = () => {
+                const delta = targetRotation - renderedRotation;
+                if (Math.abs(delta) > 0.01) {
+                    renderedRotation += delta * SCRUB_LERP;
+                } else {
+                    renderedRotation = targetRotation;
+                }
+
+                vinylContainer.style.transform = `rotate(${renderedRotation.toFixed(2)}deg)`;
+
+                if (dragging || inertiaRafId || Math.abs(targetRotation - renderedRotation) > 0.02) {
+                    scrubVisualRafId = requestAnimationFrame(tick);
+                } else {
+                    scrubVisualRafId = null;
+                }
+            };
+
+            scrubVisualRafId = requestAnimationFrame(tick);
+        };
+
+        const releaseScrubControl = () => {
             if (seekRafId) {
                 cancelAnimationFrame(seekRafId);
                 seekRafId = null;
             }
             flushPendingSeek();
 
-            vinylContainer.classList.remove('disc-scrubbing');
-            vinylContainer.style.removeProperty('transform');
-            if (!audioPlayer.paused && rotatingCoverSettings.isEnabled()) {
+            motionState.rotationDeg = renderedRotation;
+            const safeCurrentTime = Number.isFinite(audioPlayer.currentTime) ? audioPlayer.currentTime : 0;
+            motionState.phaseOffsetDeg = renderedRotation - safeCurrentTime / SECONDS_PER_DEGREE;
+            motionState.hasPhase = true;
+            motionState.isUserControlling = false;
+            motionState.isInertiaActive = false;
+
+            vinylContainer.classList.remove('spin-reverse');
+
+            if (!audioPlayer.paused) {
                 vinylContainer.classList.remove('paused');
             } else {
                 vinylContainer.classList.add('paused');
             }
+        };
+
+        const startInertiaSpin = () => {
+            if (inertiaRafId) {
+                cancelAnimationFrame(inertiaRafId);
+                inertiaRafId = null;
+            }
+
+            if (Math.abs(angularVelocity) < INERTIA_STOP_THRESHOLD) {
+                releaseScrubControl();
+                return;
+            }
+
+            motionState.isInertiaActive = true;
+
+            const inertiaTick = () => {
+                angularVelocity *= INERTIA_DECAY;
+
+                if (Math.abs(angularVelocity) < INERTIA_STOP_THRESHOLD) {
+                    inertiaRafId = null;
+                    releaseScrubControl();
+                    return;
+                }
+
+                targetRotation += angularVelocity;
+
+                if (angularVelocity < 0) {
+                    vinylContainer.classList.add('spin-reverse');
+                } else {
+                    vinylContainer.classList.remove('spin-reverse');
+                }
+
+                pendingSeekSeconds += angularVelocity * SECONDS_PER_DEGREE;
+                scheduleSeekFlush();
+                startScrubVisualLoop();
+                inertiaRafId = requestAnimationFrame(inertiaTick);
+            };
+
+            inertiaRafId = requestAnimationFrame(inertiaTick);
+        };
+
+        const stopDragging = (skipInertia = false) => {
+            if (!dragging) return;
+            dragging = false;
+            motionState.isUserControlling = false;
+
+            vinylContainer.classList.remove('disc-scrubbing');
+            if (skipInertia) {
+                releaseScrubControl();
+                return;
+            }
+
+            startInertiaSpin();
         };
 
         const onPointerDown = (event) => {
@@ -1340,16 +1552,29 @@ export class UIRenderer {
             if (startAngle === null) return;
 
             dragging = true;
+            motionState.isUserControlling = true;
+            motionState.isInertiaActive = false;
             activePointerId = event.pointerId;
             lastAngle = startAngle;
-            visualRotation = getCurrentRotationDegrees();
+            const currentRotation = getCurrentRotationDegrees();
+            targetRotation = currentRotation;
+            renderedRotation = currentRotation;
+            motionState.rotationDeg = currentRotation;
+            angularVelocity = 0;
+            lastPointerTime = performance.now();
             pendingSeekSeconds = 0;
+
+            if (inertiaRafId) {
+                cancelAnimationFrame(inertiaRafId);
+                inertiaRafId = null;
+            }
 
             if (event.pointerId !== undefined && vinylContainer.setPointerCapture) {
                 vinylContainer.setPointerCapture(event.pointerId);
             }
 
-            vinylContainer.classList.add('disc-scrubbing', 'paused');
+            vinylContainer.classList.add('disc-scrubbing');
+            startScrubVisualLoop();
             event.preventDefault();
         };
 
@@ -1362,9 +1587,20 @@ export class UIRenderer {
             const deltaAngle = normalizeDeltaAngle(angle - lastAngle);
             if (Math.abs(deltaAngle) < 0.05) return;
 
+            if (deltaAngle < 0) {
+                vinylContainer.classList.add('spin-reverse');
+            } else {
+                vinylContainer.classList.remove('spin-reverse');
+            }
+
+            const now = performance.now();
+            const frameUnit = Math.max(0.5, (now - lastPointerTime) / (1000 / 60));
+            angularVelocity = deltaAngle / frameUnit;
+            lastPointerTime = now;
+
             lastAngle = angle;
-            visualRotation += deltaAngle;
-            vinylContainer.style.transform = `rotate(${visualRotation.toFixed(2)}deg)`;
+            targetRotation += deltaAngle;
+            startScrubVisualLoop();
 
             pendingSeekSeconds += deltaAngle * SECONDS_PER_DEGREE;
             scheduleSeekFlush();
@@ -1396,7 +1632,20 @@ export class UIRenderer {
         vinylContainer.addEventListener('pointercancel', onPointerCancel);
 
         return () => {
-            stopDragging();
+            if (inertiaRafId) {
+                cancelAnimationFrame(inertiaRafId);
+                inertiaRafId = null;
+            }
+            if (scrubVisualRafId) {
+                cancelAnimationFrame(scrubVisualRafId);
+                scrubVisualRafId = null;
+            }
+            if (seekRafId) {
+                cancelAnimationFrame(seekRafId);
+                seekRafId = null;
+            }
+            flushPendingSeek();
+            stopDragging(true);
             vinylContainer.removeEventListener('pointerdown', onPointerDown);
             vinylContainer.removeEventListener('pointermove', onPointerMove);
             vinylContainer.removeEventListener('pointerup', onPointerUp);
@@ -1421,6 +1670,21 @@ export class UIRenderer {
         const fsCastBtn = document.getElementById('fs-cast-btn');
         const fsQueueBtn = document.getElementById('fs-queue-btn');
         const artistEl = document.getElementById('fullscreen-track-artist');
+
+        if (
+            !audioPlayer ||
+            !playBtn ||
+            !prevBtn ||
+            !nextBtn ||
+            !shuffleBtn ||
+            !repeatBtn ||
+            !progressBar ||
+            !progressFill ||
+            !currentTimeEl ||
+            !totalDurationEl
+        ) {
+            return;
+        }
 
         if (artistEl) {
             artistEl.style.cursor = 'pointer';
@@ -1718,11 +1982,68 @@ export class UIRenderer {
 
         if (pageId === 'settings') {
             this.renderApiSettings();
+            this.applySettingsTabFromPath();
         }
     }
 
-    async renderLibraryPage() {
+    activateSearchTab(tabName = 'tracks') {
+        const validTabs = new Set(['tracks', 'albums', 'artists', 'playlists', 'profiles']);
+        const selectedTab = validTabs.has(tabName) ? tabName : 'tracks';
+
+        const searchPage = document.getElementById('page-search');
+        if (!searchPage) return selectedTab;
+
+        searchPage.querySelectorAll('.search-tab').forEach((tab) => {
+            tab.classList.toggle('active', tab.dataset.tab === selectedTab);
+        });
+
+        searchPage.querySelectorAll('.search-tab-content').forEach((content) => {
+            content.classList.toggle('active', content.id === `search-tab-${selectedTab}`);
+        });
+
+        return selectedTab;
+    }
+
+    activateLibraryTab(tabName = 'tracks') {
+        const validTabs = new Set(['tracks', 'albums', 'artists', 'playlists', 'local']);
+        const selectedTab = validTabs.has(tabName) ? tabName : 'tracks';
+
+        const libraryPage = document.getElementById('page-library');
+        if (!libraryPage) return selectedTab;
+
+        libraryPage.querySelectorAll('.search-tab').forEach((tab) => {
+            tab.classList.toggle('active', tab.dataset.tab === selectedTab);
+        });
+
+        libraryPage.querySelectorAll('.search-tab-content').forEach((content) => {
+            content.classList.toggle('active', content.id === `library-tab-${selectedTab}`);
+        });
+
+        return selectedTab;
+    }
+
+    applySettingsTabFromPath() {
+        const settingsPage = document.getElementById('page-settings');
+        if (!settingsPage) return;
+
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        const routeTab = pathSegments[0] === 'settings' ? decodeURIComponent(pathSegments[1] || '') : '';
+        if (!routeTab) return;
+
+        const targetTab = settingsPage.querySelector(`.settings-tab[data-tab="${routeTab}"]`);
+        const targetContent = document.getElementById(`settings-tab-${routeTab}`);
+        if (!targetTab || !targetContent) return;
+
+        settingsPage.querySelectorAll('.settings-tab').forEach((tab) => tab.classList.remove('active'));
+        settingsPage.querySelectorAll('.settings-tab-content').forEach((content) => content.classList.remove('active'));
+
+        targetTab.classList.add('active');
+        targetContent.classList.add('active');
+    }
+
+    async renderLibraryPage(activeTab = 'tracks') {
         this.showPage('library');
+        this.activateLibraryTab(activeTab);
 
         const tracksContainer = document.getElementById('library-tracks-container');
         const albumsContainer = document.getElementById('library-albums-container');
@@ -2982,8 +3303,9 @@ export class UIRenderer {
         return items.filter((item) => !favoriteIds.has(item.id));
     }
 
-    async renderSearchPage(query) {
+    async renderSearchPage(query, activeTab = 'tracks') {
         this.showPage('search');
+        this.activateSearchTab(activeTab);
         document.getElementById('search-results-title').textContent = `Search Results for "${query}"`;
 
         const tracksContainer = document.getElementById('search-tracks-container');
@@ -4690,7 +5012,9 @@ export class UIRenderer {
                         try {
                             const profile = await syncManager.getProfile(friend.username);
                             if (profile?.status) friend.status = profile.status;
-                        } catch {}
+                        } catch (_error) {
+                            // Ignore per-profile lookup failures and keep rendering available friend data.
+                        }
                     })
                 );
             }
@@ -5576,7 +5900,44 @@ export class UIRenderer {
         }
 
         try {
-            const { track } = await this.api.getTrack(trackId, undefined, provider);
+            let trackData = null;
+            const resolvedProvider = provider || 'tidal';
+
+            if (provider) {
+                trackData = await this.api.getTrack(trackId, undefined, provider);
+            } else {
+                trackData = await this.api.getTrack(trackId, undefined, 'tidal');
+            }
+
+            let track = trackData?.track;
+
+            const hasDisplayMetadata = Boolean(
+                track?.title &&
+                (track?.artist || (Array.isArray(track?.artists) && track.artists.length > 0)) &&
+                (track?.album?.title || track?.album?.id)
+            );
+
+            if (!hasDisplayMetadata) {
+                try {
+                    const metadataTrack = await this.api.getTrackMetadata(trackId, resolvedProvider);
+                    if (metadataTrack) {
+                        track = {
+                            ...metadataTrack,
+                            ...(track || {}),
+                            album: {
+                                ...(metadataTrack.album || {}),
+                                ...(track?.album || {}),
+                            },
+                        };
+                    }
+                } catch (metadataError) {
+                    console.warn('Track metadata fallback failed:', metadataError);
+                }
+            }
+
+            if (!track?.title) {
+                throw new Error('Track metadata missing');
+            }
 
             const coverUrl = this.api.getCoverUrl(track.album?.cover);
             imageEl.src = coverUrl;
