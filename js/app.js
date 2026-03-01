@@ -479,11 +479,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const nowPlayingCoverTrigger =
         document.querySelector('.now-playing-bar .cover-shell') || document.querySelector('.now-playing-bar .cover');
+    const nowPlayingPlayPauseBtn = document.querySelector('.now-playing-bar .play-pause-btn');
 
-    let suppressNextCoverClick = false;
-    let coverLongPressTimer = null;
-    let coverTouchStartX = 0;
-    let coverTouchStartY = 0;
+    let suppressNextPlayPauseClick = false;
+    let playButtonLongPressTimer = null;
+    let playPointerStartX = 0;
+    let playPointerStartY = 0;
+    let playPointerId = null;
+
+    const PLAY_BUTTON_HOLD_MS = 2500;
+    const PLAY_BUTTON_MOVE_TOLERANCE = 10;
 
     const openMiniPlayerFullscreen = () => {
         if (!player.currentTrack) {
@@ -498,61 +503,63 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
-    const cancelCoverLongPress = () => {
-        if (coverLongPressTimer) {
-            clearTimeout(coverLongPressTimer);
-            coverLongPressTimer = null;
+    const cancelPlayButtonLongPress = () => {
+        if (playButtonLongPressTimer) {
+            clearTimeout(playButtonLongPressTimer);
+            playButtonLongPressTimer = null;
         }
+        playPointerId = null;
     };
 
-    const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches;
-
-    nowPlayingCoverTrigger?.addEventListener(
-        'touchstart',
+    nowPlayingPlayPauseBtn?.addEventListener(
+        'pointerdown',
         (e) => {
-            if (!isMobileViewport()) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-            cancelCoverLongPress();
-            const touch = e.changedTouches?.[0];
-            if (!touch) return;
+            cancelPlayButtonLongPress();
+            playPointerId = e.pointerId;
+            playPointerStartX = e.clientX;
+            playPointerStartY = e.clientY;
 
-            coverTouchStartX = touch.screenX;
-            coverTouchStartY = touch.screenY;
-
-            coverLongPressTimer = setTimeout(() => {
-                suppressNextCoverClick = true;
+            playButtonLongPressTimer = setTimeout(() => {
+                suppressNextPlayPauseClick = true;
                 openMiniPlayerFullscreen();
-                cancelCoverLongPress();
-            }, 2500);
+                cancelPlayButtonLongPress();
+            }, PLAY_BUTTON_HOLD_MS);
         },
         { passive: true }
     );
 
-    nowPlayingCoverTrigger?.addEventListener(
-        'touchmove',
+    nowPlayingPlayPauseBtn?.addEventListener(
+        'pointermove',
         (e) => {
-            if (!isMobileViewport() || !coverLongPressTimer) return;
-            const touch = e.changedTouches?.[0];
-            if (!touch) return;
+            if (!playButtonLongPressTimer || playPointerId !== e.pointerId) return;
 
-            const movedX = Math.abs(touch.screenX - coverTouchStartX);
-            const movedY = Math.abs(touch.screenY - coverTouchStartY);
-            if (movedX > 10 || movedY > 10) {
-                cancelCoverLongPress();
+            const movedX = Math.abs(e.clientX - playPointerStartX);
+            const movedY = Math.abs(e.clientY - playPointerStartY);
+            if (movedX > PLAY_BUTTON_MOVE_TOLERANCE || movedY > PLAY_BUTTON_MOVE_TOLERANCE) {
+                cancelPlayButtonLongPress();
             }
         },
         { passive: true }
     );
 
-    nowPlayingCoverTrigger?.addEventListener('touchend', cancelCoverLongPress, { passive: true });
-    nowPlayingCoverTrigger?.addEventListener('touchcancel', cancelCoverLongPress, { passive: true });
+    nowPlayingPlayPauseBtn?.addEventListener('pointerup', cancelPlayButtonLongPress, { passive: true });
+    nowPlayingPlayPauseBtn?.addEventListener('pointercancel', cancelPlayButtonLongPress, { passive: true });
+    nowPlayingPlayPauseBtn?.addEventListener('pointerleave', cancelPlayButtonLongPress, { passive: true });
+
+    nowPlayingPlayPauseBtn?.addEventListener(
+        'click',
+        (e) => {
+            if (!suppressNextPlayPauseClick) return;
+            suppressNextPlayPauseClick = false;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        },
+        true
+    );
 
     nowPlayingCoverTrigger?.addEventListener('click', async () => {
-        if (suppressNextCoverClick) {
-            suppressNextCoverClick = false;
-            return;
-        }
-
         if (!player.currentTrack) {
             alert('No track is currently playing');
             return;
