@@ -6630,7 +6630,6 @@ input:checked+.slider::before {
         padding-bottom: max(var(--spacing-sm), env(safe-area-inset-bottom));
     }
 
-    .main-content,
     .sidebar {
         padding-top: max(var(--spacing-md), env(safe-area-inset-top));
     }
@@ -6906,6 +6905,8 @@ input:checked+.slider::before {
     border-radius: 0.5rem;
     box-shadow: 0 6px 14px rgb(0, 0, 0, 0.3);
     isolation: isolate;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .now-playing-bar .cover-shell:hover {
@@ -7922,6 +7923,7 @@ img[src=''] {
 
     .main-content {
         padding: var(--spacing-sm);
+        padding-top: var(--spacing-sm);
         grid-area: main;
     }
 
@@ -8228,7 +8230,7 @@ img[src=''] {
 
     /* Add padding to main content to account for player bar */
     .main-content {
-        padding-bottom: calc(var(--player-bar-height-mobile) + 30px);
+        padding-bottom: calc(var(--player-bar-height-mobile) + env(safe-area-inset-bottom, 0px) + 34px);
     }
 
     .now-playing-bar .track-info {
@@ -8241,8 +8243,10 @@ img[src=''] {
     }
 
     .track-info .cover-shell {
-        width: 48px;
-        height: 48px;
+        width: 52px;
+        height: 52px;
+        min-width: 52px;
+        min-height: 52px;
     }
 
     .track-info .details {
@@ -8437,11 +8441,15 @@ img[src=''] {
     .side-panel {
         width: 100vw;
         max-width: 100vw;
+        top: 0;
         bottom: 0;
+        height: 100vh;
+        height: 100dvh;
+        z-index: 2300;
     }
 
     .side-panel[data-view='lyrics'] {
-        position: relative;
+        position: fixed;
         overflow: hidden;
         background: color-mix(in srgb, var(--background) 84%, transparent);
         backdrop-filter: none;
@@ -8480,10 +8488,71 @@ img[src=''] {
 
     .side-panel[data-view='lyrics'] .panel-header {
         border-bottom-color: rgb(255, 255, 255, 0.14);
+        padding-top: calc(0.55rem + env(safe-area-inset-top, 0px));
+        padding-right: max(0.55rem, env(safe-area-inset-right, 0px));
+        padding-left: max(0.55rem, env(safe-area-inset-left, 0px));
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .side-panel[data-view='lyrics'] .panel-header h3 {
+        flex: 0 0 auto;
+        margin-right: auto;
+    }
+
+    .side-panel[data-view='lyrics'] .panel-controls {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.25rem;
+        flex-wrap: wrap;
+    }
+
+    .side-panel[data-view='lyrics'] .lyrics-timing-controls {
+        margin-right: 0.35rem;
+        padding-right: 0.35rem;
+        gap: 0.15rem;
+    }
+
+    .side-panel[data-view='lyrics'] .lyrics-timing-display {
+        min-width: 2.9rem;
+        font-size: 0.82rem;
+    }
+
+    @media (max-width: 480px) {
+        .side-panel[data-view='lyrics'] .panel-controls {
+            flex: 1 1 100%;
+            justify-content: flex-start;
+            row-gap: 0.25rem;
+        }
+
+        .side-panel[data-view='lyrics'] .panel-controls .btn-icon,
+        .side-panel[data-view='lyrics'] .lyrics-timing-controls .btn-icon {
+            width: 26px;
+            height: 26px;
+            padding: 0.28rem;
+        }
+
+        .side-panel[data-view='lyrics'] .lyrics-timing-controls {
+            margin-right: 0.2rem;
+            padding-right: 0.2rem;
+            gap: 0.08rem;
+        }
+
+        .side-panel[data-view='lyrics'] .lyrics-timing-display {
+            min-width: 2.5rem;
+            font-size: 0.75rem;
+        }
     }
 
     .panel-content {
-        padding-bottom: calc(var(--player-bar-height-mobile) + 2rem);
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+    }
+
+    body:has(#side-panel.active) .now-playing-bar {
+        display: none;
     }
 
     .synced-line {
@@ -8823,7 +8892,7 @@ img[src=''] {
 }
 
 /* stylelint-disable-next-line media-feature-name-value-no-unknown */
-@media (display-mode: window-controls-overlay) {
+@media (display-mode: window-controls-overlay) and (min-width: 1024px) {
     .app-container {
         margin-top: env(titlebar-area-height, 0);
     }
@@ -8838,6 +8907,12 @@ img[src=''] {
 
     .sidebar {
         padding-top: max(1.5rem, env(titlebar-area-height, 0));
+    }
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        margin-top: 0;
     }
 }
 
@@ -8903,6 +8978,8 @@ img[src=''] {
 @media (hover: none) and (pointer: coarse) {
     .main-content {
         padding: var(--spacing-sm);
+        padding-top: var(--spacing-sm);
+        padding-bottom: calc(var(--player-bar-height-mobile) + env(safe-area-inset-bottom, 0px) + 34px);
         grid-area: main;
     }
 

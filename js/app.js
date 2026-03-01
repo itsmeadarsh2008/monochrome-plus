@@ -477,7 +477,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         ui.setCurrentTrack(player.currentTrack);
     }
 
-    document.querySelector('.now-playing-bar .cover').addEventListener('click', async () => {
+    const nowPlayingCoverTrigger =
+        document.querySelector('.now-playing-bar .cover-shell') || document.querySelector('.now-playing-bar .cover');
+
+    nowPlayingCoverTrigger?.addEventListener('click', async () => {
         if (!player.currentTrack) {
             alert('No track is currently playing');
             return;
@@ -568,7 +571,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // Swipe UP
                     // Avoid accidental clicks on controls
                     if (!e.target.closest('button') && !e.target.closest('.progress-bar')) {
-                        document.querySelector('.now-playing-bar .cover')?.click();
+                        nowPlayingCoverTrigger?.click();
                     }
                 }
             },
@@ -613,13 +616,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (
                     !e.target.closest('.lyrics-scroll-container') &&
                     !e.target.closest('.fs-volume-bar') &&
-                    !e.target.closest('.progress-bar')
+                    !e.target.closest('.progress-bar') &&
+                    !e.target.closest('#vinyl-disc-container') &&
+                    !e.target.closest('.fullscreen-actions') &&
+                    !e.target.closest('.fullscreen-buttons')
                 ) {
                     fsSwipeStartX = e.changedTouches[0].screenX;
                     fsSwipeStartY = e.changedTouches[0].screenY;
                     touchStartY = e.changedTouches[0].screenY;
                 } else {
                     fsSwipeStartX = null;
+                    fsSwipeStartY = null;
                     touchStartY = null;
                 }
             },
