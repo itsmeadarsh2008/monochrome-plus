@@ -91,12 +91,25 @@ export class Player {
             },
         });
         this.dashInitialized = false;
+        this._titleMarqueeResizeRaf = null;
+        this._titleMarqueeTickerRaf = null;
 
         this.loadQueueState();
         this.setupMediaSession();
 
         window.addEventListener('beforeunload', () => {
             this.saveQueueState();
+        });
+
+        window.addEventListener('resize', () => {
+            if (this._titleMarqueeResizeRaf) {
+                cancelAnimationFrame(this._titleMarqueeResizeRaf);
+            }
+
+            this._titleMarqueeResizeRaf = requestAnimationFrame(() => {
+                this._titleMarqueeResizeRaf = null;
+                this._updateNowPlayingTitleMarquee();
+            });
         });
 
         // Handle visibility change for iOS - AudioContext gets suspended when screen locks
@@ -807,7 +820,13 @@ export class Player {
 
         if (coverEl) coverEl.src = this.api.getCoverUrl(track.album?.cover);
         this._updateLyricsMobileBackground(track);
-        if (titleEl) titleEl.innerHTML = `${escapeHtml(trackTitle)} ${createQualityBadgeHTML(track)}`;
+        if (titleEl) {
+            const titleMarkup = `${escapeHtml(trackTitle)} ${createQualityBadgeHTML(track)}`;
+            titleEl.dataset.titleText = String(trackTitle || '');
+            titleEl.dataset.titleMarkup = titleMarkup;
+            this._updateNowPlayingTitleMarquee();
+            setTimeout(() => this._updateNowPlayingTitleMarquee(), 80);
+        }
         if (albumEl) {
             const albumTitle = track.album?.title || '';
             if (albumTitle && albumTitle !== trackTitle) {
@@ -834,6 +853,26 @@ export class Player {
 
         document.title = `${trackTitle} • ${getTrackArtists(track)}`;
         this.updatePlayingTrackIndicator();
+    }
+
+    _updateNowPlayingTitleMarquee() {
+        const titleEl = document.querySelector('.now-playing-bar .title');
+        if (!titleEl) return;
+
+        const titleMarkup = titleEl.dataset.titleMarkup || '';
+        const titleText = (titleEl.dataset.titleText || '').trim();
+        if (!titleMarkup) return;
+
+        titleEl.classList.remove('marquee-active');
+
+        const shouldMarquee = titleText.length >= 20;
+        if (!shouldMarquee) {
+            titleEl.innerHTML = `<span class="title-marquee-content">${titleMarkup}</span>`;
+            return;
+        }
+
+        titleEl.classList.add('marquee-active');
+        titleEl.innerHTML = `<marquee class="title-marquee-tag" behavior="scroll" direction="left" scrollamount="3" scrolldelay="30" loop="-1">${titleMarkup}</marquee>`;
     }
 
     _updateLyricsMobileBackground(track) {

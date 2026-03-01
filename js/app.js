@@ -503,6 +503,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    document.getElementById('now-playing-fullscreen-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMiniPlayerFullscreen();
+    });
+
     const cancelPlayButtonLongPress = () => {
         if (playButtonLongPressTimer) {
             clearTimeout(playButtonLongPressTimer);

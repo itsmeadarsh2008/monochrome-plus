@@ -4835,6 +4835,44 @@ input:checked+.slider::before {
     transition: color var(--transition);
 }
 
+.track-info .details .title .title-marquee-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    width: max-content;
+    max-width: none;
+    white-space: nowrap;
+    will-change: transform;
+}
+
+.track-info .details .title.marquee-active {
+    text-overflow: clip;
+}
+
+.track-info .details .title.marquee-active .title-marquee-content {
+    padding-right: 1.75rem;
+    animation: none;
+}
+
+.track-info .details .title .title-marquee-tag {
+    display: block;
+    width: 100%;
+    white-space: nowrap;
+    line-height: inherit;
+}
+
+@keyframes now-playing-title-marquee {
+    0%,
+    12% {
+        transform: translateX(0);
+    }
+
+    88%,
+    100% {
+        transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+    }
+}
+
 .track-info .details .title:hover {
     color: var(--highlight);
 }
