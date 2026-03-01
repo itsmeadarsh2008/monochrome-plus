@@ -42,7 +42,7 @@
             background-color: var(--bg-0);
             color: var(--text);
             min-height: 100vh;
-            min-height: 100dvh;
+            height: 100dvh;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -460,7 +460,12 @@
             getAuth,
             GoogleAuthProvider,
             signInWithPopup,
+            signInWithRedirect,
+            getRedirectResult,
             signInWithEmailAndPassword,
+            setPersistence,
+            browserLocalPersistence,
+            inMemoryPersistence,
         } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 
         const STORAGE_KEY = 'monochrome-firebase-config';
@@ -503,6 +508,10 @@
         const fbApp = initializeApp(firebaseConfig);
         const auth = getAuth(fbApp);
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+
+        const TRACKING_PROTECTION_HINT =
+            'Your browser privacy/adblock settings blocked the auth provider. Allow Google/Firebase for this site or use Email sign-in.';
 
         function showError(msg) {
             const el = document.getElementById('error');
@@ -512,6 +521,23 @@
 
         function hideError() {
             document.getElementById('error').style.display = 'none';
+        }
+
+        function readableAuthError(error) {
+            const code = error?.code || '';
+            if (code === 'auth/network-request-failed') {
+                return TRACKING_PROTECTION_HINT;
+            }
+            if (code === 'auth/web-storage-unsupported') {
+                return 'Browser storage is disabled. Enable cookies/local storage, then try again.';
+            }
+            if (code === 'auth/popup-blocked') {
+                return 'Popup was blocked. Switching to secure redirect sign-in...';
+            }
+            if (code === 'auth/unauthorized-domain') {
+                return 'This domain is not authorized in Firebase Auth. Add it in Firebase console.';
+            }
+            return error?.message || 'Authentication failed. Please try again.';
         }
 
         const googleBtn = document.getElementById('google-btn');
@@ -537,6 +563,25 @@
         }
 
         renderProviders();
+
+        (async () => {
+            try {
+                await setPersistence(auth, browserLocalPersistence);
+            } catch {
+                await setPersistence(auth, inMemoryPersistence);
+            }
+
+            try {
+                const redirectResult = await getRedirectResult(auth);
+                if (redirectResult?.user) {
+                    setLoading(true);
+                    await sendTokenToServer(redirectResult.user);
+                }
+            } catch (error) {
+                showError(readableAuthError(error));
+                setLoading(false);
+            }
+        })();
 
         function setLoading(loading) {
             document.getElementById('google-btn').disabled = loading;
@@ -566,9 +611,24 @@
                 const result = await signInWithPopup(auth, provider);
                 await sendTokenToServer(result.user);
             } catch (err) {
-                if (err.code !== 'auth/popup-closed-by-user') {
-                    showError(err.message);
+                const code = err?.code || '';
+                if (code === 'auth/popup-closed-by-user') {
+                    setLoading(false);
+                    return;
                 }
+
+                if (
+                    code === 'auth/popup-blocked' ||
+                    code === 'auth/cancelled-popup-request' ||
+                    code === 'auth/operation-not-supported-in-this-environment' ||
+                    code === 'auth/web-storage-unsupported'
+                ) {
+                    showError('Popup flow blocked. Redirecting to sign-in…');
+                    await signInWithRedirect(auth, provider);
+                    return;
+                }
+
+                showError(readableAuthError(err));
                 setLoading(false);
             }
         };
@@ -585,7 +645,7 @@
                 const result = await signInWithEmailAndPassword(auth, email, password);
                 await sendTokenToServer(result.user);
             } catch (err) {
-                showError(err.message);
+                showError(readableAuthError(err));
                 setLoading(false);
             }
         };

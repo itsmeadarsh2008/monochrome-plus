@@ -2,6 +2,9 @@
 import { account } from '../lib/appwrite.js';
 import { ID } from 'appwrite';
 
+const OAUTH_ATTEMPT_KEY = 'mono-oauth-attempt';
+const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
+
 export class AuthManager {
     constructor() {
         this.user = null;
@@ -28,11 +31,34 @@ export class AuthManager {
             );
             this.updateUI(user);
             this.authListeners.forEach((listener) => listener(user));
+
+            localStorage.removeItem(OAUTH_ATTEMPT_KEY);
         } catch {
             console.log('[Appwrite] Info: No active session found on initialization');
             this.user = null; // Explicitly null
             this.updateUI(null);
             this.authListeners.forEach((listener) => listener(null));
+
+            try {
+                const rawAttempt = localStorage.getItem(OAUTH_ATTEMPT_KEY);
+                if (!rawAttempt) return;
+
+                const attempt = JSON.parse(rawAttempt);
+                const age = Date.now() - Number(attempt?.ts || 0);
+                if (age <= OAUTH_ATTEMPT_MAX_AGE_MS && attempt?.provider) {
+                    window.dispatchEvent(
+                        new CustomEvent('auth-oauth-blocked', {
+                            detail: {
+                                provider: attempt.provider,
+                            },
+                        })
+                    );
+                }
+            } catch {
+                // Ignore malformed localStorage payloads
+            } finally {
+                localStorage.removeItem(OAUTH_ATTEMPT_KEY);
+            }
         }
     }
 
@@ -45,10 +71,12 @@ export class AuthManager {
     async signInWithGoogle() {
         try {
             const redirectUrl = window.location.origin;
+            localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'google', ts: Date.now() }));
             await account.createOAuth2Session('google', redirectUrl, redirectUrl);
             console.log('[Appwrite] Google login initiated...');
         } catch (error) {
             console.error('[Appwrite] ✗ Google login failed:', error);
+            localStorage.removeItem(OAUTH_ATTEMPT_KEY);
             throw error;
         }
     }
@@ -57,10 +85,12 @@ export class AuthManager {
         try {
             // Use current URL as redirect
             const redirectUrl = window.location.origin;
+            localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'discord', ts: Date.now() }));
             await account.createOAuth2Session('discord', redirectUrl, redirectUrl);
             console.log('[Appwrite] Discord login initiated...');
         } catch (error) {
             console.error('[Appwrite] ✗ Discord login failed:', error);
+            localStorage.removeItem(OAUTH_ATTEMPT_KEY);
             throw error;
         }
     }

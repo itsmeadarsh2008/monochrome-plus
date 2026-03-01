@@ -284,7 +284,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.classList.toggle('auth-locked', !isAuthenticated);
 
         if (!isAuthenticated && !onAccountPage) {
-            navigate('/account');
+            if (window.location.hash && window.location.hash !== '#') {
+                window.history.replaceState({}, '', '/account');
+            } else {
+                navigate('/account');
+            }
             return false;
         }
         return true;

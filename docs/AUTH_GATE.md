@@ -31,8 +31,17 @@ This document explains the server-side login gate and what it implies for your s
 - `AUTH_EMAIL_ENABLED` toggles email/password sign-in on `/login` (default true).
 - `FIREBASE_PROJECT_ID` sets the Firebase project used to verify tokens.
 - `FIREBASE_CONFIG` (JSON) injects config into the login page.
+- `APPWRITE_ENDPOINT` overrides the in-app Appwrite endpoint for Discord/Google OAuth in account settings.
 - `POCKETBASE_URL` hides the custom DB setting field.
 - `SESSION_MAX_AGE` sets cookie lifetime in ms (default 7 days).
+
+## Privacy / Adblock notes for Discord OAuth
+
+- In-app Discord auth uses Appwrite OAuth.
+- If `APPWRITE_ENDPOINT` is cross-site (for example `https://sgp.cloud.appwrite.io/v1` while app runs on another domain), strict tracking protection can block session cookies after OAuth redirect.
+- On localhost/http, keep `APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1` (proxy mode can fail because secure OAuth cookies may not persist on non-HTTPS).
+- Recommended production fix for strict privacy environments: use a first-party Appwrite custom domain/subdomain over HTTPS.
+- If that is not possible, users may need to allowlist the app domain, Appwrite endpoint, and Discord auth domain in privacy/adblock settings.
 
 ## Implications for the site
 

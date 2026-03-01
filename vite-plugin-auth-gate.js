@@ -33,6 +33,7 @@ export default function authGatePlugin() {
             const AUTH_ENABLED = (env.AUTH_ENABLED ?? 'true') !== 'false';
             const FIREBASE_CONFIG = env.FIREBASE_CONFIG;
             const POCKETBASE_URL = env.POCKETBASE_URL;
+            const APPWRITE_ENDPOINT = env.APPWRITE_ENDPOINT;
             const AUTH_GOOGLE_ENABLED = env.AUTH_GOOGLE_ENABLED;
             const AUTH_EMAIL_ENABLED = env.AUTH_EMAIL_ENABLED;
 
@@ -66,6 +67,7 @@ export default function authGatePlugin() {
             }
             if (parsedFirebaseConfig) flags.push(`window.__FIREBASE_CONFIG__=${JSON.stringify(parsedFirebaseConfig)}`);
             if (POCKETBASE_URL) flags.push(`window.__POCKETBASE_URL__=${JSON.stringify(POCKETBASE_URL)}`);
+            if (APPWRITE_ENDPOINT) flags.push(`window.__APPWRITE_ENDPOINT__=${JSON.stringify(APPWRITE_ENDPOINT)}`);
             const configScript = flags.length > 0 ? `<script>${flags.join(';')};</script>` : null;
 
             // --- Pre-build injected HTML pages ---
@@ -127,6 +129,12 @@ export default function authGatePlugin() {
 
                 server.middlewares.use(async (req, res, next) => {
                     const url = req.url.split('?')[0];
+
+                    // Allow same-origin Appwrite proxy path for OAuth/session bootstrap
+                    if (url.startsWith('/appwrite/v1/')) {
+                        next();
+                        return;
+                    }
 
                     if (url === '/login' || url === '/login.html') {
                         if (req.session && req.session.uid) {

@@ -22,6 +22,11 @@ export default defineConfig(({ mode }) => {
                 allow: ['.', 'node_modules'],
             },
             proxy: {
+                '/appwrite/v1': {
+                    target: 'https://sgp.cloud.appwrite.io',
+                    changeOrigin: true,
+                    secure: true,
+                },
                 '/artistgrid-api': {
                     target: 'https://sheets.artistgrid.cx',
                     changeOrigin: true,
@@ -45,6 +50,15 @@ export default defineConfig(({ mode }) => {
                     changeOrigin: true,
                     secure: false,
                     rewrite: (path) => path.replace(/^\/tracker-api/, ''),
+                },
+            },
+        },
+        preview: {
+            proxy: {
+                '/appwrite/v1': {
+                    target: 'https://sgp.cloud.appwrite.io',
+                    changeOrigin: true,
+                    secure: true,
                 },
             },
         },

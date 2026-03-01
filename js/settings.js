@@ -81,7 +81,22 @@ export function initializeSettings(scrobbler, player, api, ui) {
     };
 
     const withUiError = (error) => {
-        const message = error?.message || 'Authentication failed. Please try again.';
+        const code = error?.code || '';
+        const type = error?.type || '';
+        let message = error?.message || 'Authentication failed. Please try again.';
+
+        if (
+            code === 'auth/network-request-failed' ||
+            code === 0 ||
+            /network|fetch|cors|origin|cookie|blocked|privacy|tracking/i.test(message) ||
+            /general_unknown_origin|user_unauthorized|project_unknown/.test(type)
+        ) {
+            message =
+                'Network/privacy protection blocked authentication. Disable strict tracking protection or adblock for this site and Appwrite, then try again.';
+        } else if (code === 'auth/popup-blocked') {
+            message = 'Popup blocked by browser. Allow popups for this site and try again.';
+        }
+
         setFeedback(message, 'error');
     };
 
@@ -105,6 +120,24 @@ export function initializeSettings(scrobbler, player, api, ui) {
         authMode = authMode === 'signup' ? 'signin' : 'signup';
         setFeedback('', 'info');
         renderAuthMode();
+    });
+
+    window.addEventListener('auth-oauth-blocked', (event) => {
+        const provider = event?.detail?.provider || 'oauth';
+        if (provider === 'discord') {
+            setFeedback(
+                'Discord login was blocked by tracking protection/adblock. Allow this site, Discord, and the Appwrite endpoint in privacy settings, or use Email sign-in.',
+                'error'
+            );
+            return;
+        }
+
+        if (provider === 'google') {
+            setFeedback(
+                'Google login was blocked by privacy protection. Allow this site and the auth provider, or use Email sign-in.',
+                'error'
+            );
+        }
     });
 
     authEmailForm?.addEventListener('submit', async (event) => {

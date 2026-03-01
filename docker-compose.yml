@@ -12,6 +12,7 @@ services:
             AUTH_SECRET: ${AUTH_SECRET:-}
             FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-monochrome-database}
             FIREBASE_CONFIG: ${FIREBASE_CONFIG:-}
+            APPWRITE_ENDPOINT: ${APPWRITE_ENDPOINT:-https://sgp.cloud.appwrite.io/v1}
             POCKETBASE_URL: ${POCKETBASE_URL:-}
             SESSION_MAX_AGE: ${SESSION_MAX_AGE:-604800000}
         restart: unless-stopped

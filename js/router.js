@@ -15,7 +15,9 @@ window.router = navigate;
 
 export function createRouter(ui) {
     const router = async () => {
-        if (window.location.hash && window.location.hash.length > 1) {
+        const isAuthLocked = document.body.classList.contains('auth-locked');
+
+        if (!isAuthLocked && window.location.hash && window.location.hash.length > 1) {
             const hash = window.location.hash.substring(1);
             if (hash.includes('/')) {
                 const newPath = hash.startsWith('/') ? hash : '/' + hash;
