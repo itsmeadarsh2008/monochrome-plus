@@ -480,7 +480,79 @@ document.addEventListener('DOMContentLoaded', async () => {
     const nowPlayingCoverTrigger =
         document.querySelector('.now-playing-bar .cover-shell') || document.querySelector('.now-playing-bar .cover');
 
+    let suppressNextCoverClick = false;
+    let coverLongPressTimer = null;
+    let coverTouchStartX = 0;
+    let coverTouchStartY = 0;
+
+    const openMiniPlayerFullscreen = () => {
+        if (!player.currentTrack) {
+            alert('No track is currently playing');
+            return;
+        }
+
+        const overlay = document.getElementById('fullscreen-cover-overlay');
+        if (overlay && overlay.style.display !== 'flex') {
+            const nextTrack = player.getNextTrack();
+            ui.showFullscreenCover(player.currentTrack, nextTrack, lyricsManager, audioPlayer);
+        }
+    };
+
+    const cancelCoverLongPress = () => {
+        if (coverLongPressTimer) {
+            clearTimeout(coverLongPressTimer);
+            coverLongPressTimer = null;
+        }
+    };
+
+    const isMobileViewport = () => window.matchMedia('(max-width: 768px)').matches;
+
+    nowPlayingCoverTrigger?.addEventListener(
+        'touchstart',
+        (e) => {
+            if (!isMobileViewport()) return;
+
+            cancelCoverLongPress();
+            const touch = e.changedTouches?.[0];
+            if (!touch) return;
+
+            coverTouchStartX = touch.screenX;
+            coverTouchStartY = touch.screenY;
+
+            coverLongPressTimer = setTimeout(() => {
+                suppressNextCoverClick = true;
+                openMiniPlayerFullscreen();
+                cancelCoverLongPress();
+            }, 2500);
+        },
+        { passive: true }
+    );
+
+    nowPlayingCoverTrigger?.addEventListener(
+        'touchmove',
+        (e) => {
+            if (!isMobileViewport() || !coverLongPressTimer) return;
+            const touch = e.changedTouches?.[0];
+            if (!touch) return;
+
+            const movedX = Math.abs(touch.screenX - coverTouchStartX);
+            const movedY = Math.abs(touch.screenY - coverTouchStartY);
+            if (movedX > 10 || movedY > 10) {
+                cancelCoverLongPress();
+            }
+        },
+        { passive: true }
+    );
+
+    nowPlayingCoverTrigger?.addEventListener('touchend', cancelCoverLongPress, { passive: true });
+    nowPlayingCoverTrigger?.addEventListener('touchcancel', cancelCoverLongPress, { passive: true });
+
     nowPlayingCoverTrigger?.addEventListener('click', async () => {
+        if (suppressNextCoverClick) {
+            suppressNextCoverClick = false;
+            return;
+        }
+
         if (!player.currentTrack) {
             alert('No track is currently playing');
             return;
