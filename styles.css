@@ -1354,9 +1354,11 @@ kbd {
 
 .sidebar {
     grid-area: sidebar;
-    background: linear-gradient(165deg,
-            color-mix(in srgb, var(--card) 78%, transparent) 0%,
-            color-mix(in srgb, var(--background) 92%, transparent) 100%);
+    background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--card) 78%, transparent) 0%,
+        color-mix(in srgb, var(--background) 92%, transparent) 100%
+    );
     backdrop-filter: blur(12px);
     border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     box-shadow:
@@ -1612,9 +1614,11 @@ kbd {
 }
 
 .sidebar-nav .nav-item a.active {
-    background: linear-gradient(135deg,
-            color-mix(in srgb, var(--primary) 18%, transparent) 0%,
-            color-mix(in srgb, var(--primary) 9%, transparent) 100%);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--primary) 18%, transparent) 0%,
+        color-mix(in srgb, var(--primary) 9%, transparent) 100%
+    );
     color: var(--primary);
     border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
     box-shadow:
@@ -1652,9 +1656,11 @@ kbd {
     padding: 0.56rem 0.66rem;
     border-radius: 0.9rem;
     border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-    background: linear-gradient(145deg,
-            color-mix(in srgb, var(--card) 92%, transparent) 0%,
-            color-mix(in srgb, var(--background) 96%, transparent) 100%);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--card) 92%, transparent) 0%,
+        color-mix(in srgb, var(--background) 96%, transparent) 100%
+    );
     color: var(--foreground);
     text-align: left;
     cursor: pointer;
@@ -1668,9 +1674,11 @@ kbd {
 .nav-btn-account:hover {
     transform: translateY(-1px);
     border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
-    background: linear-gradient(145deg,
-            color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
-            color-mix(in srgb, var(--card) 96%, transparent) 100%);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--secondary) 74%, transparent) 0%,
+        color-mix(in srgb, var(--card) 96%, transparent) 100%
+    );
     box-shadow:
         0 8px 18px rgb(0, 0, 0, 0.16),
         inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
@@ -2190,7 +2198,6 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 @keyframes pulse {
-
     0%,
     100% {
         opacity: 1;
@@ -2261,7 +2268,6 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Glow pulse for featured content */
 @keyframes glow-pulse {
-
     0%,
     100% {
         box-shadow: 0 0 20px rgb(var(--accent-rgb, 255, 255, 255), 0.3);
@@ -2274,7 +2280,6 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Float animation for hero elements */
 @keyframes float {
-
     0%,
     100% {
         transform: translate3d(0, 0, 0);
@@ -2312,7 +2317,6 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 @keyframes blink-caret {
-
     0%,
     100% {
         border-color: transparent;
@@ -2576,7 +2580,6 @@ input[type='search']::-webkit-search-cancel-button {
 
 /* Hide fade edges on mobile */
 @media (max-width: 768px) {
-
     .carousel-container::before,
     .carousel-container::after {
         display: none;
@@ -2619,8 +2622,8 @@ html.carousel-mode .card-grid::-webkit-scrollbar,
 }
 
 /* Make cards not shrink in carousel mode */
-html.carousel-mode .card-grid>.card,
-.carousel-mode .card-grid>.card {
+html.carousel-mode .card-grid > .card,
+.carousel-mode .card-grid > .card {
     flex-shrink: 0;
     scroll-snap-align: start;
     width: var(--card-min-width);
@@ -2629,8 +2632,8 @@ html.carousel-mode .card-grid>.card,
 }
 
 /* Also handle any direct children that might not have .card class */
-html.carousel-mode .card-grid>*,
-.carousel-mode .card-grid>* {
+html.carousel-mode .card-grid > *,
+.carousel-mode .card-grid > * {
     flex-shrink: 0;
     scroll-snap-align: start;
 }
@@ -2762,7 +2765,6 @@ html.carousel-mode .card-grid>*,
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-
     *,
     *::before,
     *::after {
@@ -2857,7 +2859,6 @@ html.carousel-mode .card-grid>*,
 }
 
 @keyframes ultra-butter-wave {
-
     0%,
     100% {
         transform: translate3d(0, 0, 0) rotate(0deg);
@@ -2877,7 +2878,6 @@ html.carousel-mode .card-grid>*,
 }
 
 @keyframes ultra-butter-wave-2d {
-
     0%,
     100% {
         transform: translateY(0) rotate(0deg);
@@ -3477,7 +3477,6 @@ html.carousel-mode .card-grid>*,
 }
 
 @media (max-width: 1100px) {
-
     #home-recommended-songs,
     #artist-detail-tracks,
     #playlist-detail-recommended {
@@ -4601,11 +4600,11 @@ select.input {
     margin-bottom: 0;
 }
 
-.sidebar-settings-section .sidebar-settings-section-label+.setting-item {
+.sidebar-settings-section .sidebar-settings-section-label + .setting-item {
     margin-top: var(--spacing-sm);
 }
 
-.sidebar-settings-section .setting-item+.setting-item {
+.sidebar-settings-section .setting-item + .setting-item {
     margin-top: var(--spacing-md);
 }
 
@@ -4961,11 +4960,11 @@ select.input {
     box-shadow: 0 2px 4px rgb(0, 0, 0, 0.2);
 }
 
-input:checked+.slider {
+input:checked + .slider {
     background-color: var(--primary);
 }
 
-input:checked+.slider::before {
+input:checked + .slider::before {
     transform: translateX(16px);
     background-color: var(--primary-foreground);
     box-shadow: -2px 2px 4px rgb(0, 0, 0, 0.1);
@@ -4977,29 +4976,29 @@ input:checked+.slider::before {
     /* Hover scale effect */
 }
 
-.toggle-switch:hover input:checked+.slider::before {
+.toggle-switch:hover input:checked + .slider::before {
     transform: translateX(16px) scale(1.1);
 }
 
-.toggle-switch input:disabled+.slider {
+.toggle-switch input:disabled + .slider {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.toggle-switch input:disabled+.slider::before {
+.toggle-switch input:disabled + .slider::before {
     box-shadow: none;
     transform: translateX(0);
 }
 
-.toggle-switch input:disabled:checked+.slider::before {
+.toggle-switch input:disabled:checked + .slider::before {
     transform: translateX(16px);
 }
 
-.toggle-switch:hover input:disabled+.slider::before {
+.toggle-switch:hover input:disabled + .slider::before {
     transform: translateX(0);
 }
 
-.toggle-switch:hover input:disabled:checked+.slider::before {
+.toggle-switch:hover input:disabled:checked + .slider::before {
     transform: translateX(16px);
 }
 
@@ -5065,7 +5064,6 @@ input:checked+.slider::before {
 }
 
 @keyframes now-playing-title-marquee {
-
     0%,
     12% {
         transform: translateX(0);
@@ -5754,12 +5752,14 @@ input:checked+.slider::before {
     align-items: center;
     justify-content: center;
     background:
-        radial-gradient(circle at center,
+        radial-gradient(
+            circle at center,
             rgb(12, 12, 12) 0%,
             rgb(12, 12, 12) 16%,
             rgb(8, 8, 8) 16.5%,
             rgb(14, 14, 14) 18%,
-            transparent 19%),
+            transparent 19%
+        ),
         repeating-radial-gradient(circle at center, rgb(15, 15, 15) 0, rgb(24, 24, 24) 1.5px, rgb(6, 6, 6) 3px);
     box-shadow:
         inset 0 0 0 2px rgb(25, 25, 25),
@@ -5777,18 +5777,20 @@ input:checked+.slider::before {
     position: absolute;
     inset: 0;
     border-radius: var(--radius-full);
-    background: conic-gradient(from -45deg at 50% 50%,
-            transparent 0deg,
-            rgb(255, 255, 255, 0.05) 30deg,
-            rgb(255, 255, 255, 0.15) 45deg,
-            rgb(255, 255, 255, 0.05) 60deg,
-            transparent 100deg,
-            transparent 180deg,
-            rgb(255, 255, 255, 0.05) 210deg,
-            rgb(255, 255, 255, 0.15) 225deg,
-            rgb(255, 255, 255, 0.05) 240deg,
-            transparent 280deg,
-            transparent 360deg);
+    background: conic-gradient(
+        from -45deg at 50% 50%,
+        transparent 0deg,
+        rgb(255, 255, 255, 0.05) 30deg,
+        rgb(255, 255, 255, 0.15) 45deg,
+        rgb(255, 255, 255, 0.05) 60deg,
+        transparent 100deg,
+        transparent 180deg,
+        rgb(255, 255, 255, 0.05) 210deg,
+        rgb(255, 255, 255, 0.15) 225deg,
+        rgb(255, 255, 255, 0.05) 240deg,
+        transparent 280deg,
+        transparent 360deg
+    );
     mix-blend-mode: screen;
     filter: blur(3px) contrast(1.2);
     pointer-events: none;
@@ -5810,11 +5812,13 @@ input:checked+.slider::before {
     pointer-events: none;
     z-index: 4;
     background:
-        radial-gradient(circle at center,
+        radial-gradient(
+            circle at center,
             rgb(20, 20, 20) 0%,
             rgb(60, 60, 60) 0.5%,
             rgb(15, 15, 15) 0.8%,
-            transparent 1%),
+            transparent 1%
+        ),
         radial-gradient(circle at center, transparent 15.5%, rgb(0, 0, 0, 0.5) 16%, transparent 16.5%);
     will-change: transform, opacity;
     transform: translate3d(0, 0, 0);
@@ -7633,7 +7637,6 @@ input:checked+.slider::before {
 }
 
 @keyframes automix-pulse {
-
     0%,
     100% {
         opacity: 1;
@@ -7766,9 +7769,11 @@ img[src=''] {
     padding: clamp(0.9rem, 1.8vw, 1.25rem);
     border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
     border-radius: 16px;
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--card) 96%, var(--background) 4%),
-            color-mix(in srgb, var(--card) 90%, var(--background) 10%));
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--card) 96%, var(--background) 4%),
+        color-mix(in srgb, var(--card) 90%, var(--background) 10%)
+    );
     backdrop-filter: blur(var(--surface-blur, var(--background-blur, 12px))) saturate(1.08);
     box-shadow:
         0 14px 34px rgb(5 5 10 / 24%),
@@ -7787,9 +7792,11 @@ img[src=''] {
     height: 40px;
     border-radius: 10px;
     color: var(--primary-foreground);
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--primary) 64%, var(--card)),
-            color-mix(in srgb, var(--primary) 34%, var(--card)));
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--primary) 64%, var(--card)),
+        color-mix(in srgb, var(--primary) 34%, var(--card))
+    );
     margin: 0 auto;
 }
 
@@ -7860,16 +7867,20 @@ img[src=''] {
 
 #auth-discord-btn {
     border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
-    background: linear-gradient(180deg,
-            color-mix(in srgb, var(--primary) 20%, var(--card)),
-            color-mix(in srgb, var(--primary) 10%, var(--card)));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 20%, var(--card)),
+        color-mix(in srgb, var(--primary) 10%, var(--card))
+    );
 }
 
 #auth-discord-btn:hover {
     border-color: color-mix(in srgb, var(--primary) 56%, var(--border));
-    background: linear-gradient(180deg,
-            color-mix(in srgb, var(--primary) 24%, var(--card)),
-            color-mix(in srgb, var(--primary) 14%, var(--card)));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 24%, var(--card)),
+        color-mix(in srgb, var(--primary) 14%, var(--card))
+    );
 }
 
 .auth-method-btn-content {
@@ -7944,17 +7955,21 @@ img[src=''] {
     padding: 0.78rem 1rem;
     font-size: 0.98rem;
     font-weight: 600;
-    background: linear-gradient(180deg,
-            color-mix(in srgb, var(--primary) 72%, var(--card)),
-            color-mix(in srgb, var(--primary) 58%, var(--card)));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 72%, var(--card)),
+        color-mix(in srgb, var(--primary) 58%, var(--card))
+    );
     border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
     color: var(--primary-foreground);
 }
 
 .auth-primary:hover {
-    background: linear-gradient(180deg,
-            color-mix(in srgb, var(--primary) 80%, var(--card)),
-            color-mix(in srgb, var(--primary) 64%, var(--card)));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--primary) 80%, var(--card)),
+        color-mix(in srgb, var(--primary) 64%, var(--card))
+    );
     border-color: color-mix(in srgb, var(--primary) 62%, var(--border));
 }
 
@@ -8052,7 +8067,8 @@ body.auth-locked #page-account {
     width: 100%;
     min-height: 100dvh;
     margin: 0;
-    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+        max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
     pointer-events: auto;
 }
 
@@ -8098,7 +8114,7 @@ body.auth-locked #auth-status {
     font-size: 0.85rem;
 }
 
-body.auth-locked .account-content>p:last-of-type {
+body.auth-locked .account-content > p:last-of-type {
     margin-top: 0.6rem;
     padding-top: 0 !important;
     font-size: 0.8rem;
@@ -10673,9 +10689,11 @@ textarea:focus {
     border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
     background:
         radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 55%),
-        linear-gradient(155deg,
+        linear-gradient(
+            155deg,
             color-mix(in srgb, var(--card) 86%, transparent) 0%,
-            color-mix(in srgb, var(--background) 94%, transparent) 100%);
+            color-mix(in srgb, var(--background) 94%, transparent) 100%
+        );
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
@@ -10688,9 +10706,11 @@ textarea:focus {
 /* Recommended artist cards */
 .card.artist-circular {
     position: relative;
-    background: linear-gradient(165deg,
-            color-mix(in srgb, var(--card) 86%, transparent) 0%,
-            color-mix(in srgb, var(--background) 94%, transparent) 100%);
+    background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--card) 86%, transparent) 0%,
+        color-mix(in srgb, var(--background) 94%, transparent) 100%
+    );
     border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
     border-radius: 1rem;
     padding: 0.7rem;
@@ -11268,9 +11288,11 @@ textarea:focus {
 .profile-banner {
     width: 100%;
     height: 100%;
-    background: linear-gradient(145deg,
-            color-mix(in srgb, var(--primary) 16%, var(--background)) 0%,
-            var(--background) 55%);
+    background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--primary) 16%, var(--background)) 0%,
+        var(--background) 55%
+    );
     background-size: cover;
     background-position: center;
     transition:
@@ -11296,9 +11318,11 @@ textarea:focus {
     margin-right: auto;
     position: relative;
     z-index: 10;
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--card) 88%, transparent) 0%,
-            color-mix(in srgb, var(--card) 72%, transparent) 100%);
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--card) 88%, transparent) 0%,
+        color-mix(in srgb, var(--card) 72%, transparent) 100%
+    );
     backdrop-filter: blur(24px) saturate(160%);
     border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
     border-radius: var(--radius-2xl);
@@ -11608,9 +11632,11 @@ textarea:focus {
     font-size: clamp(2rem, 5vw, 3.35rem);
     font-weight: 850;
     letter-spacing: -0.02em;
-    background: linear-gradient(180deg,
-            var(--foreground) 0%,
-            color-mix(in srgb, var(--foreground) 72%, transparent) 100%);
+    background: linear-gradient(
+        180deg,
+        var(--foreground) 0%,
+        color-mix(in srgb, var(--foreground) 72%, transparent) 100%
+    );
     background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0;
@@ -11710,9 +11736,11 @@ textarea:focus {
     flex-direction: column;
     align-items: stretch;
     text-align: left;
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--card) 86%, transparent) 0%,
-            color-mix(in srgb, var(--card) 70%, transparent) 100%);
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--card) 86%, transparent) 0%,
+        color-mix(in srgb, var(--card) 70%, transparent) 100%
+    );
     border: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
     border-radius: var(--radius-xl);
     padding: 1.25rem 1.25rem 1.5rem;
@@ -12067,7 +12095,7 @@ textarea:focus {
     padding: 0.2rem;
 }
 
-.sidebar-account-dropdown .account-dropdown-section+.account-dropdown-section {
+.sidebar-account-dropdown .account-dropdown-section + .account-dropdown-section {
     border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
     padding-top: 0.5rem;
 }
@@ -12160,9 +12188,11 @@ input[type='search']::-webkit-search-results-decoration {
 /* Primary Button - Enhanced with glow effects */
 .btn-primary {
     position: relative;
-    background: linear-gradient(140deg,
-            color-mix(in srgb, var(--primary) 92%, white) 0%,
-            color-mix(in srgb, var(--primary) 78%, black) 100%);
+    background: linear-gradient(
+        140deg,
+        color-mix(in srgb, var(--primary) 92%, white) 0%,
+        color-mix(in srgb, var(--primary) 78%, black) 100%
+    );
     color: var(--primary-foreground);
     border: 1px solid color-mix(in srgb, var(--primary) 66%, white);
     border-radius: var(--radius-pill);
@@ -12300,9 +12330,11 @@ input[type='search']::-webkit-search-results-decoration {
 
 /* Base Card - Glassmorphism with depth */
 .card {
-    background: linear-gradient(160deg,
-            color-mix(in srgb, var(--glass-bg) 92%, transparent) 0%,
-            color-mix(in srgb, var(--card) 72%, transparent) 100%);
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--glass-bg) 92%, transparent) 0%,
+        color-mix(in srgb, var(--card) 72%, transparent) 100%
+    );
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-soft);
     overflow: hidden;
@@ -12500,7 +12532,7 @@ input[type='search']::-webkit-search-results-decoration {
     transition: color 0.2s var(--ease-out);
 }
 
-.search-bar input:focus+.search-icon,
+.search-bar input:focus + .search-icon,
 .search-bar:has(input:focus) .search-icon {
     color: var(--primary);
 }
@@ -12525,10 +12557,12 @@ input[type='search']::-webkit-search-results-decoration {
     padding: 2.35rem 2rem;
     margin-bottom: 0;
     border-radius: var(--radius-xl);
-    background: linear-gradient(132deg,
-            color-mix(in srgb, var(--card) 90%, var(--primary) 8%) 0%,
-            color-mix(in srgb, var(--card) 76%, transparent) 48%,
-            color-mix(in srgb, var(--primary) 7%, var(--card) 76%) 100%);
+    background: linear-gradient(
+        132deg,
+        color-mix(in srgb, var(--card) 90%, var(--primary) 8%) 0%,
+        color-mix(in srgb, var(--card) 76%, transparent) 48%,
+        color-mix(in srgb, var(--primary) 7%, var(--card) 76%) 100%
+    );
     border: 1px solid var(--glass-border);
     overflow: hidden;
     box-shadow: var(--shadow-card);
@@ -12761,7 +12795,6 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 @keyframes pulse-glow {
-
     0%,
     100% {
         box-shadow: 0 0 0 0 rgb(var(--highlight-rgb) / 0.4);
@@ -13169,7 +13202,6 @@ input[type='search']::-webkit-search-results-decoration {
 
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
-
     .friend-card,
     .card,
     .btn-primary,

@@ -6,8 +6,7 @@ const DEFAULT_UPDATE_MANIFEST_URL =
 export async function checkForDesktopUpdates() {
     if (!isNeutralinoRuntime()) return;
 
-    const updateManifestUrl =
-        window.MONOCHROME_DESKTOP_UPDATE_MANIFEST_URL || DEFAULT_UPDATE_MANIFEST_URL;
+    const updateManifestUrl = window.MONOCHROME_DESKTOP_UPDATE_MANIFEST_URL || DEFAULT_UPDATE_MANIFEST_URL;
 
     try {
         if (!window.Neutralino?.updater?.checkForUpdates) {
