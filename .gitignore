@@ -1,5 +1,6 @@
 node_modules
 dist
+desktop-dist
 .DS_Store
 *.local
 .vite
@@ -9,6 +10,11 @@ dist
 
 # Logs
 *.log
+
+# Desktop packaging
+release-artifacts/
+wixobj/
+installers/
 
 # Misc
 .tmp/
