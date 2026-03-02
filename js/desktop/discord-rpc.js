@@ -2,8 +2,16 @@
 import { getTrackTitle, getTrackArtists } from '../utils.js';
 
 export function initializeDiscordRPC(player) {
-    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    const isTauri =
+        typeof window !== 'undefined' &&
+        (window.__TAURI_INTERNALS__ ||
+            window.__TAURI__ ||
+            window.__TAURI_IPC__ ||
+            /\btauri\b/i.test(navigator.userAgent || ''));
     let lastRefreshAt = 0;
+    let lastPayload = null;
+    let rpcHealthy = false;
+    let heartbeatId = null;
 
     const sendViaTauri = async (payload) => {
         const core = await import('@tauri-apps/api/core');
@@ -48,8 +56,11 @@ export function initializeDiscordRPC(player) {
         try {
             if (isTauri) {
                 await sendViaTauri(data);
+                lastPayload = data;
+                rpcHealthy = true;
             }
         } catch (error) {
+            rpcHealthy = false;
             console.error('[Desktop][DiscordRPC] Failed to send update:', error);
         }
     }
@@ -62,13 +73,42 @@ export function initializeDiscordRPC(player) {
                 state: 'Monochrome+',
                 instance: false,
             });
+            lastPayload = {
+                details: 'Idling',
+                state: 'Monochrome+',
+                instance: false,
+            };
+            rpcHealthy = true;
         } catch {
+            rpcHealthy = false;
             try {
                 await clearViaTauri();
             } catch {
                 // no-op
             }
         }
+    }
+
+    async function heartbeat() {
+        if (!isTauri) return;
+
+        const activeTrack = player.currentTrack;
+        if (activeTrack) {
+            await sendUpdate(activeTrack, player.audio.paused);
+            return;
+        }
+
+        if (!rpcHealthy && lastPayload) {
+            try {
+                await sendViaTauri(lastPayload);
+                rpcHealthy = true;
+            } catch {
+                rpcHealthy = false;
+            }
+            return;
+        }
+
+        await sendIdle();
     }
 
     player.audio.addEventListener('play', () => {
@@ -98,6 +138,10 @@ export function initializeDiscordRPC(player) {
     });
 
     window.addEventListener('beforeunload', () => {
+        if (heartbeatId) {
+            clearInterval(heartbeatId);
+            heartbeatId = null;
+        }
         void clearViaTauri().catch(() => {});
     });
 
@@ -107,4 +151,8 @@ export function initializeDiscordRPC(player) {
     } else {
         void sendIdle();
     }
+
+    heartbeatId = window.setInterval(() => {
+        void heartbeat();
+    }, 10000);
 }

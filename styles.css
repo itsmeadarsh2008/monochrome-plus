@@ -653,12 +653,22 @@ body {
 }
 
 body.tauri-desktop {
-    padding-top: var(--tauri-titlebar-height);
+    padding-top: 0;
 }
 
 body.tauri-desktop .app-container {
-    height: calc(100dvh - var(--tauri-titlebar-height));
+    height: 100dvh;
     zoom: var(--desktop-zoom-scale);
+}
+
+#tauri-window-reveal-hitbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 8px;
+    z-index: 1999;
+    background: transparent;
 }
 
 #tauri-window-chrome {
@@ -670,11 +680,24 @@ body.tauri-desktop .app-container {
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.6rem;
-    background: color-mix(in srgb, var(--card) 84%, transparent);
+    background: color-mix(in srgb, var(--card) 72%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
     backdrop-filter: blur(12px);
     z-index: 2000;
     user-select: none;
+    transform: translateY(calc(-1 * var(--tauri-titlebar-height) - 8px));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform 0.22s ease,
+        opacity 0.22s ease;
+}
+
+body.tauri-desktop.tauri-chrome-peek #tauri-window-chrome,
+#tauri-window-chrome:hover {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .tauri-window-brand {

@@ -43,6 +43,11 @@ async function initFramelessWindowChrome() {
 
     document.body.classList.add('tauri-desktop');
 
+    const revealHitbox = document.createElement('div');
+    revealHitbox.id = 'tauri-window-reveal-hitbox';
+    revealHitbox.setAttribute('aria-hidden', 'true');
+    document.body.prepend(revealHitbox);
+
     const bar = document.createElement('div');
     bar.id = 'tauri-window-chrome';
     bar.innerHTML = `
@@ -83,7 +88,23 @@ async function initFramelessWindowChrome() {
         const zoomOutBtn = bar.querySelector('#tauri-zoom-out');
         const zoomInBtn = bar.querySelector('#tauri-zoom-in');
         const zoomResetBtn = bar.querySelector('#tauri-zoom-reset');
+        let hideChromeTimer = null;
         let currentZoom = applyDesktopZoom(getStoredDesktopZoom());
+
+        const showChrome = () => {
+            if (hideChromeTimer) {
+                clearTimeout(hideChromeTimer);
+                hideChromeTimer = null;
+            }
+            document.body.classList.add('tauri-chrome-peek');
+        };
+
+        const hideChromeSoon = () => {
+            if (hideChromeTimer) clearTimeout(hideChromeTimer);
+            hideChromeTimer = setTimeout(() => {
+                document.body.classList.remove('tauri-chrome-peek');
+            }, 900);
+        };
 
         const syncZoomUI = () => {
             if (zoomResetBtn) {
@@ -154,11 +175,22 @@ async function initFramelessWindowChrome() {
             });
         }
 
+        revealHitbox.addEventListener('mouseenter', showChrome);
+        bar.addEventListener('mouseenter', showChrome);
+        bar.addEventListener('mouseleave', hideChromeSoon);
+        window.addEventListener('mousemove', (event) => {
+            if (event.clientY <= 6) showChrome();
+        });
+        window.addEventListener('blur', () => {
+            document.body.classList.remove('tauri-chrome-peek');
+        });
+
         dragRegion?.addEventListener('dblclick', async () => {
             await appWindow.toggleMaximize();
             await syncMaximizeState();
         });
 
+        hideChromeSoon();
         syncZoomUI();
         await syncMaximizeState();
         appWindow.onResized(() => {
@@ -172,7 +204,12 @@ async function initFramelessWindowChrome() {
 export async function initDesktop(player) {
     console.log('[Desktop] Initializing desktop features...');
 
-    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    const isTauri =
+        typeof window !== 'undefined' &&
+        (window.__TAURI_INTERNALS__ ||
+            window.__TAURI__ ||
+            window.__TAURI_IPC__ ||
+            /\btauri\b/i.test(navigator.userAgent || ''));
 
     if (isTauri) {
         console.log('[Desktop] Tauri runtime detected.');
