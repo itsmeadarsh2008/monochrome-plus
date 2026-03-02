@@ -7078,9 +7078,8 @@ input:checked + .slider::before {
 }
 
 #side-panel-title {
-    /* font-size: 1.5rem; */
     font-weight: 700;
-    padding:15px;
+    padding: 15px;
     color: var(--foreground);
 }
 
