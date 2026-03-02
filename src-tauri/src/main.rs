@@ -6,6 +6,8 @@ use discord_rich_presence::{
 };
 use serde::Deserialize;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 use tauri::{Manager, State};
 
 const DISCORD_CLIENT_ID: &str = "1466351059843809282";
@@ -39,12 +41,32 @@ fn update_discord_presence(
         .map_err(|_| "Failed to lock Discord RPC state".to_string())?;
 
     if client_guard.is_none() {
-        let mut created = DiscordIpcClient::new(DISCORD_CLIENT_ID)
-            .map_err(|e| format!("Failed to create Discord RPC client: {e}"))?;
-        created
-            .connect()
-            .map_err(|e| format!("Failed to connect Discord RPC client: {e}"))?;
-        *client_guard = Some(created);
+        let mut last_error = String::from("Unknown Discord RPC init error");
+        for attempt in 0..3 {
+            match DiscordIpcClient::new(DISCORD_CLIENT_ID) {
+                Ok(mut created) => match created.connect() {
+                    Ok(()) => {
+                        *client_guard = Some(created);
+                        last_error.clear();
+                        break;
+                    }
+                    Err(e) => {
+                        last_error = format!("Failed to connect Discord RPC client: {e}");
+                    }
+                },
+                Err(e) => {
+                    last_error = format!("Failed to create Discord RPC client: {e}");
+                }
+            }
+
+            if attempt < 2 {
+                thread::sleep(Duration::from_millis(300));
+            }
+        }
+
+        if client_guard.is_none() {
+            return Err(last_error);
+        }
     }
 
     let client = client_guard
@@ -103,17 +125,39 @@ fn update_discord_presence(
         Ok(()) => Ok(()),
         Err(first_error) => {
             *client_guard = None;
+            let mut last_error = format!(
+                "Failed to set Discord RPC activity ({first_error}) and could not recover"
+            );
 
-            let mut recreated = DiscordIpcClient::new(DISCORD_CLIENT_ID)
-                .map_err(|e| format!("Failed to recreate Discord RPC client: {e}"))?;
-            recreated
-                .connect()
-                .map_err(|e| format!("Failed to reconnect Discord RPC client: {e}"))?;
-            recreated.set_activity(activity).map_err(|e| {
-                format!("Failed to set Discord RPC activity after reconnect ({first_error}): {e}")
-            })?;
-            *client_guard = Some(recreated);
-            Ok(())
+            for attempt in 0..3 {
+                match DiscordIpcClient::new(DISCORD_CLIENT_ID) {
+                    Ok(mut recreated) => match recreated.connect() {
+                        Ok(()) => match recreated.set_activity(activity.clone()) {
+                            Ok(()) => {
+                                *client_guard = Some(recreated);
+                                return Ok(());
+                            }
+                            Err(e) => {
+                                last_error = format!(
+                                    "Failed to set Discord RPC activity after reconnect ({first_error}): {e}"
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            last_error = format!("Failed to reconnect Discord RPC client: {e}");
+                        }
+                    },
+                    Err(e) => {
+                        last_error = format!("Failed to recreate Discord RPC client: {e}");
+                    }
+                }
+
+                if attempt < 2 {
+                    thread::sleep(Duration::from_millis(300));
+                }
+            }
+
+            Err(last_error)
         }
     }
 }

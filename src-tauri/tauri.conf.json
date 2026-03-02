@@ -4,8 +4,8 @@
     "version": "1.0.3",
     "identifier": "network.appwrite.monochromeplus",
     "build": {
-        "beforeDevCommand": "node -e \"console.log('Using hosted Monochrome+ frontend for Tauri dev')\"",
-        "beforeBuildCommand": "node -e \"console.log('Using hosted Monochrome+ frontend for Tauri build')\"",
+        "beforeDevCommand": "echo Using hosted Monochrome+ frontend for Tauri dev",
+        "beforeBuildCommand": "echo Using hosted Monochrome+ frontend for Tauri build",
         "devUrl": "https://monochrome-plus.appwrite.network",
         "frontendDist": "https://monochrome-plus.appwrite.network"
     },
