@@ -391,10 +391,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTracker(player);
 
     // Initialize desktop features if in Tauri mode
-    if (
-        typeof window !== 'undefined' &&
-        (window.__TAURI_INTERNALS__ || window.__TAURI__)
-    ) {
+    if (typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__)) {
         try {
             const desktopModule = await import('./desktop/desktop.js');
             await desktopModule.initDesktop(player);

@@ -50,7 +50,7 @@ export class SearchEngine {
      */
     searchLocal(query) {
         if (!this._fuse || !query) return [];
-        return this._fuse.search(query, { limit: 8 }).map(r => ({ ...r.item, _score: r.score, _source: 'local' }));
+        return this._fuse.search(query, { limit: 8 }).map((r) => ({ ...r.item, _score: r.score, _source: 'local' }));
     }
 
     // ─── Remote Search with Cache + Dedup ────────────────────────────────────
@@ -76,19 +76,22 @@ export class SearchEngine {
         }
 
         // 3. Remote fetch
-        const promise = this.api.search(query).then(results => {
-            this._cache.set(normalized, { ts: Date.now(), results });
-            this._inflight.delete(normalized);
-            // Evict oldest entries if cache is too large
-            if (this._cache.size > MAX_CACHE_ENTRIES) {
-                const oldest = [...this._cache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0][0];
-                this._cache.delete(oldest);
-            }
-            return results;
-        }).catch(err => {
-            this._inflight.delete(normalized);
-            throw err;
-        });
+        const promise = this.api
+            .search(query)
+            .then((results) => {
+                this._cache.set(normalized, { ts: Date.now(), results });
+                this._inflight.delete(normalized);
+                // Evict oldest entries if cache is too large
+                if (this._cache.size > MAX_CACHE_ENTRIES) {
+                    const oldest = [...this._cache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0][0];
+                    this._cache.delete(oldest);
+                }
+                return results;
+            })
+            .catch((err) => {
+                this._inflight.delete(normalized);
+                throw err;
+            });
 
         this._inflight.set(normalized, promise);
         return promise;

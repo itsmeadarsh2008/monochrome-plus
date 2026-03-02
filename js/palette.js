@@ -34,11 +34,14 @@ function samplePixels(img) {
     const imageData = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
     const pixels = [];
     for (let i = 0; i < imageData.length; i += 4) {
-        const r = imageData[i], g = imageData[i + 1], b = imageData[i + 2], a = imageData[i + 3];
+        const r = imageData[i],
+            g = imageData[i + 1],
+            b = imageData[i + 2],
+            a = imageData[i + 3];
         // Skip transparent and near-black/white borders
         if (a < 128) continue;
         if (r > 240 && g > 240 && b > 240) continue; // white
-        if (r < 15 && g < 15 && b < 15) continue;     // black
+        if (r < 15 && g < 15 && b < 15) continue; // black
         pixels.push([r, g, b]);
     }
     return pixels;
@@ -58,19 +61,21 @@ function kMeans(pixels, k) {
     if (pixels.length < k) return { centroids: pixels.slice(0, k), sizes: pixels.map(() => 1) };
 
     // Random init from evenly spaced picks
-    let centroids = Array.from({ length: k }, (_, i) =>
-        [...pixels[Math.floor((i / k) * pixels.length)]]
-    );
+    let centroids = Array.from({ length: k }, (_, i) => [...pixels[Math.floor((i / k) * pixels.length)]]);
 
     let assignments = new Int32Array(pixels.length);
 
     for (let iter = 0; iter < ITER; iter++) {
         // Assign step
         for (let i = 0; i < pixels.length; i++) {
-            let best = 0, bestDist = Infinity;
+            let best = 0,
+                bestDist = Infinity;
             for (let c = 0; c < k; c++) {
                 const d = dist(pixels[i], centroids[c]);
-                if (d < bestDist) { bestDist = d; best = c; }
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = c;
+                }
             }
             assignments[i] = best;
         }
@@ -97,9 +102,11 @@ function kMeans(pixels, k) {
     }
 
     return {
-        centroids, sizes: Array.from(assignments).reduce((acc, c) => {
-            acc[c] = (acc[c] || 0) + 1; return acc;
-        }, new Array(k).fill(0))
+        centroids,
+        sizes: Array.from(assignments).reduce((acc, c) => {
+            acc[c] = (acc[c] || 0) + 1;
+            return acc;
+        }, new Array(k).fill(0)),
     };
 }
 
@@ -114,8 +121,11 @@ function luminance([r, g, b]) {
  * Compute saturation of an RGB colour (0–1, HSL model approximation).
  */
 function saturation([r, g, b]) {
-    r /= 255; g /= 255; b /= 255;
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b),
+        min = Math.min(r, g, b);
     const l = (max + min) / 2;
     if (max === min) return 0;
     const d = max - min;
@@ -152,7 +162,10 @@ export async function applyPaletteFromImage(imageUrl) {
         let bestScore = -Infinity;
         for (let i = 0; i < centroids.length; i++) {
             const score = accentScore(centroids[i], sizes[i]);
-            if (score > bestScore) { bestScore = score; bestIdx = i; }
+            if (score > bestScore) {
+                bestScore = score;
+                bestIdx = i;
+            }
         }
 
         let [r, g, b] = centroids[bestIdx];
@@ -173,13 +186,12 @@ export async function applyPaletteFromImage(imageUrl) {
         }
 
         const adjustedBrightness = 0.299 * r + 0.587 * g + 0.114 * b;
-        const toHex = (rv, gv, bv) => `#${rv.toString(16).padStart(2, '0')}${gv.toString(16).padStart(2, '0')}${bv.toString(16).padStart(2, '0')}`;
+        const toHex = (rv, gv, bv) =>
+            `#${rv.toString(16).padStart(2, '0')}${gv.toString(16).padStart(2, '0')}${bv.toString(16).padStart(2, '0')}`;
         const hex = toHex(r, g, b);
 
         // Sort remaining centroids by brightness for secondary/tertiary uses
-        const others = centroids
-            .filter((_, i) => i !== bestIdx)
-            .sort((a, b) => luminance(b) - luminance(a));
+        const others = centroids.filter((_, i) => i !== bestIdx).sort((a, b) => luminance(b) - luminance(a));
 
         const secondaryHex = others[0] ? toHex(others[0][0], others[0][1], others[0][2]) : hex;
         const tertiaryHex = others[1] ? toHex(others[1][0], others[1][1], others[1][2]) : secondaryHex;
@@ -209,17 +221,23 @@ export async function applyPaletteFromImage(imageUrl) {
         // Dynamic theme gradient
         if (theme === 'dynamic') {
             const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
-            const r2 = clamp(r + 40), g2 = clamp(g - 30), b2 = clamp(b + 20);
-            const r3 = clamp(r - 30), g3 = clamp(g + 40), b3 = clamp(b - 20);
-            root.style.setProperty('--dynamic-gradient',
+            const r2 = clamp(r + 40),
+                g2 = clamp(g - 30),
+                b2 = clamp(b + 20);
+            const r3 = clamp(r - 30),
+                g3 = clamp(g + 40),
+                b3 = clamp(b - 20);
+            root.style.setProperty(
+                '--dynamic-gradient',
                 `linear-gradient(135deg, ` +
-                `rgb(${clamp(r * 0.3)},${clamp(g * 0.3)},${clamp(b * 0.3)}) 0%, ` +
-                `rgb(${clamp(r2 * 0.35)},${clamp(g2 * 0.35)},${clamp(b2 * 0.35)}) 25%, ` +
-                `rgb(${clamp(r3 * 0.25)},${clamp(g3 * 0.25)},${clamp(b3 * 0.25)}) 50%, ` +
-                `rgb(${clamp(r * 0.2)},${clamp(g * 0.2)},${clamp(b * 0.2)}) 75%, ` +
-                `rgb(${clamp(r2 * 0.3)},${clamp(g2 * 0.3)},${clamp(b2 * 0.3)}) 100%)`
+                    `rgb(${clamp(r * 0.3)},${clamp(g * 0.3)},${clamp(b * 0.3)}) 0%, ` +
+                    `rgb(${clamp(r2 * 0.35)},${clamp(g2 * 0.35)},${clamp(b2 * 0.35)}) 25%, ` +
+                    `rgb(${clamp(r3 * 0.25)},${clamp(g3 * 0.25)},${clamp(b3 * 0.25)}) 50%, ` +
+                    `rgb(${clamp(r * 0.2)},${clamp(g * 0.2)},${clamp(b * 0.2)}) 75%, ` +
+                    `rgb(${clamp(r2 * 0.3)},${clamp(g2 * 0.3)},${clamp(b2 * 0.3)}) 100%)`
             );
-            root.style.setProperty('--dynamic-brightness',
+            root.style.setProperty(
+                '--dynamic-brightness',
                 adjustedBrightness > 150 ? '0.3' : adjustedBrightness > 100 ? '0.4' : '0.5'
             );
         }
@@ -252,13 +270,24 @@ export async function applyPaletteFromImage(imageUrl) {
 export function resetPalette() {
     const root = document.documentElement;
     const vars = [
-        '--accent-color', '--accent-glow', '--accent-dim',
-        '--palette-rgb', '--palette-1', '--palette-2', '--palette-3',
-        '--palette-border', '--palette-secondary',
-        '--primary', '--primary-foreground',
-        '--highlight', '--highlight-rgb', '--active-highlight',
-        '--ring', '--track-hover-bg',
-        '--dynamic-gradient', '--dynamic-brightness',
+        '--accent-color',
+        '--accent-glow',
+        '--accent-dim',
+        '--palette-rgb',
+        '--palette-1',
+        '--palette-2',
+        '--palette-3',
+        '--palette-border',
+        '--palette-secondary',
+        '--primary',
+        '--primary-foreground',
+        '--highlight',
+        '--highlight-rgb',
+        '--active-highlight',
+        '--ring',
+        '--track-hover-bg',
+        '--dynamic-gradient',
+        '--dynamic-brightness',
         '--palette-transition',
     ];
     for (const v of vars) root.style.removeProperty(v);

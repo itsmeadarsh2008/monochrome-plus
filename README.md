@@ -128,26 +128,26 @@ For PocketBase, development mode, and advanced setups, see [docs/DOCKER.md](docs
 
 1. **Clone the repository:**
 
-   ```bash
-   git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
-   cd monochrome-plus
-   ```
+    ```bash
+    git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
+    cd monochrome-plus
+    ```
 
 2. **Install dependencies:**
 
-   ```bash
-   bun install
-   # or
-   npm install
-   ```
+    ```bash
+    bun install
+    # or
+    npm install
+    ```
 
 3. **Start the development server:**
 
-   ```bash
-   bun run dev
-   # or
-   npm run dev
-   ```
+    ```bash
+    bun run dev
+    # or
+    npm run dev
+    ```
 
 4. **Open your browser:**
    Navigate to `http://localhost:5173/`.
