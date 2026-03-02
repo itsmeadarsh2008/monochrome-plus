@@ -49,11 +49,62 @@ jobs:
             - name: Build Neutralino desktop app
               run: bun run build:desktop:release
 
+            - name: Install Linux packaging tools
+              if: matrix.platform == 'ubuntu-latest'
+              shell: bash
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y ruby ruby-dev build-essential rpm
+                  sudo gem install --no-document fpm
+
+            - name: Build Linux installers (.deb + .rpm)
+              if: matrix.platform == 'ubuntu-latest'
+              shell: bash
+              run: bash ./scripts/build-linux-installers.sh
+
+            - name: Build macOS installers (.dmg)
+              if: matrix.platform == 'macos-latest'
+              shell: bash
+              run: bash ./scripts/build-macos-installer.sh
+
+            - name: Install Windows packaging tools
+              if: matrix.platform == 'windows-latest'
+              shell: powershell
+              run: |
+                  choco install innosetup -y
+                  choco install wixtoolset -y
+
+            - name: Build Windows installers (.exe + .msi)
+              if: matrix.platform == 'windows-latest'
+              shell: powershell
+              run: ./scripts/build-windows-installers.ps1
+
             - name: Upload desktop artifacts
               uses: actions/upload-artifact@v4
               with:
                   name: desktop-${{ matrix.platform }}
                   path: desktop-dist/**
+
+            - name: Upload Windows installer artifacts
+              if: matrix.platform == 'windows-latest'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: desktop-windows-installers
+                  path: release-artifacts/**
+
+            - name: Upload Linux installer artifacts
+              if: matrix.platform == 'ubuntu-latest'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: desktop-linux-installers
+                  path: release-artifacts/**
+
+            - name: Upload macOS installer artifacts
+              if: matrix.platform == 'macos-latest'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: desktop-macos-installers
+                  path: release-artifacts/**
 
     publish-release:
         needs: build-desktop
