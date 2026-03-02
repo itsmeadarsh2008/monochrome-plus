@@ -257,10 +257,7 @@ function renderTrackerTracks(container, tracks) {
 
 // Create project card HTML - EXACTLY like album cards
 export function createProjectCardHTML(era, artist, sheetId, trackCount) {
-    const playBtnHTML = `
-        <button class="play-btn card-play-btn" data-action="play-card" data-type="tracker-project" data-id="${encodeURIComponent(era.name)}" title="Play">
-            ${SVG_PLAY}
-        </button>
+    const cardMenuHTML = `
         <button class="card-menu-btn" data-action="card-menu" data-type="tracker-project" data-id="${encodeURIComponent(era.name)}" title="Menu">
             ${SVG_MENU}
         </button>
@@ -274,10 +271,7 @@ export function createProjectCardHTML(era, artist, sheetId, trackCount) {
                      class="card-image" 
                      loading="lazy"
                      onerror="this.src='assets/logo.svg'">
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="tracker-project" title="Add to Liked">
-                    ${SVG_HEART}
-                </button>
-                ${playBtnHTML}
+                ${cardMenuHTML}
             </div>
             <div class="card-info">
                 <h4 class="card-title">${escapeHtml(era.name)}</h4>

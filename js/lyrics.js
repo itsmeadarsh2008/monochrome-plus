@@ -6,10 +6,6 @@ import { audioContextManager } from './audio-context.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
-const isTauriRuntime =
-    typeof window !== 'undefined' &&
-    (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__ || window.isTauri);
-
 // Check if text contains Japanese, Chinese, or Korean characters
 function containsAsianText(text) {
     if (!text) return false;
@@ -155,7 +151,6 @@ export class LyricsManager {
         this.currentGeniusData = null;
         this.timingOffset = 0; // Offset in milliseconds (positive = delay lyrics, negative = advance lyrics)
         this._karaokeLayoutRaf = null;
-        this.useLiteKaraoke = false;
     }
 
     // Get timing offset for current track
@@ -373,64 +368,28 @@ export class LyricsManager {
             return;
         }
 
-        const sources = [
-            'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
-            'https://unpkg.com/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
-            'https://esm.run/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
-        ];
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = 'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js';
 
-        let lastError = null;
-        for (const source of sources) {
-            try {
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.type = 'module';
-                    script.src = source;
-                    script.crossOrigin = 'anonymous';
-
-                    const timeout = setTimeout(
-                        () => {
-                            reject(new Error(`Timed out loading lyrics component from ${source}`));
-                        },
-                        isTauriRuntime ? 20000 : 10000
-                    );
-
-                    script.onload = () => {
-                        if (typeof customElements !== 'undefined') {
-                            customElements
-                                .whenDefined('am-lyrics')
-                                .then(() => {
-                                    clearTimeout(timeout);
-                                    this.componentLoaded = true;
-                                    resolve();
-                                })
-                                .catch((err) => {
-                                    clearTimeout(timeout);
-                                    reject(err);
-                                });
-                        } else {
-                            clearTimeout(timeout);
+            script.onload = () => {
+                if (typeof customElements !== 'undefined') {
+                    customElements
+                        .whenDefined('am-lyrics')
+                        .then(() => {
+                            this.componentLoaded = true;
                             resolve();
-                        }
-                    };
-
-                    script.onerror = () => {
-                        clearTimeout(timeout);
-                        reject(new Error(`Failed to load lyrics component from ${source}`));
-                    };
-
-                    document.head.appendChild(script);
-                });
-
-                if (this.componentLoaded) {
-                    return;
+                        })
+                        .catch(reject);
+                } else {
+                    resolve();
                 }
-            } catch (error) {
-                lastError = error;
-            }
-        }
+            };
 
-        throw lastError || new Error('Failed to load lyrics component');
+            script.onerror = () => reject(new Error('Failed to load lyrics component'));
+            document.head.appendChild(script);
+        });
     }
 
     async fetchLyrics(trackId, track = null) {
@@ -460,47 +419,14 @@ export class LyricsManager {
                 if (album) params.append('album_name', album);
                 if (duration) params.append('duration', duration.toString());
 
-                const endpoint = `https://lrclib.net/api/get?${params.toString()}`;
-                let response = await fetch(endpoint).catch(() => null);
+                const response = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
 
-                if (!response?.ok) {
-                    response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(endpoint)}`).catch(
-                        () => null
-                    );
-                }
-
-                if (response?.ok) {
+                if (response.ok) {
                     const data = await response.json();
 
                     if (data.syncedLyrics) {
                         const lyricsData = {
                             subtitles: data.syncedLyrics,
-                            lyricsProvider: 'LRCLIB',
-                        };
-
-                        this.lyricsCache.set(trackId, lyricsData);
-                        return lyricsData;
-                    }
-                }
-
-                const searchEndpoint = `https://lrclib.net/api/search?${params.toString()}`;
-                let searchResponse = await fetch(searchEndpoint).catch(() => null);
-
-                if (!searchResponse?.ok) {
-                    searchResponse = await fetch(
-                        `https://api.allorigins.win/raw?url=${encodeURIComponent(searchEndpoint)}`
-                    ).catch(() => null);
-                }
-
-                if (searchResponse?.ok) {
-                    const searchResults = await searchResponse.json();
-                    const firstSynced = Array.isArray(searchResults)
-                        ? searchResults.find((item) => item?.syncedLyrics)
-                        : null;
-
-                    if (firstSynced?.syncedLyrics) {
-                        const lyricsData = {
-                            subtitles: firstSynced.syncedLyrics,
                             lyricsProvider: 'LRCLIB',
                         };
 
@@ -762,88 +688,13 @@ export class LyricsManager {
         const lineNodes = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
 
         lineNodes.forEach((line, lineIndex) => {
-            if (line.dataset.lyricsSubtextStyled !== '1') {
-                line.innerHTML = line.innerHTML.replace(
-                    /([\(\（])([^\)\）<\n]{1,180})([\)\）])/g,
-                    '<span class="lyrics-subtext">$2</span>'
-                );
-                line.dataset.lyricsSubtextStyled = '1';
-            }
-
             line.classList.add('karaoke-line-enhanced');
             line.style.setProperty('--line-stagger', String(lineIndex % 24));
 
-            let words = Array.from(line.querySelectorAll('.word, .lyric-word, .karaoke-word-enhanced'));
-
-            if (!this.useLiteKaraoke && words.length === 0 && line.dataset.karaokeTokenized !== '1') {
-                const skipClassPattern = /(time|timestamp)/i;
-                const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-                const textNodes = [];
-                let node = walker.nextNode();
-                while (node) {
-                    textNodes.push(node);
-                    node = walker.nextNode();
-                }
-
-                let generatedWordIndex = 0;
-                textNodes.forEach((textNode) => {
-                    const text = textNode.textContent || '';
-                    if (!text.trim()) return;
-
-                    const parentElement = textNode.parentElement;
-                    if (parentElement) {
-                        const className = parentElement.className || '';
-                        if (skipClassPattern.test(String(className))) return;
-                    }
-
-                    const parts = text.split(/(\s+)/);
-                    const fragment = document.createDocumentFragment();
-
-                    parts.forEach((part) => {
-                        if (!part) return;
-                        if (/^\s+$/.test(part)) {
-                            fragment.appendChild(document.createTextNode(part));
-                            return;
-                        }
-
-                        const wordSpan = document.createElement('span');
-                        wordSpan.className = 'karaoke-word-enhanced karaoke-word-generated';
-                        wordSpan.style.setProperty('--word-index', String(generatedWordIndex));
-                        generatedWordIndex += 1;
-                        wordSpan.textContent = part;
-                        fragment.appendChild(wordSpan);
-                    });
-
-                    textNode.parentNode?.replaceChild(fragment, textNode);
-                });
-
-                line.dataset.karaokeTokenized = '1';
-                words = Array.from(line.querySelectorAll('.word, .lyric-word, .karaoke-word-enhanced'));
-            }
-
+            const words = Array.from(line.querySelectorAll('.word, .lyric-word'));
             words.forEach((word, wordIndex) => {
                 word.classList.add('karaoke-word-enhanced');
                 word.style.setProperty('--word-index', String(wordIndex));
-
-                if (!this.useLiteKaraoke && word.dataset.karaokeChars !== '1') {
-                    const text = word.textContent || '';
-                    if (text.trim().length > 0) {
-                        const frag = document.createDocumentFragment();
-                        const chars = Array.from(text);
-
-                        chars.forEach((char, charIndex) => {
-                            const charSpan = document.createElement('span');
-                            charSpan.className = 'karaoke-char-enhanced';
-                            charSpan.style.setProperty('--char-index', String(charIndex));
-                            charSpan.textContent = char;
-                            frag.appendChild(charSpan);
-                        });
-
-                        word.textContent = '';
-                        word.appendChild(frag);
-                        word.dataset.karaokeChars = '1';
-                    }
-                }
             });
         });
     }
@@ -1195,27 +1046,16 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
             })
             .catch((e) => console.warn('Background lyrics fetch failed', e));
 
-        const hasRenderableLyricLines = () => {
-            const root = amLyrics.shadowRoot || amLyrics;
-            const lyricLikeNodes = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
-            if (!lyricLikeNodes.length) return false;
-
-            const meaningfulLines = lyricLikeNodes.filter((node) => {
-                const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
-                if (!text || text.length < 2) return false;
-                if (text === 'Auto') return false;
-                return /[\p{L}\p{N}]/u.test(text);
-            });
-
-            return meaningfulLines.length >= 2;
-        };
-
         // Wait for lyrics to appear, then do an immediate conversion
         const waitForLyrics = () => {
             return new Promise((resolve) => {
                 // Check if lyrics are already loaded
                 const checkForLyrics = () => {
-                    return hasRenderableLyricLines();
+                    const hasLyrics =
+                        amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
+                        (amLyrics.shadowRoot && amLyrics.shadowRoot.querySelector("[class*='lyric']")) ||
+                        (amLyrics.textContent && amLyrics.textContent.length > 50);
+                    return hasLyrics;
                 };
 
                 if (checkForLyrics()) {
@@ -1225,7 +1065,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
                 // Check more frequently (200ms) for faster response
                 let attempts = 0;
-                const maxAttempts = isTauriRuntime ? 60 : 25;
+                const maxAttempts = 25; // 5 seconds max
                 const interval = setInterval(() => {
                     attempts++;
                     if (checkForLyrics() || attempts >= maxAttempts) {
@@ -1237,56 +1077,6 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         };
 
         await waitForLyrics();
-
-        const hasLyricsContent = () => hasRenderableLyricLines();
-
-        if (!hasLyricsContent() && isTauriRuntime) {
-            return await renderFallbackLyricsComponent(
-                container,
-                track,
-                audioPlayer,
-                lyricsManager,
-                'Using desktop fallback'
-            );
-        }
-
-        let contentWatchdogId = null;
-        if (isTauriRuntime) {
-            contentWatchdogId = window.setInterval(async () => {
-                const panelStillActive = sidePanelManager.isActive('lyrics');
-                if (!panelStillActive) {
-                    clearInterval(contentWatchdogId);
-                    return;
-                }
-
-                const rootNode = amLyrics.shadowRoot || amLyrics;
-                const existsInDom = document.contains(amLyrics);
-                if (!existsInDom) {
-                    clearInterval(contentWatchdogId);
-                    return;
-                }
-
-                const lineCount = rootNode.querySelectorAll('p, .line, .lyric-line, .lrc-line').length;
-                if (lineCount > 0) return;
-
-                clearInterval(contentWatchdogId);
-                await renderFallbackLyricsComponent(
-                    container,
-                    track,
-                    audioPlayer,
-                    lyricsManager,
-                    'Reconnected desktop lyrics'
-                );
-            }, 5000);
-        }
-
-        const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
-        const isStandalonePwa =
-            window.matchMedia('(display-mode: standalone)').matches ||
-            window.matchMedia('(display-mode: fullscreen)').matches ||
-            window.navigator.standalone === true;
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        lyricsManager.useLiteKaraoke = isMobileViewport || isStandalonePwa || prefersReducedMotion;
 
         // Inject GPU-accelerated, high-refresh karaoke styles into am-lyrics Shadow DOM
         const root = amLyrics.shadowRoot || amLyrics;
@@ -1331,110 +1121,71 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     margin-inline-end: 0.06em;
                     transform: translate3d(0, 0, 0);
                     backface-visibility: hidden;
-                    transform-origin: 50% 100%;
                 }
 
                 .word:last-child, .lyric-word:last-child, .karaoke-word-enhanced:last-child {
                     margin-inline-end: 0;
                 }
 
-                .lyrics-subtext {
-                    font-family: var(--font-family, inherit) !important;
-                    font-size: 0.68em !important;
-                    font-weight: 300 !important;
-                    opacity: 0.82;
-                }
-
-                .karaoke-char-enhanced {
-                    display: inline-block;
-                    transform: translate3d(0, 0, 0);
-                    will-change: transform, opacity, filter;
-                    backface-visibility: hidden;
-                    transform-origin: 50% 100%;
-                }
-
                 /* Active line water-wave motion */
-                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active, .karaoke-active-line {
+                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active {
                     will-change: transform, opacity, filter;
-                    transform: translate3d(0, 0, 0) scale(1.03);
-                    animation: none;
-                    filter: saturate(1.12) brightness(1.08);
+                    transform: translate3d(0, 0, 0) scale(1.022);
+                    animation: karaoke-wave-line 2050ms cubic-bezier(0.36, 0.03, 0.21, 0.99) infinite;
+                    filter: saturate(1.08);
+                }
+
+                p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after {
+                    content: '';
+                    position: absolute;
+                    pointer-events: none;
+                    inset: -0.18em -0.08em;
+                    border-radius: 0.45em;
+                    background:
+                        radial-gradient(130% 75% at 50% 95%, rgba(255, 255, 255, 0.12), transparent 72%),
+                        linear-gradient(
+                            112deg,
+                            transparent 0%,
+                            rgba(255, 255, 255, 0.11) 26%,
+                            transparent 47%,
+                            rgba(255, 255, 255, 0.08) 64%,
+                            transparent 100%
+                        );
+                    background-size: 190% 100%;
+                    background-position: calc(var(--karaoke-wave-ms) * 0.032px) 50%;
+                    mix-blend-mode: screen;
+                    opacity: 0.55;
+                    will-change: transform, opacity;
+                    animation: karaoke-wave-shimmer 1400ms linear infinite;
                 }
 
                 p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                 p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
-                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line .karaoke-word-enhanced {
+                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
                     will-change: transform, filter;
-                    animation: none;
-                    animation-delay: calc(var(--word-index, 0) * 32ms + var(--line-stagger, 0) * 13ms);
-                    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.22));
+                    animation: karaoke-word-wave 1180ms cubic-bezier(0.27, 0.1, 0.23, 1) infinite;
+                    animation-delay: calc(var(--word-index, 0) * 34ms + var(--line-stagger, 0) * 14ms);
                 }
 
-                p[active] .karaoke-char-enhanced, p[data-active] .karaoke-char-enhanced, p[data-active="true"] .karaoke-char-enhanced, .is-active .karaoke-char-enhanced, p.active .karaoke-char-enhanced, .line.active .karaoke-char-enhanced, .lyric-line.active .karaoke-char-enhanced, .lrc-line.active .karaoke-char-enhanced, .karaoke-active-line .karaoke-char-enhanced {
-                    animation: none;
-                    animation-delay: calc(
-                        var(--word-index, 0) * 34ms +
-                        var(--char-index, 0) * 15ms +
-                        var(--line-stagger, 0) * 10ms
-                    );
-                    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.18));
+                @keyframes karaoke-wave-line {
+                    0% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 0 rgba(255, 255, 255, 0); }
+                    25% { transform: translate3d(0, -1px, 0) scale(1.028); text-shadow: 0 0 14px rgba(255, 255, 255, 0.18); }
+                    50% { transform: translate3d(0, 0.8px, 0) scale(1.021); text-shadow: 0 0 11px rgba(255, 255, 255, 0.13); }
+                    75% { transform: translate3d(0, -0.7px, 0) scale(1.026); text-shadow: 0 0 16px rgba(255, 255, 255, 0.2); }
+                    100% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 12px rgba(255, 255, 255, 0.14); }
                 }
 
-                @keyframes karaoke-line-bounce {
-                    0% {
-                        transform: translate3d(0, 0, 0) scale(1.02);
-                    }
-                    22% {
-                        transform: translate3d(0, -2.7px, 0) scale(1.042);
-                    }
-                    48% {
-                        transform: translate3d(0, 1.35px, 0) scale(1.028);
-                    }
-                    72% {
-                        transform: translate3d(0, -1.15px, 0) scale(1.035);
-                    }
-                    100% {
-                        transform: translate3d(0, 0, 0) scale(1.02);
-                    }
+                @keyframes karaoke-wave-shimmer {
+                    0% { opacity: 0.3; transform: translate3d(0, 0, 0); }
+                    50% { opacity: 0.58; transform: translate3d(0, -0.6px, 0); }
+                    100% { opacity: 0.3; transform: translate3d(0, 0, 0); }
                 }
 
-                @keyframes karaoke-word-bubble-drop {
-                    0% {
-                        transform: translate3d(0, 0, 0) scale(0.98);
-                    }
-                    26% {
-                        transform: translate3d(0, -6px, 0) scale(1.045);
-                    }
-                    52% {
-                        transform: translate3d(0, 2.5px, 0) scale(0.99);
-                    }
-                    72% {
-                        transform: translate3d(0, -1.9px, 0) scale(1.015);
-                    }
-                    100% {
-                        transform: translate3d(0, 0, 0) scale(1);
-                    }
-                }
-
-                @keyframes karaoke-char-lift {
-                    0% {
-                        transform: translate3d(0, 4.8px, 0) scale(0.96);
-                        opacity: 0.72;
-                    }
-                    28% {
-                        transform: translate3d(0, -6px, 0) scale(1.08);
-                        opacity: 1;
-                    }
-                    56% {
-                        transform: translate3d(0, 1.8px, 0) scale(0.985);
-                    }
-                    78% {
-                        transform: translate3d(0, -1.25px, 0) scale(1.02);
-                    }
-                    100% {
-                        transform: translate3d(0, 0, 0) scale(1);
-                        opacity: 1;
-                    }
+                @keyframes karaoke-word-wave {
+                    0% { transform: translate3d(0, 0, 0); }
+                    30% { transform: translate3d(0, -1.5px, 0); }
+                    60% { transform: translate3d(0, 0.7px, 0); }
+                    100% { transform: translate3d(0, 0, 0); }
                 }
 
                 @media (max-height: 760px) {
@@ -1448,45 +1199,10 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active,
                     p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                     p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
-                    p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line, .karaoke-active-line .karaoke-word-enhanced, .karaoke-active-line .karaoke-char-enhanced {
+                    p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
                         animation: none !important;
                         transform: none !important;
                     }
-                }
-
-                ${
-                    lyricsManager.useLiteKaraoke
-                        ? `
-                :host {
-                    --karaoke-wave-ms: 0;
-                }
-
-                p, .line, .lyric-line, .lrc-line, .karaoke-line-enhanced {
-                    opacity: 0.88 !important;
-                    filter: none !important;
-                    transform: none !important;
-                    text-shadow: none !important;
-                    transition: opacity 140ms ease, color 140ms ease !important;
-                }
-
-                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active, .karaoke-active-line,
-                p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
-                p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
-                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line, .karaoke-active-line .karaoke-word-enhanced, .karaoke-active-line .karaoke-char-enhanced {
-                    animation: none !important;
-                    transform: none !important;
-                    filter: none !important;
-                    text-shadow: none !important;
-                }
-
-                .karaoke-word-enhanced,
-                .karaoke-char-enhanced {
-                    animation: none !important;
-                    transition: none !important;
-                    filter: none !important;
-                }
-                `
-                        : ''
                 }
             `;
             root.appendChild(style);
@@ -1511,13 +1227,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         const cleanup = setupSync(track, audioPlayer, amLyrics, lyricsManager);
 
         // Attach cleanup to container for easy access
-        container.lyricsCleanup = () => {
-            if (contentWatchdogId) {
-                clearInterval(contentWatchdogId);
-                contentWatchdogId = null;
-            }
-            cleanup();
-        };
+        container.lyricsCleanup = cleanup;
         container.lyricsManager = lyricsManager;
 
         // Tap-to-seek: clicking any lyric line seeks audio to that line's time
@@ -1547,131 +1257,9 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         return amLyrics;
     } catch (error) {
         console.error('Failed to load lyrics:', error);
-        return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager);
-    }
-}
-
-async function renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, label = '') {
-    const lyricsData =
-        lyricsManager.lyricsCache.get(track.id) ||
-        (await lyricsManager.fetchLyrics(track.id, track).catch(() => null)) ||
-        null;
-
-    if (!lyricsData?.subtitles) {
-        container.innerHTML = '<div class="lyrics-error">Lyrics unavailable for this track</div>';
+        container.innerHTML = '<div class="lyrics-error">Failed to load lyrics</div>';
         return null;
     }
-
-    const parsed = lyricsManager.parseSyncedLyrics(lyricsData.subtitles);
-    if (!parsed.length) {
-        container.innerHTML = '<div class="lyrics-error">Lyrics unavailable for this track</div>';
-        return null;
-    }
-
-    const root = document.createElement('div');
-    root.className = 'lyrics-fallback';
-    root.innerHTML = `<div class="lyrics-fallback-status">${label || 'Fallback lyrics mode'}</div>`;
-
-    const scroller = document.createElement('div');
-    scroller.className = 'lyrics-fallback-scroller';
-    root.appendChild(scroller);
-
-    parsed.forEach((line, index) => {
-        const lineEl = document.createElement('button');
-        lineEl.type = 'button';
-        lineEl.className = 'lyrics-fallback-line';
-        lineEl.dataset.index = String(index);
-        lineEl.dataset.time = String(line.time);
-        lineEl.textContent = line.text || '…';
-        lineEl.addEventListener('click', () => {
-            audioPlayer.currentTime = line.time;
-            void audioPlayer.play();
-        });
-        scroller.appendChild(lineEl);
-    });
-
-    container.innerHTML = '';
-    container.appendChild(root);
-
-    let activeIndex = -1;
-    let rafId = null;
-
-    const computeActive = () => {
-        const current = audioPlayer.currentTime;
-        let found = -1;
-        for (let index = 0; index < parsed.length; index += 1) {
-            if (current >= parsed[index].time) found = index;
-            else break;
-        }
-        return found;
-    };
-
-    const updateLines = () => {
-        const next = computeActive();
-        if (next === activeIndex) return;
-        activeIndex = next;
-
-        scroller.querySelectorAll('.lyrics-fallback-line').forEach((el, index) => {
-            el.classList.toggle('active', index === activeIndex);
-            el.classList.toggle('past', index < activeIndex);
-            el.classList.toggle('upcoming', index > activeIndex);
-        });
-
-        if (activeIndex >= 0) {
-            const currentLine = scroller.querySelector(`.lyrics-fallback-line[data-index="${activeIndex}"]`);
-            currentLine?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }
-    };
-
-    const tick = () => {
-        updateLines();
-        if (!audioPlayer.paused) {
-            rafId = requestAnimationFrame(tick);
-        }
-    };
-
-    const onPlay = () => {
-        if (!rafId) {
-            rafId = requestAnimationFrame(tick);
-        }
-    };
-
-    const onPause = () => {
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-        }
-        updateLines();
-    };
-
-    const onSeek = () => {
-        updateLines();
-    };
-
-    updateLines();
-    audioPlayer.addEventListener('play', onPlay);
-    audioPlayer.addEventListener('pause', onPause);
-    audioPlayer.addEventListener('seeked', onSeek);
-    audioPlayer.addEventListener('timeupdate', onSeek);
-
-    if (!audioPlayer.paused) {
-        rafId = requestAnimationFrame(tick);
-    }
-
-    const cleanup = () => {
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-        }
-        audioPlayer.removeEventListener('play', onPlay);
-        audioPlayer.removeEventListener('pause', onPause);
-        audioPlayer.removeEventListener('seeked', onSeek);
-        audioPlayer.removeEventListener('timeupdate', onSeek);
-    };
-
-    container.lyricsCleanup = cleanup;
-    container.lyricsManager = lyricsManager;
-    return root;
 }
 
 function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
@@ -1683,8 +1271,6 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let lastHapticLineIndex = -1;
     let lastHapticAt = 0;
     let lastBeatPulseAt = 0;
-    let lyricLineElements = [];
-    let activeKaraokeLineIndex = -1;
     let hapticsEnabled = lyricsSettings.isHapticSyncEnabled();
     let hapticEnhancementEnabled = lyricsSettings.isHapticEnhancementEnabled();
     let analyser = null;
@@ -1693,7 +1279,6 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let lowMidBinCount = 0;
     let energyBaseline = 0;
     let lastEnergySampleAt = 0;
-    const waveUpdateIntervalMs = lyricsManager?.useLiteKaraoke ? 40 : 8;
 
     const onHapticsChanged = (e) => {
         hapticsEnabled = Boolean(e?.detail?.enabled);
@@ -1733,39 +1318,6 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         } else {
             syncedLyricLines = [];
         }
-
-        const root = amLyrics.shadowRoot || amLyrics;
-        lyricLineElements = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
-    };
-
-    const updateKaraokeActiveLine = (syncedTimeMs) => {
-        if (!lyricLineElements.length) return;
-
-        const nextActive = getLineIndexAtTime(syncedTimeMs / 1000);
-        if (nextActive === activeKaraokeLineIndex) return;
-
-        if (activeKaraokeLineIndex >= 0) {
-            const prevLine = lyricLineElements[activeKaraokeLineIndex];
-            if (prevLine) {
-                prevLine.classList.remove('karaoke-active-line');
-                prevLine.dataset.active = 'false';
-            }
-        }
-
-        activeKaraokeLineIndex = nextActive;
-
-        lyricLineElements.forEach((line, lineIndex) => {
-            if (!line) return;
-            if (lineIndex === nextActive) {
-                line.classList.add('karaoke-active-line');
-                line.dataset.active = 'true';
-            } else {
-                line.classList.remove('karaoke-active-line');
-                line.dataset.active = 'false';
-            }
-
-            line.dataset.prev = lineIndex === nextActive - 1 ? 'true' : 'false';
-        });
     };
 
     const getLineIndexAtTime = (seconds) => {
@@ -1904,7 +1456,6 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         const syncedTimeMs = currentMs - getTimingOffset();
         amLyrics.currentTime = syncedTimeMs;
         lastHapticLineIndex = getLineIndexAtTime(syncedTimeMs / 1000);
-        updateKaraokeActiveLine(syncedTimeMs);
     };
 
     const tick = () => {
@@ -1915,10 +1466,9 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
             // Apply timing offset: positive offset delays lyrics, negative advances them
             const syncedTimeMs = nextMs - getTimingOffset();
             amLyrics.currentTime = syncedTimeMs;
-            updateKaraokeActiveLine(syncedTimeMs);
 
             // High-refresh visual phase update for wave shimmer (up to ~120Hz)
-            if (now - lastWaveCssUpdate >= waveUpdateIntervalMs) {
+            if (now - lastWaveCssUpdate >= 8) {
                 amLyrics.style.setProperty('--karaoke-wave-ms', now.toFixed(2));
                 lastWaveCssUpdate = now;
             }

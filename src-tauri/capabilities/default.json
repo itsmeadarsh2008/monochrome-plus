@@ -2,6 +2,26 @@
     "$schema": "../gen/schemas/desktop-schema.json",
     "identifier": "default",
     "description": "Main desktop window capability set for core APIs, updater, shell/process plugins, and app IPC commands.",
+    "remote": {
+        "urls": ["http://localhost:1420", "http://127.0.0.1:1420"]
+    },
     "windows": ["main"],
-    "permissions": ["core:default", "dialog:default", "process:default", "shell:default", "updater:default"]
+    "permissions": [
+        "core:default",
+        "core:window:allow-close",
+        "core:window:allow-minimize",
+        "core:window:allow-toggle-maximize",
+        "core:window:allow-is-maximized",
+        "core:window:allow-set-fullscreen",
+        "core:window:allow-is-fullscreen",
+        "core:window:allow-start-dragging",
+        "dialog:default",
+        "process:default",
+        "process:allow-restart",
+        "shell:default",
+        "updater:default",
+        "updater:allow-check",
+        "updater:allow-download",
+        "updater:allow-download-and-install"
+    ]
 }

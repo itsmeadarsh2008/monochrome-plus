@@ -18,9 +18,13 @@ import { syncManager } from './accounts/appwrite-sync.js';
 import { showNotification, downloadTracks } from './downloads.js';
 
 export function initializeUIInteractions(player, api, ui) {
+    document.body.classList.add('navbar-removed');
+
     const sidebar = document.querySelector('.sidebar');
     const sidebarOverlay = document.getElementById('sidebar-overlay');
     const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebarMobileCloseBtn = document.getElementById('sidebar-mobile-close');
+    const quickNavButtons = Array.from(document.querySelectorAll('[data-quick-nav]'));
     const queueBtn = document.getElementById('queue-btn');
     const libraryPage = document.getElementById('page-library');
 
@@ -75,24 +79,47 @@ export function initializeUIInteractions(player, api, ui) {
 
     let draggedQueueIndex = null;
 
-    // Sidebar mobile
-    hamburgerBtn.addEventListener('click', () => {
-        sidebar.classList.add('is-open');
-        sidebarOverlay.classList.add('is-visible');
-    });
+    sidebar?.classList.remove('is-open');
+    sidebarOverlay?.classList.remove('is-visible');
+    document.body.classList.remove('mobile-nav-open');
+    hamburgerBtn?.setAttribute('aria-hidden', 'true');
+    sidebarMobileCloseBtn?.setAttribute('aria-hidden', 'true');
 
-    const closeSidebar = () => {
-        sidebar.classList.remove('is-open');
-        sidebarOverlay.classList.remove('is-visible');
+    const normalizePath = (path) => {
+        if (!path) return '/';
+        if (path === '/') return '/';
+        const withoutTrailing = path.endsWith('/') ? path.slice(0, -1) : path;
+        return withoutTrailing || '/';
     };
 
-    sidebarOverlay.addEventListener('click', closeSidebar);
+    const syncQuickNavState = () => {
+        const currentPath = normalizePath(window.location.pathname);
+        quickNavButtons.forEach((button) => {
+            const targetPath = normalizePath(button.getAttribute('data-quick-nav') || '/');
+            const isActive = targetPath === '/'
+                ? currentPath === '/'
+                : currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-current', isActive ? 'page' : 'false');
+        });
+    };
 
-    sidebar.addEventListener('click', (e) => {
-        if (e.target.closest('a')) {
-            closeSidebar();
-        }
+    quickNavButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            const targetPath = button.getAttribute('data-quick-nav');
+            if (!targetPath) return;
+
+            if (typeof window.navigate === 'function') {
+                window.navigate(targetPath);
+            } else {
+                window.location.pathname = targetPath;
+            }
+        });
     });
+
+    syncQuickNavState();
+    window.addEventListener('popstate', syncQuickNavState);
 
     // Queue panel
     const renderQueueControls = (container) => {

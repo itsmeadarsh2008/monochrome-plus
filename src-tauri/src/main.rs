@@ -11,6 +11,8 @@ use std::time::Duration;
 use tauri::{Manager, State};
 
 const DISCORD_CLIENT_ID: &str = "1466351059843809282";
+const RPC_CONNECT_RETRIES: usize = 3;
+const RPC_UPDATE_RETRIES: usize = 3;
 
 #[derive(Default)]
 struct RpcState {
@@ -30,6 +32,102 @@ struct DiscordPresencePayload {
     end_timestamp: Option<i64>,
 }
 
+struct NormalizedPresence {
+    details: String,
+    state: String,
+    large_image_key: String,
+    large_image_text: String,
+    small_image_key: Option<String>,
+    small_image_text: Option<String>,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+}
+
+fn clamp_text(value: Option<String>, max_len: usize) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let mut out = String::with_capacity(trimmed.len().min(max_len));
+        for ch in trimmed.chars().take(max_len) {
+            out.push(ch);
+        }
+        Some(out)
+    })
+}
+
+fn connect_client(client_guard: &mut Option<DiscordIpcClient>) -> Result<(), String> {
+    if client_guard.is_some() {
+        return Ok(());
+    }
+
+    let mut last_error = String::from("Unknown Discord RPC init error");
+    for attempt in 0..RPC_CONNECT_RETRIES {
+        match DiscordIpcClient::new(DISCORD_CLIENT_ID) {
+            Ok(mut created) => match created.connect() {
+                Ok(()) => {
+                    *client_guard = Some(created);
+                    return Ok(());
+                }
+                Err(e) => {
+                    last_error = format!("Failed to connect Discord RPC client: {e}");
+                }
+            },
+            Err(e) => {
+                last_error = format!("Failed to create Discord RPC client: {e}");
+            }
+        }
+
+        if attempt + 1 < RPC_CONNECT_RETRIES {
+            thread::sleep(Duration::from_millis(300));
+        }
+    }
+
+    Err(last_error)
+}
+
+fn normalize_presence_payload(
+    payload: &DiscordPresencePayload,
+    allow_external_cover: bool,
+) -> NormalizedPresence {
+    let details =
+        clamp_text(payload.details.clone(), 128).unwrap_or_else(|| "Monochrome+".to_string());
+    let state = clamp_text(payload.state.clone(), 128)
+        .unwrap_or_else(|| "Listening on Monochrome+".to_string());
+
+    let mut large_image_key = clamp_text(payload.large_image_key.clone(), 300);
+    if !allow_external_cover {
+        if large_image_key
+            .as_deref()
+            .is_some_and(|key| key.starts_with("mp:"))
+        {
+            large_image_key = None;
+        }
+    }
+
+    if large_image_key.is_none() {
+        large_image_key = Some("appicon".to_string());
+    }
+
+    let large_image_text = clamp_text(payload.large_image_text.clone(), 128)
+        .unwrap_or_else(|| "Monochrome+".to_string());
+    let small_image_key = clamp_text(payload.small_image_key.clone(), 64);
+    let small_image_text = clamp_text(payload.small_image_text.clone(), 128);
+
+    NormalizedPresence {
+        details,
+        state,
+        large_image_key: large_image_key.unwrap_or_else(|| "appicon".to_string()),
+        large_image_text,
+        small_image_key,
+        small_image_text,
+        start_timestamp: payload.start_timestamp,
+        end_timestamp: payload.end_timestamp,
+    }
+}
+
 #[tauri::command]
 fn update_discord_presence(
     payload: DiscordPresencePayload,
@@ -40,125 +138,59 @@ fn update_discord_presence(
         .lock()
         .map_err(|_| "Failed to lock Discord RPC state".to_string())?;
 
-    if client_guard.is_none() {
-        let mut last_error = String::from("Unknown Discord RPC init error");
-        for attempt in 0..3 {
-            match DiscordIpcClient::new(DISCORD_CLIENT_ID) {
-                Ok(mut created) => match created.connect() {
-                    Ok(()) => {
-                        *client_guard = Some(created);
-                        last_error.clear();
-                        break;
-                    }
-                    Err(e) => {
-                        last_error = format!("Failed to connect Discord RPC client: {e}");
-                    }
-                },
-                Err(e) => {
-                    last_error = format!("Failed to create Discord RPC client: {e}");
-                }
-            }
+    let mut last_error = String::from("Failed to update Discord RPC activity");
 
-            if attempt < 2 {
-                thread::sleep(Duration::from_millis(300));
-            }
+    for attempt in 0..RPC_UPDATE_RETRIES {
+        connect_client(&mut client_guard)?;
+
+        let allow_external_cover = attempt == 0;
+        let normalized = normalize_presence_payload(&payload, allow_external_cover);
+        let mut activity = Activity::new()
+            .details(normalized.details.as_str())
+            .state(normalized.state.as_str());
+
+        let mut assets = Assets::new()
+            .large_image(normalized.large_image_key.as_str())
+            .large_text(normalized.large_image_text.as_str());
+
+        if let Some(ref key) = normalized.small_image_key {
+            assets = assets.small_image(key.as_str());
+        }
+        if let Some(ref text) = normalized.small_image_text {
+            assets = assets.small_text(text.as_str());
         }
 
-        if client_guard.is_none() {
-            return Err(last_error);
-        }
-    }
-
-    let client = client_guard
-        .as_mut()
-        .ok_or_else(|| "Discord RPC client not available".to_string())?;
-
-    let details = payload.details;
-    let state = payload.state;
-    let large_image_key = payload.large_image_key;
-    let large_image_text = payload.large_image_text;
-    let small_image_key = payload.small_image_key;
-    let small_image_text = payload.small_image_text;
-
-    let mut activity = Activity::new();
-
-    if let Some(ref d) = details {
-        activity = activity.details(d.as_str());
-    }
-    if let Some(ref s) = state {
-        activity = activity.state(s.as_str());
-    }
-
-    if large_image_key.is_some()
-        || large_image_text.is_some()
-        || small_image_key.is_some()
-        || small_image_text.is_some()
-    {
-        let mut assets = Assets::new();
-        if let Some(ref k) = large_image_key {
-            assets = assets.large_image(k.as_str());
-        }
-        if let Some(ref t) = large_image_text {
-            assets = assets.large_text(t.as_str());
-        }
-        if let Some(ref k) = small_image_key {
-            assets = assets.small_image(k.as_str());
-        }
-        if let Some(ref t) = small_image_text {
-            assets = assets.small_text(t.as_str());
-        }
         activity = activity.assets(assets);
-    }
 
-    if payload.start_timestamp.is_some() || payload.end_timestamp.is_some() {
-        let mut timestamps = Timestamps::new();
-        if let Some(start) = payload.start_timestamp {
-            timestamps = timestamps.start(start);
+        if normalized.start_timestamp.is_some() || normalized.end_timestamp.is_some() {
+            let mut timestamps = Timestamps::new();
+            if let Some(start) = normalized.start_timestamp {
+                timestamps = timestamps.start(start);
+            }
+            if let Some(end) = normalized.end_timestamp {
+                timestamps = timestamps.end(end);
+            }
+            activity = activity.timestamps(timestamps);
         }
-        if let Some(end) = payload.end_timestamp {
-            timestamps = timestamps.end(end);
-        }
-        activity = activity.timestamps(timestamps);
-    }
 
-    match client.set_activity(activity.clone()) {
-        Ok(()) => Ok(()),
-        Err(first_error) => {
-            *client_guard = None;
-            let mut last_error =
-                format!("Failed to set Discord RPC activity ({first_error}) and could not recover");
+        let update_result = client_guard
+            .as_mut()
+            .ok_or_else(|| "Discord RPC client not available".to_string())?
+            .set_activity(activity);
 
-            for attempt in 0..3 {
-                match DiscordIpcClient::new(DISCORD_CLIENT_ID) {
-                    Ok(mut recreated) => match recreated.connect() {
-                        Ok(()) => match recreated.set_activity(activity.clone()) {
-                            Ok(()) => {
-                                *client_guard = Some(recreated);
-                                return Ok(());
-                            }
-                            Err(e) => {
-                                last_error = format!(
-                                    "Failed to set Discord RPC activity after reconnect ({first_error}): {e}"
-                                );
-                            }
-                        },
-                        Err(e) => {
-                            last_error = format!("Failed to reconnect Discord RPC client: {e}");
-                        }
-                    },
-                    Err(e) => {
-                        last_error = format!("Failed to recreate Discord RPC client: {e}");
-                    }
-                }
-
-                if attempt < 2 {
+        match update_result {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = format!("Failed to set Discord RPC activity: {error}");
+                *client_guard = None;
+                if attempt + 1 < RPC_UPDATE_RETRIES {
                     thread::sleep(Duration::from_millis(300));
                 }
             }
-
-            Err(last_error)
         }
     }
+
+    Err(last_error)
 }
 
 #[tauri::command]
@@ -188,6 +220,7 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title("Monochrome+");
             }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

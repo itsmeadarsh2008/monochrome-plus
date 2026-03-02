@@ -649,19 +649,6 @@ export class UIRenderer {
         extraAttributes = '',
         extraClasses = '',
     }) {
-        const hasActions = type !== 'artist';
-
-        const playBtnHTML = hasActions
-            ? `<button class="card-action-btn card-play-btn" data-action="play-card" data-type="${type}" data-id="${id}" title="Play">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-               </button>`
-            : '';
-
-        // Menu button removed - only play button shown
-        const menuBtnHTML = '';
-
         return `
             <div class="card ${extraClasses} ${isCompact ? 'compact' : ''}" data-${type}-id="${id}" data-href="${href}" ${extraAttributes}>
                 <div class="card-image-wrapper">
@@ -672,16 +659,6 @@ export class UIRenderer {
                     <h4 class="card-title">${title}</h4>
                     ${subtitle ? `<p class="card-subtitle">${subtitle}</p>` : ''}
                 </div>
-                ${
-                    hasActions
-                        ? `
-                <div class="card-actions">
-                    ${menuBtnHTML}
-                    ${playBtnHTML}
-                </div>
-                `
-                        : ''
-                }
             </div>
         `;
     }
@@ -697,11 +674,7 @@ export class UIRenderer {
             title: playlist.title,
             subtitle: `${playlist.numberOfTracks || 0} tracks`,
             imageHTML: `<img src="${this.api.getCoverUrl(imageId)}" alt="${playlist.title}" class="card-image" loading="lazy">`,
-            actionButtonsHTML: `
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="playlist" title="Add to Liked">
-                    ${this.createHeartIcon(false)}
-                </button>
-            `,
+            actionButtonsHTML: '',
             isCompact,
         });
     }
@@ -734,11 +707,7 @@ export class UIRenderer {
             title: mix.title,
             subtitle: description,
             imageHTML: `<img src="${imageSrc}" alt="${mix.title}" class="card-image" loading="lazy">`,
-            actionButtonsHTML: `
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="mix" title="Add to Liked">
-                    ${this.createHeartIcon(false)}
-                </button>
-            `,
+            actionButtonsHTML: '',
             isCompact,
         });
     }
@@ -835,11 +804,7 @@ export class UIRenderer {
             title: `${escapeHtml(album.title)} ${explicitBadge} ${qualityBadge}`,
             subtitle: `${escapeHtml(album.artist?.name ?? '')} • ${yearDisplay}${typeLabel}`,
             imageHTML: `<img src="${this.api.getCoverUrl(album.cover)}" alt="${escapeHtml(album.title)}" class="card-image" loading="lazy">`,
-            actionButtonsHTML: `
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="album" title="Add to Liked">
-                    ${this.createHeartIcon(false)}
-                </button>
-            `,
+            actionButtonsHTML: '',
             isCompact,
             extraClasses: isBlocked ? 'blocked' : '',
             extraAttributes: isBlocked
@@ -860,11 +825,7 @@ export class UIRenderer {
             title: escapeHtml(artist.name),
             subtitle: '',
             imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
-            actionButtonsHTML: `
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="artist" title="Add to Liked">
-                    ${this.createHeartIcon(false)}
-                </button>
-            `,
+            actionButtonsHTML: '',
             isCompact,
             extraClasses: `artist${isBlocked ? ' blocked' : ''}`,
             extraAttributes: isBlocked ? 'title="Blocked: Artist blocked"' : '',
@@ -3013,11 +2974,7 @@ export class UIRenderer {
             title: `${escapeHtml(getTrackTitle(track))} ${explicitBadge} ${qualityBadge}`,
             subtitle: escapeHtml(getTrackArtists(track)),
             imageHTML: `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="${escapeHtml(track.title)}" class="card-image" loading="lazy">`,
-            actionButtonsHTML: `
-                <button class="like-btn card-like-btn" data-action="toggle-like" data-type="track" title="Add to Liked">
-                    ${this.createHeartIcon(false)}
-                </button>
-            `,
+            actionButtonsHTML: '',
             isCompact,
         });
     }

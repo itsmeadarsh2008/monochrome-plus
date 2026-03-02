@@ -648,7 +648,7 @@ body {
 }
 
 :root {
-    --tauri-titlebar-height: 40px;
+    --tauri-titlebar-height: 46px;
     --desktop-zoom-scale: 1;
 }
 
@@ -666,31 +666,52 @@ body.tauri-desktop .app-container {
     top: 0;
     left: 0;
     right: 0;
-    height: 8px;
+    height: 12px;
     z-index: 1999;
     background: transparent;
 }
 
 #tauri-window-chrome {
     position: fixed;
-    inset: 0 0 auto;
+    inset: 8px 10px auto;
     height: var(--tauri-titlebar-height);
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.6rem;
-    background: color-mix(in srgb, var(--card) 72%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-    backdrop-filter: blur(12px);
+    gap: 0.65rem;
+    padding: 0.42rem 0.62rem;
+    background: linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--card) 84%, transparent) 0%,
+        color-mix(in srgb, var(--card) 72%, var(--background) 28%) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    border-radius: calc(var(--radius-lg) + 2px);
+    box-shadow:
+        0 14px 26px -18px rgb(0 0 0 / 0.55),
+        0 3px 9px -4px rgb(0 0 0 / 0.35),
+        inset 0 1px 0 rgb(255 255 255 / 0.08);
+    backdrop-filter: blur(16px) saturate(1.08);
     z-index: 2000;
     user-select: none;
-    transform: translateY(calc(-1 * var(--tauri-titlebar-height) - 8px));
+    transform: translateY(calc(-1 * var(--tauri-titlebar-height) - 16px));
     opacity: 0;
     pointer-events: none;
     transition:
-        transform 0.22s ease,
-        opacity 0.22s ease;
+        transform 0.24s var(--ease-out),
+        opacity 0.24s var(--ease-out),
+        box-shadow 0.24s var(--ease-out);
+}
+
+#tauri-window-chrome::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgb(255 255 255 / 0.1) 0%, rgb(255 255 255 / 0) 55%);
+    mix-blend-mode: screen;
+    opacity: 0.72;
 }
 
 body.tauri-desktop.tauri-chrome-peek #tauri-window-chrome,
@@ -698,38 +719,43 @@ body.tauri-desktop.tauri-chrome-peek #tauri-window-chrome,
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
+    box-shadow:
+        0 16px 30px -18px rgb(0 0 0 / 0.6),
+        0 4px 10px -4px rgb(0 0 0 / 0.38),
+        inset 0 1px 0 rgb(255 255 255 / 0.11);
 }
 
 .tauri-window-brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
-    min-width: 170px;
+    gap: 0.52rem;
+    min-width: 184px;
     color: var(--foreground);
-    opacity: 0.9;
+    opacity: 0.96;
 }
 
 .tauri-window-brand-handle {
     display: inline-flex;
     align-items: center;
-    gap: 0.22rem;
-    padding: 0.18rem 0.4rem;
+    gap: 0.24rem;
+    padding: 0.22rem 0.44rem;
     border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-    background: color-mix(in srgb, var(--secondary) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--secondary) 74%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
 }
 
 .tauri-window-brand-handle span {
     width: 5px;
     height: 5px;
     border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--foreground) 74%, transparent);
+    background: color-mix(in srgb, var(--foreground) 84%, transparent);
 }
 
 .tauri-window-brand-text {
-    font-size: var(--text-sm);
+    font-size: 0.84rem;
     font-weight: var(--font-semibold);
-    letter-spacing: 0.02em;
+    letter-spacing: 0.015em;
 }
 
 .tauri-window-drag-region {
@@ -743,65 +769,116 @@ body.tauri-desktop.tauri-chrome-peek #tauri-window-chrome,
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
     border-radius: var(--radius-full);
-    padding: 0.32rem 0.65rem;
-    background: color-mix(in srgb, var(--secondary) 66%, transparent);
+    padding: 0.34rem 0.72rem;
+    background: color-mix(in srgb, var(--secondary) 76%, transparent);
     cursor: grab;
     pointer-events: auto;
+    transition:
+        background-color var(--transition-fast),
+        border-color var(--transition-fast),
+        transform var(--transition-fast);
 }
 
 .tauri-window-grab-handle:active {
     cursor: grabbing;
+    transform: scale(0.98);
+}
+
+.tauri-window-grab-handle:hover {
+    background: color-mix(in srgb, var(--secondary) 88%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--border) 70%);
 }
 
 .tauri-window-grab-handle span {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
     border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--foreground) 72%, transparent);
+    background: color-mix(in srgb, var(--foreground) 82%, transparent);
 }
 
 .tauri-window-controls {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
 }
 
 .tauri-window-zoom-controls {
     display: inline-flex;
     align-items: center;
-    gap: 0.28rem;
-    margin-right: 0.2rem;
+    gap: 0.3rem;
+    margin-right: 0.25rem;
+    padding-right: 0.3rem;
+    border-right: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .tauri-window-zoom-value {
-    min-width: 52px;
+    min-width: 56px;
     font-size: var(--text-xs);
     font-weight: var(--font-medium);
 }
 
 .tauri-window-btn {
-    width: 32px;
-    height: 26px;
-    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    width: 30px;
+    height: 30px;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--secondary) 80%, transparent);
     color: var(--foreground);
     cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: var(--font-medium);
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition:
+        transform var(--transition-fast),
         background-color var(--transition-fast),
         border-color var(--transition-fast),
-        opacity var(--transition-fast);
+        color var(--transition-fast),
+        opacity var(--transition-fast),
+        box-shadow var(--transition-fast);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
 }
 
 .tauri-window-btn:hover {
-    background: color-mix(in srgb, var(--secondary) 90%, transparent);
+    background: color-mix(in srgb, var(--secondary) 96%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border) 66%);
+    transform: translateY(-1px);
 }
 
 .tauri-window-btn.close:hover {
-    background: color-mix(in srgb, var(--color-danger) 86%, transparent);
+    color: color-mix(in srgb, var(--primary-foreground) 92%, white);
+    background: color-mix(in srgb, var(--color-danger) 80%, transparent);
     border-color: color-mix(in srgb, var(--color-danger) 80%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-danger) 42%, transparent);
+}
+
+.tauri-window-btn:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.tauri-window-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    transform: none;
+}
+
+@media (max-width: 980px) {
+    #tauri-window-chrome {
+        inset: 6px 8px auto;
+        grid-template-columns: auto auto;
+    }
+
+    .tauri-window-drag-region {
+        display: none;
+    }
+
+    .tauri-window-brand {
+        min-width: auto;
+    }
 }
 
 img {
@@ -1835,6 +1912,11 @@ kbd {
     backdrop-filter: blur(4px);
 }
 
+body.mobile-nav-open {
+    overflow: hidden;
+    touch-action: none;
+}
+
 .main-header {
     display: flex;
     justify-content: space-between;
@@ -2007,6 +2089,76 @@ kbd {
     transform: translateY(-1px);
 }
 
+.quick-nav-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+    margin-left: 0.2rem;
+    padding-left: 0.34rem;
+    border-left: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.quick-nav-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-full);
+    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    color: var(--muted-foreground);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        border-color var(--transition-fast),
+        background-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.quick-nav-btn:hover {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--secondary) 84%, transparent);
+    border-color: color-mix(in srgb, var(--border) 68%, transparent);
+    transform: translateY(-1px);
+}
+
+.quick-nav-btn.active {
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+}
+
+.header-account-control--search {
+    width: auto;
+    margin-left: 0.25rem;
+}
+
+.search-nav-controls .nav-btn-account--compact {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+    border-radius: var(--radius-full);
+}
+
+.search-nav-controls .nav-btn-account--compact .nav-account-meta {
+    display: none;
+}
+
+.search-nav-controls .nav-btn-account--compact .nav-account-chevron {
+    display: none;
+}
+
+.search-account-dropdown {
+    top: calc(100% + 0.5rem);
+    bottom: auto;
+    left: 0;
+    right: auto;
+    min-width: 220px;
+}
+
 .search-input-wrapper {
     position: relative;
     flex: 1;
@@ -2020,6 +2172,22 @@ kbd {
 
 body.has-page-background .search-bar input {
     background-color: var(--background);
+}
+
+body.navbar-removed .app-container {
+    grid-template:
+        'main' 1fr
+        'player' auto / 1fr;
+}
+
+body.navbar-removed .sidebar,
+body.navbar-removed #sidebar-overlay {
+    display: none !important;
+}
+
+body.navbar-removed .now-playing-bar {
+    width: 96% !important;
+    left: 2% !important;
 }
 
 body.has-page-background .track-item:hover {
@@ -6909,6 +7077,13 @@ input:checked + .slider::before {
     box-shadow: none;
 }
 
+#side-panel-title {
+    /* font-size: 1.5rem; */
+    font-weight: 700;
+    padding:15px;
+    color: var(--foreground);
+}
+
 .side-panel.resizing {
     transition: none !important;
 
@@ -7577,10 +7752,15 @@ input:checked + .slider::before {
 #page-home .card:not(.artist-circular) .card-title {
     color: var(--foreground);
     text-shadow: none;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
-    -webkit-line-clamp: 1;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    line-height: 1.28;
+    min-height: calc(1.28em * 2);
 }
 
 #page-home .card:not(.artist-circular) .card-subtitle {
@@ -7589,6 +7769,19 @@ input:checked + .slider::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+    html.carousel-mode #page-home .card-grid > .card,
+    .carousel-mode #page-home .card-grid > .card {
+        width: clamp(160px, 46vw, 190px);
+        min-width: clamp(160px, 46vw, 190px);
+        max-width: clamp(160px, 46vw, 190px);
+    }
+
+    #page-home .card:not(.artist-circular) .card-content {
+        padding: 0.8rem 0.85rem 0.92rem;
+    }
 }
 
 #artist-detail-similar,
@@ -8870,6 +9063,28 @@ body.auth-locked .auth-email-form .template-input {
         transform: translateX(0);
     }
 
+    .sidebar-logo {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding-right: 0.25rem;
+    }
+
+    #sidebar-mobile-close {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-md);
+        border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+        background: color-mix(in srgb, var(--secondary) 78%, transparent);
+        color: var(--foreground);
+        flex-shrink: 0;
+    }
+
+    #sidebar-mobile-close:hover {
+        background: color-mix(in srgb, var(--secondary) 90%, transparent);
+    }
+
     /* Player bar is at the bottom - no additional nav bar needed */
 
     .sidebar-content {
@@ -8934,6 +9149,7 @@ body.auth-locked .auth-email-form .template-input {
         bottom: 0;
         background: rgb(0, 0, 0, 0.5);
         z-index: 1999;
+        pointer-events: auto;
     }
 
     .search-bar {
@@ -8961,6 +9177,21 @@ body.auth-locked .auth-email-form .template-input {
 
     .search-nav-controls {
         order: 1;
+    }
+
+    .quick-nav-buttons {
+        overflow-x: auto;
+        max-width: min(58vw, 260px);
+        scrollbar-width: none;
+    }
+
+    .search-nav-controls .nav-btn-account--compact {
+        width: 32px;
+        height: 32px;
+    }
+
+    .quick-nav-buttons::-webkit-scrollbar {
+        display: none;
     }
 
     .search-input-wrapper {

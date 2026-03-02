@@ -1,5 +1,5 @@
 // js/desktop/discord-rpc.js
-import { getTrackTitle, getTrackArtists } from '../utils.js';
+import { deriveTrackQuality, getTrackTitle, getTrackArtists } from '../utils.js';
 
 export function initializeDiscordRPC(player) {
     const isTauri =
@@ -12,6 +12,21 @@ export function initializeDiscordRPC(player) {
     let lastPayload = null;
     let rpcHealthy = false;
     let heartbeatId = null;
+    let monotoneTicker = 0;
+
+    const MONOCHROME_ROTATION = [
+        'Monochrome+ • Hyper-fast playback',
+        'Monochrome+ • Privacy-respecting audio',
+        'Monochrome+ • High-fidelity streaming',
+        'Monochrome+ • Built for focused listening',
+    ];
+
+    const QUALITY_LABELS = {
+        HI_RES_LOSSLESS: 'Hi-Res Lossless',
+        LOSSLESS: 'Lossless',
+        HIGH: 'High',
+        LOW: 'Low',
+    };
 
     const sendViaTauri = async (payload) => {
         const core = await import('@tauri-apps/api/core');
@@ -35,18 +50,50 @@ export function initializeDiscordRPC(player) {
 
         const candidates = [
             track?.album?.coverUrl,
+            track?.album?.cover,
             track?.album?.image,
             track?.album?.artwork,
+            track?.album?.images?.large,
+            track?.album?.images?.medium,
+            track?.album?.images?.small,
             track?.coverUrl,
+            track?.cover,
             track?.image,
             track?.artwork,
+            track?.images?.large,
+            track?.images?.medium,
+            track?.images?.small,
         ].filter(Boolean);
 
-        return candidates.find((url) => /^https?:\/\//i.test(String(url))) || null;
+        const candidate = candidates.find((url) => /^https?:\/\//i.test(String(url)));
+        if (!candidate) return null;
+
+        const normalized = String(candidate).trim();
+        if (normalized.length > 240) return null;
+        return normalized;
     };
 
-    async function sendUpdate(track, isPaused = false) {
-        if (!track) return;
+    const getTrackQualityLabel = (track) => {
+        const qualityToken =
+            track?.streamedQuality ||
+            track?.audioQuality ||
+            deriveTrackQuality(track) ||
+            player?.quality ||
+            null;
+
+        if (!qualityToken) return 'Quality unknown';
+
+        return QUALITY_LABELS[qualityToken] || String(qualityToken).replace(/_/g, ' ');
+    };
+
+    const getDynamicMonochromeLabel = (qualityLabel, isPaused = false) => {
+        const base = MONOCHROME_ROTATION[monotoneTicker % MONOCHROME_ROTATION.length];
+        monotoneTicker += 1;
+        return isPaused ? `${base} • Paused • ${qualityLabel}` : `${base} • ${qualityLabel}`;
+    };
+
+    const buildPayload = (track, isPaused = false) => {
+        if (!track) return null;
 
         const rawDuration = Number(track.duration);
         const trackDurationSeconds = Number.isFinite(rawDuration)
@@ -56,26 +103,40 @@ export function initializeDiscordRPC(player) {
             : 0;
         const currentTimeSeconds = Number(player.audio.currentTime) || 0;
 
+        const title = clamp(getTrackTitle(track), 128) || 'Unknown Track';
+        const artists = clamp(getTrackArtists(track), 96) || 'Unknown Artist';
+        const qualityLabel = clamp(getTrackQualityLabel(track), 36) || 'Quality unknown';
+
         const data = {
-            details: clamp(getTrackTitle(track), 128) || 'Monochrome+',
-            state: clamp(getTrackArtists(track), 128) || 'Playing music',
+            details: title,
+            state: clamp(`${artists} • ${qualityLabel}`, 128),
+            largeImageText: clamp(`${title} • ${qualityLabel}`, 128),
+            smallImageText: clamp(getDynamicMonochromeLabel(qualityLabel, isPaused), 128),
             instance: false,
         };
 
         const coverUrl = getTrackCoverUrl(track);
-        if (coverUrl) {
-            data.largeImageKey = `mp:${coverUrl}`;
-            data.largeImageText = clamp(getTrackTitle(track), 128) || 'Monochrome+';
-        } else {
-            data.largeImageKey = 'appicon';
-            data.largeImageText = 'Monochrome+';
-        }
+        data.largeImageKey = coverUrl ? `mp:${coverUrl}` : 'appicon';
 
         if (!isPaused && trackDurationSeconds > 0 && currentTimeSeconds >= 0) {
             const elapsed = Math.min(currentTimeSeconds, trackDurationSeconds);
             if (Number.isFinite(elapsed)) {
-                data.startTimestamp = Math.floor(Date.now() / 1000 - elapsed);
+                const startTimestamp = Math.floor(Date.now() / 1000 - elapsed);
+                data.startTimestamp = startTimestamp;
+                data.endTimestamp = startTimestamp + Math.floor(trackDurationSeconds);
             }
+        }
+
+        return data;
+    };
+
+    async function sendUpdate(track, isPaused = false) {
+        const data = buildPayload(track, isPaused);
+        if (!data) return;
+
+        const payloadHasChanged = JSON.stringify(data) !== JSON.stringify(lastPayload);
+        if (!payloadHasChanged && !isPaused) {
+            return;
         }
 
         try {
@@ -93,16 +154,18 @@ export function initializeDiscordRPC(player) {
     async function sendIdle() {
         if (!isTauri) return;
         try {
-            await sendViaTauri({
+            const idlePayload = {
                 details: 'Idling',
-                state: 'Monochrome+',
-                instance: false,
-            });
-            lastPayload = {
-                details: 'Idling',
-                state: 'Monochrome+',
+                state: 'No active track',
+                largeImageKey: 'appicon',
+                largeImageText: 'Monochrome+',
+                smallImageText: clamp(MONOCHROME_ROTATION[monotoneTicker % MONOCHROME_ROTATION.length], 128),
                 instance: false,
             };
+            monotoneTicker += 1;
+
+            await sendViaTauri(idlePayload);
+            lastPayload = idlePayload;
             rpcHealthy = true;
         } catch {
             rpcHealthy = false;
@@ -137,23 +200,28 @@ export function initializeDiscordRPC(player) {
     }
 
     player.audio.addEventListener('play', () => {
-        void sendUpdate(player.currentTrack);
+        lastRefreshAt = 0;
+        void sendUpdate(player.currentTrack, false);
     });
 
     player.audio.addEventListener('pause', () => {
         void sendUpdate(player.currentTrack, true);
     });
 
-    player.audio.addEventListener('loadedmetadata', () => {
-        if (!player.audio.paused) {
-            void sendUpdate(player.currentTrack);
+    player.audio.addEventListener('seeking', () => {
+        if (player.currentTrack) {
+            void sendUpdate(player.currentTrack, player.audio.paused);
         }
+    });
+
+    player.audio.addEventListener('loadedmetadata', () => {
+        void sendUpdate(player.currentTrack, player.audio.paused);
     });
 
     player.audio.addEventListener('timeupdate', () => {
         if (player.audio.paused || !player.currentTrack) return;
         const now = Date.now();
-        if (now - lastRefreshAt < 15000) return;
+        if (now - lastRefreshAt < 12000) return;
         lastRefreshAt = now;
         void sendUpdate(player.currentTrack);
     });

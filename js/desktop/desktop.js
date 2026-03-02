@@ -7,6 +7,38 @@ const DEFAULT_DESKTOP_ZOOM = 0.9;
 const MIN_DESKTOP_ZOOM = 0.75;
 const MAX_DESKTOP_ZOOM = 1;
 const DESKTOP_ZOOM_STEP = 0.05;
+const USE_CUSTOM_WINDOW_CHROME = false;
+
+function bootstrapDiscordRPC(player) {
+    if (window.__monochromeDiscordRpcInitialized) return;
+
+    const resolvePlayer = () => player || window.player || window.__monochromePlayer || null;
+    const resolvedPlayer = resolvePlayer();
+    if (resolvedPlayer) {
+        initializeDiscordRPC(resolvedPlayer);
+        window.__monochromeDiscordRpcInitialized = true;
+        return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 30;
+    const retryId = window.setInterval(() => {
+        const readyPlayer = resolvePlayer();
+        attempts += 1;
+
+        if (readyPlayer) {
+            initializeDiscordRPC(readyPlayer);
+            window.__monochromeDiscordRpcInitialized = true;
+            window.clearInterval(retryId);
+            return;
+        }
+
+        if (attempts >= maxAttempts) {
+            window.clearInterval(retryId);
+            console.warn('[Desktop] Discord RPC bootstrap timed out waiting for player.');
+        }
+    }, 500);
+}
 
 function normalizeDesktopZoom(value) {
     const numeric = Number(value);
@@ -140,23 +172,35 @@ async function initFramelessWindowChrome() {
             fullscreenBtn.setAttribute('aria-label', isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen');
         };
 
+        const runWindowAction = async (action, label) => {
+            try {
+                await action();
+            } catch (error) {
+                console.error(`[Desktop] Failed to ${label}:`, error);
+            }
+        };
+
         bar.querySelector('#tauri-window-minimize')?.addEventListener('click', async () => {
-            await appWindow.minimize();
+            await runWindowAction(() => appWindow.minimize(), 'minimize window');
         });
 
         maximizeBtn?.addEventListener('click', async () => {
-            await appWindow.toggleMaximize();
-            await syncMaximizeState();
+            await runWindowAction(async () => {
+                await appWindow.toggleMaximize();
+                await syncMaximizeState();
+            }, 'toggle maximize');
         });
 
         fullscreenBtn?.addEventListener('click', async () => {
-            const isFullscreen = await appWindow.isFullscreen();
-            await appWindow.setFullscreen(!isFullscreen);
-            await syncFullscreenState();
+            await runWindowAction(async () => {
+                const isFullscreen = await appWindow.isFullscreen();
+                await appWindow.setFullscreen(!isFullscreen);
+                await syncFullscreenState();
+            }, 'toggle fullscreen');
         });
 
         bar.querySelector('#tauri-window-close')?.addEventListener('click', async () => {
-            await appWindow.close();
+            await runWindowAction(() => appWindow.close(), 'close window');
         });
 
         zoomOutBtn?.addEventListener('click', () => {
@@ -196,9 +240,11 @@ async function initFramelessWindowChrome() {
             window.addEventListener('keydown', async (event) => {
                 if (event.key !== 'F11') return;
                 event.preventDefault();
-                const isFullscreen = await appWindow.isFullscreen();
-                await appWindow.setFullscreen(!isFullscreen);
-                await syncFullscreenState();
+                await runWindowAction(async () => {
+                    const isFullscreen = await appWindow.isFullscreen();
+                    await appWindow.setFullscreen(!isFullscreen);
+                    await syncFullscreenState();
+                }, 'toggle fullscreen');
             });
         }
 
@@ -207,15 +253,21 @@ async function initFramelessWindowChrome() {
             if (event.button !== 0) return;
             try {
                 await appWindow.startDragging();
-            } catch {
-                // no-op fallback to data-tauri-drag-region
+            } catch (error) {
+                console.warn('[Desktop] startDragging failed, using drag-region fallback:', error);
             }
         };
 
         holderHandle?.addEventListener('mousedown', (event) => {
             void triggerDrag(event);
         });
+        holderHandle?.addEventListener('pointerdown', (event) => {
+            void triggerDrag(event);
+        });
         brandRegion?.addEventListener('mousedown', (event) => {
+            void triggerDrag(event);
+        });
+        brandRegion?.addEventListener('pointerdown', (event) => {
             void triggerDrag(event);
         });
 
@@ -230,8 +282,10 @@ async function initFramelessWindowChrome() {
         });
 
         dragRegion?.addEventListener('dblclick', async () => {
-            await appWindow.toggleMaximize();
-            await syncMaximizeState();
+            await runWindowAction(async () => {
+                await appWindow.toggleMaximize();
+                await syncMaximizeState();
+            }, 'toggle maximize');
         });
 
         hideChromeSoon();
@@ -261,10 +315,12 @@ export async function initDesktop(player) {
 
     if (isTauri) {
         console.log('[Desktop] Tauri runtime detected.');
-        await initFramelessWindowChrome();
-        if (player) {
-            initializeDiscordRPC(player);
+        bootstrapDiscordRPC(player);
+
+        if (USE_CUSTOM_WINDOW_CHROME || window.__MONOCHROME_USE_CUSTOM_CHROME__ === true) {
+            await initFramelessWindowChrome();
         }
+
         checkForDesktopUpdates();
         return;
     }

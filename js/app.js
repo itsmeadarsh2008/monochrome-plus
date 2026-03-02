@@ -2761,8 +2761,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sidebarProfileNav = document.getElementById('sidebar-nav-profile');
     const sidebarEl = document.querySelector('.sidebar');
 
-    if (headerAccountBtn && headerAccountDropdown) {
+    if (headerAccountBtn) {
         const closeAccountDropdown = () => {
+            if (!headerAccountDropdown) return;
             headerAccountDropdown.classList.remove('active');
             headerAccountBtn.classList.remove('is-open');
             headerAccountBtn.setAttribute('aria-expanded', 'false');
@@ -2770,22 +2771,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         headerAccountBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
-            const willOpen = !headerAccountDropdown.classList.contains('active');
-            headerAccountDropdown.classList.toggle('active', willOpen);
-            headerAccountBtn.classList.toggle('is-open', willOpen);
-            headerAccountBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-            if (sidebarEl) sidebarEl.classList.toggle('sidebar-account-open', willOpen);
-            if (willOpen) {
-                updateAccountDropdown();
-            }
+            closeAccountDropdown();
+            navigate('/account');
         });
 
-        document.addEventListener('click', (e) => {
-            if (!headerAccountBtn.contains(e.target) && !headerAccountDropdown.contains(e.target)) {
-                closeAccountDropdown();
-            }
-        });
+        if (headerAccountDropdown) {
+            document.addEventListener('click', (e) => {
+                if (!headerAccountBtn.contains(e.target) && !headerAccountDropdown.contains(e.target)) {
+                    closeAccountDropdown();
+                }
+            });
+        }
 
         async function updateAccountDropdown() {
             const user = authManager?.user;
@@ -2904,7 +2902,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     ui.renderProfilePage();
                 }
             }
-            updateAccountDropdown();
+            if (headerAccountDropdown) {
+                updateAccountDropdown();
+            }
         });
     }
 });

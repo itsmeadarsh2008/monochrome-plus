@@ -1,25 +1,26 @@
 {
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "Monochrome+",
-    "version": "1.0.3",
+    "version": "2.0.0",
     "identifier": "network.appwrite.monochromeplus",
     "build": {
-        "beforeDevCommand": "echo Using hosted Monochrome+ frontend for Tauri dev",
-        "beforeBuildCommand": "echo Using hosted Monochrome+ frontend for Tauri build",
-        "devUrl": "https://monochrome-plus.appwrite.network",
-        "frontendDist": "https://monochrome-plus.appwrite.network"
+        "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 1420",
+        "beforeBuildCommand": "npm run build:web",
+        "devUrl": "http://127.0.0.1:1420",
+        "frontendDist": "../dist"
     },
     "app": {
         "withGlobalTauri": true,
         "windows": [
             {
                 "title": "Monochrome+",
-                "url": "https://monochrome-plus.appwrite.network",
                 "width": 1440,
                 "height": 900,
                 "minWidth": 480,
                 "minHeight": 320,
-                "decorations": false,
+                "maxWidth": 1920,
+                "maxHeight": 1200,
+                "decorations": true,
                 "resizable": true,
                 "fullscreen": false,
                 "maximizable": true,
@@ -61,7 +62,7 @@
         "updater": {
             "active": true,
             "dangerousInsecureTransportProtocol": false,
-            "endpoints": ["https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"],
+            "endpoints": ["https://github.com/monochrome-music/monochrome/releases/latest/download/latest.json"],
             "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIwMzVEMTE5NEIzQjAzQUIKUldTckF6dExHZEUxSU0rbWVtRWFUNE8xbVlTVEV5SlRmempRNGV4aVlteENrVy9kK1BpZS9STHMK"
         }
     }
