@@ -153,10 +153,21 @@ jobs:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               shell: bash
               run: |
-                mapfile -t ASSETS < <(find desktop-dist release-assets -type f)
+                mapfile -t ASSETS < <(find release-artifacts release-assets -type f)
                 if [ "${#ASSETS[@]}" -eq 0 ]; then
                   echo "No assets were found to upload."
                   exit 1
                 fi
 
-                gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}" --clobber
+                RELEASE_ID="$(gh release view "${GITHUB_REF_NAME}" --json id -q '.id')"
+
+                for asset in "${ASSETS[@]}"; do
+                  asset_name="$(basename "$asset")"
+                  existing_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq ".[] | select(.name == \"${asset_name}\") | .id" | head -n1 || true)"
+
+                  if [ -n "${existing_id}" ]; then
+                    gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}"
+                  fi
+                done
+
+                gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}"
