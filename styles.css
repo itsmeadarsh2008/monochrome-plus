@@ -6858,7 +6858,6 @@ input:checked+.slider::before {
     opacity: 1;
     transform: scale(1);
     filter: blur(0);
-    text-shadow: 0 0 20px rgb(var(--highlight-rgb), 0.3);
 }
 
 .synced-line.upcoming {

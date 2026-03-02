@@ -1218,34 +1218,6 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     transform: translate3d(0, 0, 0) scale(1.03);
                     animation: karaoke-line-bounce 1780ms cubic-bezier(0.22, 0.9, 0.22, 1) infinite;
                     filter: saturate(1.12) brightness(1.08);
-                    text-shadow:
-                        0 0 10px rgba(255, 255, 255, 0.28),
-                        0 0 18px rgba(var(--palette-rgb, 99, 102, 241), 0.22),
-                        0 0 28px rgba(var(--palette-rgb, 99, 102, 241), 0.15);
-                }
-
-                p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after, .karaoke-active-line::after {
-                    content: '';
-                    position: absolute;
-                    pointer-events: none;
-                    inset: -0.18em -0.08em;
-                    border-radius: 0.45em;
-                    background:
-                        radial-gradient(130% 75% at 50% 95%, rgba(255, 255, 255, 0.12), transparent 72%),
-                        linear-gradient(
-                            112deg,
-                            transparent 0%,
-                            rgba(255, 255, 255, 0.11) 26%,
-                            transparent 47%,
-                            rgba(255, 255, 255, 0.08) 64%,
-                            transparent 100%
-                        );
-                    background-size: 190% 100%;
-                    background-position: calc(var(--karaoke-wave-ms) * 0.032px) 50%;
-                    mix-blend-mode: screen;
-                    opacity: 0.62;
-                    will-change: transform, opacity;
-                    animation: karaoke-bubble-shimmer 1250ms linear infinite;
                 }
 
                 p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
@@ -1264,20 +1236,15 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                         var(--char-index, 0) * 15ms +
                         var(--line-stagger, 0) * 10ms
                     );
+                    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.18));
                 }
 
                 @keyframes karaoke-line-bounce {
                     0% {
                         transform: translate3d(0, 0, 0) scale(1.02);
-                        text-shadow:
-                            0 0 8px rgba(255, 255, 255, 0.15),
-                            0 0 16px rgba(var(--palette-rgb, 99, 102, 241), 0.1);
                     }
                     22% {
                         transform: translate3d(0, -2.7px, 0) scale(1.042);
-                        text-shadow:
-                            0 0 13px rgba(255, 255, 255, 0.28),
-                            0 0 24px rgba(var(--palette-rgb, 99, 102, 241), 0.2);
                     }
                     48% {
                         transform: translate3d(0, 1.35px, 0) scale(1.028);
@@ -1288,12 +1255,6 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     100% {
                         transform: translate3d(0, 0, 0) scale(1.02);
                     }
-                }
-
-                @keyframes karaoke-bubble-shimmer {
-                    0% { opacity: 0.34; transform: translate3d(0, 0, 0) scale(1); }
-                    50% { opacity: 0.7; transform: translate3d(0, -0.75px, 0) scale(1.01); }
-                    100% { opacity: 0.34; transform: translate3d(0, 0, 0) scale(1); }
                 }
 
                 @keyframes karaoke-word-bubble-drop {
@@ -1318,12 +1279,10 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     0% {
                         transform: translate3d(0, 4.8px, 0) scale(0.96);
                         opacity: 0.72;
-                        filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
                     }
                     28% {
                         transform: translate3d(0, -6px, 0) scale(1.08);
                         opacity: 1;
-                        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.36));
                     }
                     56% {
                         transform: translate3d(0, 1.8px, 0) scale(0.985);
@@ -1334,7 +1293,6 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     100% {
                         transform: translate3d(0, 0, 0) scale(1);
                         opacity: 1;
-                        filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.2));
                     }
                 }
 
