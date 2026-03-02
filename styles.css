@@ -11263,7 +11263,6 @@ textarea:focus {
     font-weight: 700;
     letter-spacing: -0.02em;
     background: linear-gradient(135deg, var(--foreground) 0%, var(--muted-foreground) 100%);
-    background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
@@ -11906,7 +11905,6 @@ input[type='search']::-webkit-search-cancel-button,
 input[type='search']::-webkit-search-results-button,
 input[type='search']::-webkit-search-results-decoration {
     appearance: none;
-    appearance: none;
 }
 
 input[type='search']::-webkit-search-cancel-button,
@@ -12045,7 +12043,6 @@ input[type='search']::-webkit-search-results-decoration {
         transform 0.2s var(--ease-spring-soft),
         box-shadow 0.2s var(--ease-out);
     backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
 }
 
 .btn-secondary:hover {
@@ -12100,7 +12097,6 @@ input[type='search']::-webkit-search-results-decoration {
         transform 0.2s var(--ease-spring-soft),
         box-shadow 0.2s var(--ease-out);
     backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
 }
 
 .btn-icon:hover {
@@ -12132,7 +12128,6 @@ input[type='search']::-webkit-search-results-decoration {
         transform 0.3s var(--ease-spring-soft),
         box-shadow 0.3s var(--ease-out),
         border-color 0.2s var(--ease-out);
-    backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
     box-shadow: var(--shadow-card);
 }
@@ -12265,7 +12260,6 @@ input[type='search']::-webkit-search-results-decoration {
         box-shadow 0.2s var(--ease-out),
         transform 0.2s var(--ease-spring-soft);
     backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
 }
 
 .input:hover {
@@ -12304,7 +12298,6 @@ input[type='search']::-webkit-search-results-decoration {
         background 0.2s var(--ease-out),
         border-color 0.2s var(--ease-out),
         box-shadow 0.2s var(--ease-out);
-    backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
 }
 
@@ -12466,7 +12459,6 @@ input[type='search']::-webkit-search-results-decoration {
         box-shadow 0.3s var(--ease-out),
         border-color 0.2s var(--ease-out),
         background 0.2s var(--ease-out);
-    backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
     display: flex;
     align-items: center;
@@ -12637,7 +12629,6 @@ input[type='search']::-webkit-search-results-decoration {
         box-shadow 0.2s var(--ease-out),
         border-color 0.2s var(--ease-out);
     backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
 }
 
 .friend-request-item:hover {
@@ -12695,7 +12686,6 @@ input[type='search']::-webkit-search-results-decoration {
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-xl);
     padding: 1.5rem;
-    backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
     box-shadow: var(--shadow-card);
 }
@@ -12805,7 +12795,6 @@ input[type='search']::-webkit-search-results-decoration {
     background: var(--glass-bg);
     border: 2px dashed var(--glass-border);
     border-radius: var(--radius-xl);
-    backdrop-filter: blur(var(--glass-blur));
     backdrop-filter: blur(var(--glass-blur));
 }
 
@@ -13028,12 +13017,10 @@ input[type='search']::-webkit-search-results-decoration {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
 }
 
 .glass-heavy {
     background: color-mix(in srgb, var(--card) 85%, transparent);
-    backdrop-filter: blur(var(--glass-blur-heavy));
     backdrop-filter: blur(var(--glass-blur-heavy));
 }
 
@@ -13043,7 +13030,6 @@ input[type='search']::-webkit-search-results-decoration {
 
 .text-gradient {
     background: linear-gradient(135deg, var(--foreground) 0%, var(--muted-foreground) 100%);
-    background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
@@ -13093,18 +13079,23 @@ input[type='search']::-webkit-search-results-decoration {
 .stagger-item:nth-child(1) {
     animation-delay: 0.05s;
 }
+
 .stagger-item:nth-child(2) {
     animation-delay: 0.1s;
 }
+
 .stagger-item:nth-child(3) {
     animation-delay: 0.15s;
 }
+
 .stagger-item:nth-child(4) {
     animation-delay: 0.2s;
 }
+
 .stagger-item:nth-child(5) {
     animation-delay: 0.25s;
 }
+
 .stagger-item:nth-child(6) {
     animation-delay: 0.3s;
 }
