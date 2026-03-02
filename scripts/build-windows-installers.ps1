@@ -87,10 +87,15 @@ $wixProductPath = Join-Path $installerDir 'Product.wxs'
 $wixFilesPath = Join-Path $installerDir 'AppFiles.wxs'
 Set-Content -Path $wixProductPath -Value $wixProduct -Encoding UTF8
 
-$heatExe = (Get-Command heat.exe -ErrorAction SilentlyContinue)?.Source
-$candleExe = (Get-Command candle.exe -ErrorAction SilentlyContinue)?.Source
-$lightExe = (Get-Command light.exe -ErrorAction SilentlyContinue)?.Source
-$isccExe = (Get-Command ISCC.exe -ErrorAction SilentlyContinue)?.Source
+$heatCmd = Get-Command heat.exe -ErrorAction SilentlyContinue
+$candleCmd = Get-Command candle.exe -ErrorAction SilentlyContinue
+$lightCmd = Get-Command light.exe -ErrorAction SilentlyContinue
+$isccCmd = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+
+$heatExe = if ($heatCmd) { $heatCmd.Source } else { $null }
+$candleExe = if ($candleCmd) { $candleCmd.Source } else { $null }
+$lightExe = if ($lightCmd) { $lightCmd.Source } else { $null }
+$isccExe = if ($isccCmd) { $isccCmd.Source } else { $null }
 
 if (-not $heatExe -or -not $candleExe -or -not $lightExe) {
     throw 'WiX toolset binaries are missing (heat.exe/candle.exe/light.exe).'
