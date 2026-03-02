@@ -38,6 +38,9 @@ jobs:
             - name: Install dependencies
               run: bun install --frozen-lockfile
 
+            - name: Update Neutralino framework binaries
+              run: npx @neutralinojs/neu update --latest
+
             - name: Sync app version from tag
               if: startsWith(github.ref, 'refs/tags/v')
               shell: bash

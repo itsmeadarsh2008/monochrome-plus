@@ -18,12 +18,19 @@ if (-not $appDir) {
     throw "Unable to locate Neutralino app directory containing resources.neu under: $desktopDist"
 }
 
-$exe = Get-ChildItem -Path $appDir.FullName -Filter '*.exe' -File |
+$exe = Get-ChildItem -Path $appDir.FullName -Filter '*.exe' -File -Recurse |
     Where-Object { $_.Name -notmatch 'setup|unins|installer' } |
     Select-Object -First 1
 
 if (-not $exe) {
-    throw "Unable to locate Windows executable in: $($appDir.FullName)"
+  $exe = Get-ChildItem -Path $desktopDist -Filter '*.exe' -File -Recurse |
+    Where-Object { $_.FullName -notmatch 'release-artifacts|installers|wixobj' } |
+    Where-Object { $_.Name -notmatch 'setup|unins|installer' } |
+    Select-Object -First 1
+}
+
+if (-not $exe) {
+  throw "Unable to locate Windows executable under: $desktopDist"
 }
 
 $appVersion = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME.TrimStart('v') } else { '1.0.0' }
