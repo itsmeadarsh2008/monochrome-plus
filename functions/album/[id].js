@@ -2,7 +2,8 @@
 
 class ServerAPI {
     constructor() {
-        this.INSTANCES_URL = 'https://raw.githubusercontent.com/Monochrome-music/monochrome/main/instances.json';
+        this.INSTANCES_URL =
+            'https://raw.githubusercontent.com/itsmeadarsh2008/monochrome-plus/main/public/instances.json';
         this.apiInstances = null;
     }
 
@@ -88,7 +89,7 @@ export async function onRequest(context) {
                 const description = `Album by ${artist} • ${year} • ${trackCount} Tracks\nListen on Monochrome`;
                 const imageUrl = album.cover
                     ? api.getCoverUrl(album.cover, '1280')
-                    : 'https://monochrome.samidy.com/assets/appicon.png';
+                    : 'https://monochrome-plus.appwrite.network/assets/appicon.png';
                 const pageUrl = new URL(request.url).href;
 
                 const metaHtml = `

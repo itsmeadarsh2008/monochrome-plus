@@ -1,0 +1,28 @@
+[package]
+name = "monochrome_plus_desktop"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-updater = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-process = "2.0.0"
+tauri-plugin-shell = "2.0.0"
+discord-rich-presence = "0.2.5"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

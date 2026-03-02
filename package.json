@@ -2,13 +2,14 @@
     "name": "monochrome-plus",
     "type": "module",
     "version": "1.0.0",
-    "description": "[<img src=\"https://github.com/SamidyFR/monochrome/blob/main/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome.samidy.com)",
+    "description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
     "main": "sw.js",
     "scripts": {
         "dev": "vite",
-        "dev:desktop": "start npm run dev & node scripts/dev-runner.js",
-        "build": "vite build --mode neutralino && bun x neu build",
-        "postbuild": "node -e \"const fs = require('fs'); const path = require('path'); const src = 'extensions'; const dest = path.join('dist', 'Monochrome', 'extensions'); if (fs.existsSync(src)) { fs.mkdirSync(dest, { recursive: true }); fs.cpSync(src, dest, { recursive: true }); console.log('Extensions manually copied to ' + dest); }\"",
+        "dev:tauri": "tauri dev",
+        "build:web": "vite build",
+        "build:tauri": "tauri build",
+        "build": "vite build",
         "preview": "vite preview",
         "lint:js": "eslint .",
         "lint:css": "stylelint \"**/*.css\"",
@@ -19,17 +20,16 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/SamidyFR/monochrome.git"
+        "url": "git+https://github.com/itsmeadarsh2008/monochrome-plus.git"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "bugs": {
-        "url": "https://github.com/SamidyFR/monochrome/issues"
+        "url": "https://github.com/itsmeadarsh2008/monochrome-plus/issues"
     },
-    "homepage": "https://github.com/SamidyFR/monochrome#readme",
+    "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
     "devDependencies": {
-        "@neutralinojs/neu": "^11.7.0",
         "eslint": "^9.39.2",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.0.0",
@@ -39,15 +39,14 @@
         "stylelint-config-standard": "^39.0.1",
         "stylelint-config-standard-scss": "^16.0.0",
         "vite": "^7.3.0",
-        "vite-plugin-neutralino": "^1.0.3",
-        "vite-plugin-pwa": "^1.2.0"
+        "vite-plugin-pwa": "^1.2.0",
+        "@tauri-apps/cli": "^2.1.0"
     },
     "overrides": {
         "sourcemap-codec": "npm:@jridgewell/sourcemap-codec@^1.4.14",
         "source-map": "^0.7.4"
     },
     "dependencies": {
-        "@neutralinojs/lib": "^6.5.0",
         "appwrite": "^22.4.0",
         "butterchurn": "^2.6.7",
         "butterchurn-presets": "^2.4.7",
@@ -58,6 +57,10 @@
         "howler": "^2.2.4",
         "jose": "^6.0.11",
         "node-appwrite": "^14.1.0",
-        "pocketbase": "^0.26.5"
+        "pocketbase": "^0.26.5",
+        "@tauri-apps/api": "^2.0.0",
+        "@tauri-apps/plugin-process": "^2.0.0",
+        "@tauri-apps/plugin-shell": "^2.0.0",
+        "@tauri-apps/plugin-updater": "^2.0.0"
     }
 }

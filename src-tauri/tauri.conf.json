@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Monochrome+",
+  "version": "1.0.0",
+  "identifier": "network.appwrite.monochromeplus",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build:web",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Monochrome+",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": true,
+        "focus": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Music",
+    "shortDescription": "Monochrome+ Desktop",
+    "longDescription": "Hyper-fast, privacy-respecting, high-fidelity desktop music experience.",
+    "createUpdaterArtifacts": true,
+    "externalBin": [],
+    "publisher": "Monochrome",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "../public/assets/appicon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dangerousInsecureTransportProtocol": false,
+      "endpoints": [
+        "https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIwMzVEMTE5NEIzQjAzQUIKUldTckF6dExHZEUxSU0rbWVtRWFUNE8xbVlTVEV5SlRmempRNGV4aVlteENrVy9kK1BpZS9STHMK"
+    }
+  }
+}

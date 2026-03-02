@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://monochrome.tf">
-    <img src="https://github.com/monochrome-music/monochrome/blob/main/public/assets/512.png?raw=true" alt="Monochrome+ Logo" width="150px">
+  <a href="https://monochrome-plus.appwrite.network">
+    <img src="https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true" alt="Monochrome+ Logo" width="150px">
   </a>
 </p>
 
@@ -11,24 +11,23 @@
 </p>
 
 <p align="center">
-  <a href="https://monochrome.tf">Website</a> •
+  <a href="https://monochrome-plus.appwrite.network">Website</a> •
   <a href="https://ko-fi.com/monochromemusic">Donate</a> •
   <a href="#features">Features</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#usage">Usage</a> •
+  <a href="#quick-start">Quick Start</a> •
   <a href="#self-hosting">Self-Hosting</a> •
-  <a href="CONTRIBUTE.md">Contributing</a>
+  <a href="docs/CONTRIBUTE.md">Contributing</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/monochrome-music/monochrome/stargazers">
-    <img src="https://img.shields.io/github/stars/monochrome-music/monochrome?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub stars">
+  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/stargazers">
+    <img src="https://img.shields.io/github/stars/itsmeadarsh2008/monochrome-plus?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub stars">
   </a>
-  <a href="https://github.com/monochrome-music/monochrome/forks">
-    <img src="https://img.shields.io/github/forks/monochrome-music/monochrome?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub forks">
+  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/forks">
+    <img src="https://img.shields.io/github/forks/itsmeadarsh2008/monochrome-plus?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub forks">
   </a>
-  <a href="https://github.com/monochrome-music/monochrome/issues">
-    <img src="https://img.shields.io/github/issues/monochrome-music/monochrome?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub issues">
+  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/issues">
+    <img src="https://img.shields.io/github/issues/itsmeadarsh2008/monochrome-plus?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub issues">
   </a>
 </p>
 
@@ -39,8 +38,8 @@
 **Monochrome+** is an open-source, privacy-respecting, ad-free [TIDAL](https://tidal.com) web UI, built on top of [Hi-Fi](https://github.com/binimum/hifi-api). It provides a beautiful, minimalist interface for streaming high-quality music without the clutter of traditional streaming platforms.
 
 <p align="center">
-  <a href="https://monochrome.tf/#album/90502209">
-    <img width="2559" height="1439" alt="image" src="https://github.com/user-attachments/assets/7973ea9f-c4aa-4c12-b476-f388f614db38"  alt="Monochrome UI" width="800">
+  <a href="https://monochrome-plus.appwrite.network/#album/90502209">
+    <img width="2559" height="1439" alt="Monochrome UI" src="https://github.com/user-attachments/assets/7973ea9f-c4aa-4c12-b476-f388f614db38" width="800">
   </a>
 </p>
 
@@ -94,29 +93,29 @@
 
 ### Live Instance
 
-Our Recommended way to use Monochrome+ is through our official instance:
+Our recommended way to use Monochrome+ is through the official instance:
 
-**[monochrome.tf](https://monochrome.tf)**
+**[monochrome-plus.appwrite.network](https://monochrome-plus.appwrite.network)**
 
-For alternative instances, check [INSTANCES.md](INSTANCES.md).
+For alternative instances, check [docs/INSTANCES.md](docs/INSTANCES.md).
 
 ---
 
 ## Self-Hosting
 
-NOTE: Accounts wont work on self-hosted instances.
+NOTE: Accounts won’t work on self-hosted instances.
 
 ### Option 1: Docker (Recommended)
 
 ```bash
-git clone https://github.com/adarsh-shishir/monochrome-plus.git
+git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
 cd monochrome-plus
 docker compose up -d
 ```
 
 Visit `http://localhost:3000`
 
-For PocketBase, development mode, and advanced setups, see [DOCKER.md](DOCKER.md).
+For PocketBase, development mode, and advanced setups, see [docs/DOCKER.md](docs/DOCKER.md).
 
 ### Option 2: Manual Installation
 
@@ -127,31 +126,31 @@ For PocketBase, development mode, and advanced setups, see [DOCKER.md](DOCKER.md
 
 #### Local Development
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
 
-    ```bash
-    git clone https://github.com/monochrome-music/monochrome.git
-    cd monochrome
-    ```
+   ```bash
+   git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
+   cd monochrome-plus
+   ```
 
-2.  **Install dependencies:**
+2. **Install dependencies:**
 
-    ```bash
-    bun install
-    # or
-    npm install
-    ```
+   ```bash
+   bun install
+   # or
+   npm install
+   ```
 
-3.  **Start the development server:**
+3. **Start the development server:**
 
-    ```bash
-    bun run dev
-    # or
-    npm run dev
-    ```
+   ```bash
+   bun run dev
+   # or
+   npm run dev
+   ```
 
-4.  **Open your browser:**
-    Navigate to `http://localhost:5173/`
+4. **Open your browser:**
+   Navigate to `http://localhost:5173/`.
 
 #### Building for Production
 
@@ -167,10 +166,10 @@ npm run build
 
 ### Basic Usage
 
-1.  Visit the [Website](https://monochrome.tf) or your local development server
-2.  Search for your favorite artists, albums, or tracks
-3.  Click play to start streaming
-4.  Use the media controls to manage playback, queue, and volume
+1. Visit the [Website](https://monochrome-plus.appwrite.network) or your local development server
+2. Search for your favorite artists, albums, or tracks
+3. Click play to start streaming
+4. Use the media controls to manage playback, queue, and volume
 
 ### Keyboard Shortcuts
 
@@ -190,21 +189,21 @@ npm run build
 
 To sync your library, history, and playlists across devices:
 
-1.  Click the "Profile" Section
-2.  Sign in with Discord or Email
-3.  Your data will automatically sync across all devices
+1. Click the Profile section
+2. Sign in with Discord or email
+3. Your data automatically syncs across devices
 
 ---
 
 ## Contributing
 
-We welcome contributions from the community! Please see our [Contributing Guide](CONTRIBUTE.md).
+We welcome contributions from the community. Please see [docs/CONTRIBUTE.md](docs/CONTRIBUTE.md).
 
 ---
 
 <p align="center">
   <a href="https://fmhy.net/audio#streaming-sites">
-    <img src="https://raw.githubusercontent.com/monochrome-music/monochrome/refs/heads/main/public/assets/asseenonfmhy880x310.png" alt="As seen on FMHY" height="50">
+    <img src="https://raw.githubusercontent.com/itsmeadarsh2008/monochrome-plus/refs/heads/main/public/assets/asseenonfmhy880x310.png" alt="As seen on FMHY" height="50">
   </a>
 </p>
 

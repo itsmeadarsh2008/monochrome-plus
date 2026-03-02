@@ -2,7 +2,8 @@
 
 class ServerAPI {
     constructor() {
-        this.INSTANCES_URL = 'https://raw.githubusercontent.com/Monochrome-music/monochrome/main/public/instances.json';
+        this.INSTANCES_URL =
+            'https://raw.githubusercontent.com/itsmeadarsh2008/monochrome-plus/main/public/instances.json';
         this.apiInstances = null;
     }
 
@@ -86,7 +87,7 @@ export async function onRequest(context) {
                 const imageId = playlist.squareImage || playlist.image;
                 const imageUrl = imageId
                     ? api.getCoverUrl(imageId, '1080')
-                    : 'https://monochrome.samidy.com/assets/appicon.png';
+                    : 'https://monochrome-plus.appwrite.network/assets/appicon.png';
                 const pageUrl = new URL(request.url).href;
 
                 const metaHtml = `

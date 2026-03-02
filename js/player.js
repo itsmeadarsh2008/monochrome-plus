@@ -1990,14 +1990,8 @@ export class Player {
     }
 
     async updateNativeWindow(track) {
-        if (!window.Neutralino) return;
-
         const trackTitle = getTrackTitle(track);
         const artist = getTrackArtists(track);
-        try {
-            await Neutralino.window.setTitle(`${trackTitle} • ${artist}`);
-        } catch (e) {
-            console.error('Failed to set window title:', e);
-        }
+        document.title = `${trackTitle} • ${artist}`;
     }
 }

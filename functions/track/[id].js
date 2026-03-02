@@ -14,7 +14,8 @@ function getTrackArtists(track = {}, { fallback = 'Unknown Artist' } = {}) {
 
 class ServerAPI {
     constructor() {
-        this.INSTANCES_URL = 'https://raw.githubusercontent.com/Monochrome-music/monochrome/main/public/instances.json';
+        this.INSTANCES_URL =
+            'https://raw.githubusercontent.com/itsmeadarsh2008/monochrome-plus/main/public/instances.json';
         this.apiInstances = null;
     }
 

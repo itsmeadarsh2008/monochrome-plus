@@ -2,9 +2,14 @@
 import { getTrackTitle, getTrackArtists } from '../utils.js';
 
 export function initializeDiscordRPC(player) {
-    const EXTENSION_ID = 'js.neutralino.discordrpc';
+    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 
-    function sendUpdate(track, isPaused = false) {
+    const sendViaTauri = async (payload) => {
+        const core = await import('@tauri-apps/api/core');
+        await core.invoke('update_discord_presence', { payload });
+    };
+
+    async function sendUpdate(track, isPaused = false) {
         if (!track) return;
 
         let coverUrl = 'monochrome';
@@ -32,39 +37,43 @@ export function initializeDiscordRPC(player) {
             data.endTimestamp = Math.floor((now + remaining) / 1000);
         }
 
-        Neutralino.events.broadcast('discord:update', data).catch((e) => console.error('Broadcast failed', e));
-        Neutralino.extensions
-            .dispatch(EXTENSION_ID, 'discord:update', data)
-            .catch((e) => console.error('Dispatch failed', e));
+        try {
+            if (isTauri) {
+                await sendViaTauri(data);
+            }
+        } catch (error) {
+            console.error('[Desktop][DiscordRPC] Failed to send update:', error);
+        }
     }
 
     player.audio.addEventListener('play', () => {
-        sendUpdate(player.currentTrack);
+        void sendUpdate(player.currentTrack);
     });
 
     player.audio.addEventListener('pause', () => {
-        sendUpdate(player.currentTrack, true);
+        void sendUpdate(player.currentTrack, true);
     });
 
     player.audio.addEventListener('loadedmetadata', () => {
         if (!player.audio.paused) {
-            sendUpdate(player.currentTrack);
+            void sendUpdate(player.currentTrack);
         }
     });
 
     // Send initial status
     if (player.currentTrack) {
-        sendUpdate(player.currentTrack, player.audio.paused);
+        void sendUpdate(player.currentTrack, player.audio.paused);
     } else {
-        Neutralino.events
-            .broadcast('discord:update', {
-                details: 'Idling',
-                state: 'Monochrome+',
-                largeImageKey: 'monochrome',
-                largeImageText: 'Monochrome+',
-                smallImageKey: 'pause',
-                smallImageText: 'Paused',
-            })
-            .catch(() => { });
+        const idlePayload = {
+            details: 'Idling',
+            state: 'Monochrome+',
+            largeImageKey: 'monochrome',
+            largeImageText: 'Monochrome+',
+            smallImageKey: 'pause',
+            smallImageText: 'Paused',
+        };
+        if (isTauri) {
+            void sendViaTauri(idlePayload).catch(() => {});
+        }
     }
 }
