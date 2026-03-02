@@ -689,6 +689,14 @@ export class LyricsManager {
         const lineNodes = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
 
         lineNodes.forEach((line, lineIndex) => {
+            if (line.dataset.lyricsSubtextStyled !== '1') {
+                line.innerHTML = line.innerHTML.replace(
+                    /([\(\（])([^\)\）<\n]{1,180})([\)\）])/g,
+                    '<span class="lyrics-subtext">$2</span>'
+                );
+                line.dataset.lyricsSubtextStyled = '1';
+            }
+
             line.classList.add('karaoke-line-enhanced');
             line.style.setProperty('--line-stagger', String(lineIndex % 24));
 
@@ -1204,6 +1212,13 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     margin-inline-end: 0;
                 }
 
+                .lyrics-subtext {
+                    font-family: var(--font-family, inherit) !important;
+                    font-size: 0.68em !important;
+                    font-weight: 300 !important;
+                    opacity: 0.82;
+                }
+
                 .karaoke-char-enhanced {
                     display: inline-block;
                     transform: translate3d(0, 0, 0);
@@ -1216,7 +1231,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                 p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active, .karaoke-active-line {
                     will-change: transform, opacity, filter;
                     transform: translate3d(0, 0, 0) scale(1.03);
-                    animation: karaoke-line-bounce 1780ms cubic-bezier(0.22, 0.9, 0.22, 1) infinite;
+                    animation: none;
                     filter: saturate(1.12) brightness(1.08);
                 }
 
@@ -1224,13 +1239,13 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                 p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
                 p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line .karaoke-word-enhanced {
                     will-change: transform, filter;
-                    animation: karaoke-word-bubble-drop 940ms cubic-bezier(0.2, 0.92, 0.2, 1) infinite;
+                    animation: none;
                     animation-delay: calc(var(--word-index, 0) * 32ms + var(--line-stagger, 0) * 13ms);
                     filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.22));
                 }
 
                 p[active] .karaoke-char-enhanced, p[data-active] .karaoke-char-enhanced, p[data-active="true"] .karaoke-char-enhanced, .is-active .karaoke-char-enhanced, p.active .karaoke-char-enhanced, .line.active .karaoke-char-enhanced, .lyric-line.active .karaoke-char-enhanced, .lrc-line.active .karaoke-char-enhanced, .karaoke-active-line .karaoke-char-enhanced {
-                    animation: karaoke-char-lift 760ms cubic-bezier(0.23, 0.9, 0.2, 1) infinite;
+                    animation: none;
                     animation-delay: calc(
                         var(--word-index, 0) * 34ms +
                         var(--char-index, 0) * 15ms +
@@ -1313,8 +1328,9 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     }
                 }
 
-                ${lyricsManager.useLiteKaraoke
-                    ? `
+                ${
+                    lyricsManager.useLiteKaraoke
+                        ? `
                 :host {
                     --karaoke-wave-ms: 0;
                 }
@@ -1344,7 +1360,8 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     filter: none !important;
                 }
                 `
-                    : ''}
+                        : ''
+                }
             `;
             root.appendChild(style);
         }

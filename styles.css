@@ -2570,18 +2570,18 @@ html.carousel-mode .card-grid>*,
    ========================================================================== */
 
 /* Elements that should always be GPU-accelerated */
-.card,
-.card-image-wrapper,
-.modal,
-.modal-content,
-.sidebar,
-.now-playing-bar,
-.track-item,
-.btn-icon,
-.page,
-.slide-panel,
-.dropdown-menu,
-.toast {
+:root:not(.disable-gpu-acceleration) .card,
+:root:not(.disable-gpu-acceleration) .card-image-wrapper,
+:root:not(.disable-gpu-acceleration) .modal,
+:root:not(.disable-gpu-acceleration) .modal-content,
+:root:not(.disable-gpu-acceleration) .sidebar,
+:root:not(.disable-gpu-acceleration) .now-playing-bar,
+:root:not(.disable-gpu-acceleration) .track-item,
+:root:not(.disable-gpu-acceleration) .btn-icon,
+:root:not(.disable-gpu-acceleration) .page,
+:root:not(.disable-gpu-acceleration) .slide-panel,
+:root:not(.disable-gpu-acceleration) .dropdown-menu,
+:root:not(.disable-gpu-acceleration) .toast {
     transform: translateZ(0);
     backface-visibility: hidden;
     perspective: 1000px;
@@ -2671,12 +2671,27 @@ html.carousel-mode .card-grid>*,
     backface-visibility: hidden;
 }
 
+.disable-gpu-acceleration.animations-ultra .card,
+.disable-gpu-acceleration.animations-ultra .now-playing-bar .cover-shell,
+.disable-gpu-acceleration.animations-ultra #vinyl-disc-container.rotating-disc {
+    transform: none;
+    backface-visibility: visible;
+}
+
 .animations-ultra .card:hover {
     transform: translate3d(0, -12px, 0) scale3d(1.025, 1.025, 1);
 }
 
+.disable-gpu-acceleration.animations-ultra .card:hover {
+    transform: translateY(-12px) scale(1.025);
+}
+
 .animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
     animation: ultra-butter-wave var(--motion-wave-duration, 6s) cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.disable-gpu-acceleration.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
+    animation-name: ultra-butter-wave-2d;
 }
 
 .thermal-adaptive.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
@@ -2700,6 +2715,26 @@ html.carousel-mode .card-grid>*,
 
     75% {
         transform: translate3d(0, var(--motion-wave-amplitude, 4px), 0) rotate(0.35deg);
+    }
+}
+
+@keyframes ultra-butter-wave-2d {
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+        transform: translateY(calc(var(--motion-wave-amplitude, 4px) * -1)) rotate(-0.35deg);
+    }
+
+    50% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    75% {
+        transform: translateY(var(--motion-wave-amplitude, 4px)) rotate(0.35deg);
     }
 }
 
@@ -6860,6 +6895,13 @@ input:checked+.slider::before {
     filter: blur(0);
 }
 
+.lyrics-subtext {
+    font-family: var(--font-family, inherit);
+    font-size: 0.68em;
+    font-weight: 300;
+    opacity: 0.82;
+}
+
 .synced-line.upcoming {
     opacity: 0.7;
     transform: scale(0.98);
@@ -9220,30 +9262,6 @@ body.auth-locked .auth-email-form .template-input {
         display: none;
     }
 
-    .synced-line {
-        font-size: 1rem;
-    }
-
-    .synced-line.active {
-        font-size: 1.125rem;
-    }
-
-    .karaoke-title {
-        font-size: 1.5rem;
-    }
-
-    .karaoke-artist {
-        font-size: 1rem;
-    }
-
-    .karaoke-line {
-        font-size: 1.25rem;
-    }
-
-    .karaoke-line.active {
-        font-size: 1.75rem;
-    }
-
     /* ─── Lift Animation System for "World's Most Beautiful Lyrics" ─── */
 
     /* Parent lines: 3D perspective context */
@@ -9295,7 +9313,7 @@ body.auth-locked .auth-email-form .template-input {
     .karaoke-line-enhanced.active .karaoke-word-enhanced,
     .karaoke-line-enhanced.karaoke-active-line .karaoke-word-enhanced,
     .karaoke-line-enhanced[data-active='true'] .karaoke-word-enhanced {
-        animation: lyric-word-bubble-drop 0.86s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+        animation: none;
         animation-delay: calc(var(--word-index, 0) * 36ms);
         filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.22));
     }
@@ -9303,7 +9321,7 @@ body.auth-locked .auth-email-form .template-input {
     .karaoke-line-enhanced.active .karaoke-char-enhanced,
     .karaoke-line-enhanced.karaoke-active-line .karaoke-char-enhanced,
     .karaoke-line-enhanced[data-active='true'] .karaoke-char-enhanced {
-        animation: lyric-char-lift 0.72s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+        animation: none;
         animation-delay: calc(var(--word-index, 0) * 30ms + var(--char-index, 0) * 14ms);
     }
 

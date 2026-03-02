@@ -1122,12 +1122,19 @@ export function initializeSettings(scrobbler, player, api, ui) {
         return intensity;
     };
 
+    const applyHardwareAccelerationPreference = (enabled) => {
+        document.documentElement.classList.toggle('disable-gpu-acceleration', !enabled);
+    };
+
+    applyHardwareAccelerationPreference(performanceModeSettings.isGpuAccelerationEnabled());
+
     // ========================================
     // Performance Mode Settings
     // ========================================
     const performanceModeSelect = document.getElementById('performance-mode-select');
     const lowLatencyAudioToggle = document.getElementById('low-latency-audio-toggle');
     const imageQualitySelect = document.getElementById('image-quality-select');
+    const hardwareAccelerationToggle = document.getElementById('hardware-acceleration-toggle');
 
     if (performanceModeSelect) {
         performanceModeSelect.value = performanceModeSettings.getMode();
@@ -1166,6 +1173,14 @@ export function initializeSettings(scrobbler, player, api, ui) {
         imageQualitySelect.value = performanceModeSettings.getImageQuality();
         imageQualitySelect.addEventListener('change', (e) => {
             performanceModeSettings.setImageQuality(e.target.value);
+        });
+    }
+
+    if (hardwareAccelerationToggle) {
+        hardwareAccelerationToggle.checked = performanceModeSettings.isGpuAccelerationEnabled();
+        hardwareAccelerationToggle.addEventListener('change', (e) => {
+            performanceModeSettings.setGpuAcceleration(e.target.checked);
+            applyHardwareAccelerationPreference(e.target.checked);
         });
     }
 

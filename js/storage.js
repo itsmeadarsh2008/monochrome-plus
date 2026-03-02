@@ -2740,6 +2740,16 @@ export const performanceModeSettings = {
         settings.lowLatencyAudio = enabled;
         this.setSettings(settings);
     },
+
+    isGpuAccelerationEnabled() {
+        return this.getSettings().gpuAcceleration !== false;
+    },
+
+    setGpuAcceleration(enabled) {
+        const settings = this.getSettings();
+        settings.gpuAcceleration = enabled;
+        this.setSettings(settings);
+    },
 };
 
 // ==========================================================================
