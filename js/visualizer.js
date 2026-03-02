@@ -4,13 +4,16 @@ import { LCDPreset } from './visualizers/lcd.js';
 import { ParticlesPreset } from './visualizers/particles.js';
 import { UnknownPleasuresWebGL } from './visualizers/unknown_pleasures_webgl.js';
 import { ButterchurnPreset } from './visualizers/butterchurn.js';
+import { VideoCoverPreset } from './visualizers/video_cover.js';
 import { audioContextManager } from './audio-context.js';
 
 export class Visualizer {
-    constructor(canvas, audio) {
+    constructor(canvas, audio, options = {}) {
         this.canvas = canvas;
         this.ctx = null;
         this.audio = audio;
+        this.api = options.api || null;
+        this.currentTrack = options.track || null;
 
         this.audioContext = null;
         this.analyser = null;
@@ -23,6 +26,7 @@ export class Visualizer {
             particles: new ParticlesPreset(),
             'unknown-pleasures': new UnknownPleasuresWebGL(),
             butterchurn: new ButterchurnPreset(),
+            'video-cover': new VideoCoverPreset(this.api),
         };
 
         this.activePresetKey = visualizerSettings.getPreset();
@@ -124,20 +128,23 @@ export class Visualizer {
     start() {
         if (this.isActive) return;
 
+        const preset = this.activePreset;
+        const needsAnalyser = preset?.requiresAnalyser !== false;
+
         if (!this.ctx) {
             this.initContext();
         }
-        if (!this.audioContext) {
+        if (!this.audioContext && needsAnalyser) {
             this.init();
         }
 
-        if (!this.analyser) {
+        if (needsAnalyser && !this.analyser) {
             return;
         }
 
         this.isActive = true;
 
-        if (this.audioContext.state === 'suspended') {
+        if (this.audioContext?.state === 'suspended') {
             this.audioContext.resume();
         }
 
@@ -151,6 +158,22 @@ export class Visualizer {
         window.addEventListener('resize', this._resizeBound);
         this.canvas.style.display = 'block';
 
+        if (preset?.setTrack) {
+            preset.setTrack(this.currentTrack);
+        }
+
+        if (preset?.start) {
+            preset.start(this.canvas, {
+                track: this.currentTrack,
+                audio: this.audio,
+                visualizer: this,
+            });
+        }
+
+        if (preset?.requiresAnimation === false) {
+            return;
+        }
+
         this.animate();
     }
 
@@ -163,6 +186,14 @@ export class Visualizer {
         }
 
         window.removeEventListener('resize', this._resizeBound);
+
+        if (this.activePreset?.stop) {
+            this.activePreset.stop(this.canvas, {
+                track: this.currentTrack,
+                audio: this.audio,
+                visualizer: this,
+            });
+        }
 
         if (this.ctx && this.ctx.clearRect) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -259,6 +290,12 @@ export class Visualizer {
     setPreset(key) {
         if (!this.presets[key]) return;
 
+        const wasActive = this.isActive;
+
+        if (wasActive) {
+            this.stop();
+        }
+
         if (this.activePreset?.destroy) {
             this.activePreset.destroy();
         }
@@ -271,6 +308,21 @@ export class Visualizer {
         if (key === 'butterchurn' && this.presets[key].lazyInit && this.audioContext) {
             const sourceNode = audioContextManager.getSourceNode();
             this.presets[key].lazyInit(this.canvas, this.audioContext, sourceNode);
+        }
+
+        if (this.activePreset?.setTrack) {
+            this.activePreset.setTrack(this.currentTrack);
+        }
+
+        if (wasActive) {
+            this.start();
+        }
+    }
+
+    setTrack(track) {
+        this.currentTrack = track || null;
+        if (this.activePreset?.setTrack) {
+            this.activePreset.setTrack(this.currentTrack);
         }
     }
 }

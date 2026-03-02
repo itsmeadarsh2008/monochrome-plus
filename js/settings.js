@@ -2579,9 +2579,10 @@ export function initializeSettings(scrobbler, player, api, ui) {
         visualizerPresetSelect.addEventListener('change', (e) => {
             const val = e.target.value;
             visualizerSettings.setPreset(val);
-            if (ui && ui.visualizer) {
+            if (ui?.visualizer) {
                 ui.visualizer.setPreset(val);
             }
+            window.dispatchEvent(new CustomEvent('visualizer-style-changed', { detail: { style: val } }));
             updateButterchurnSettingsVisibility();
         });
     }

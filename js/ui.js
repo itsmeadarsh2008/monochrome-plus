@@ -141,7 +141,19 @@ export class UIRenderer {
 
         window.addEventListener('hifi-visual-settings-changed', () => {
             this.updateGlobalTheme();
+            this.reapplyCurrentPageBackground();
         });
+    }
+
+    reapplyCurrentPageBackground() {
+        const bgElement = document.getElementById('page-background');
+        if (!bgElement) return;
+
+        const visualUrl = bgElement.dataset.visualUrl || null;
+        const fallbackUrl = bgElement.dataset.fallbackUrl || null;
+        if (!visualUrl && !fallbackUrl) return;
+
+        this.setPageBackground(visualUrl, fallbackUrl);
     }
 
     // Helper for Heart Icon
@@ -1012,13 +1024,58 @@ export class UIRenderer {
         container.appendChild(fragment);
     }
 
-    setPageBackground(imageUrl) {
+    setPageBackground(imageUrl, fallbackImageUrl = null) {
         const bgElement = document.getElementById('page-background');
-        if (backgroundSettings.isEnabled() && imageUrl) {
-            bgElement.style.backgroundImage = `url('${imageUrl}')`;
+
+        const removeExistingVideo = () => {
+            const existingVideo = bgElement.querySelector('.page-background-video');
+            if (existingVideo) {
+                try {
+                    existingVideo.pause();
+                } catch {}
+                existingVideo.remove();
+            }
+            bgElement.classList.remove('has-video');
+        };
+
+        const isVideoSource =
+            typeof imageUrl === 'string' &&
+            (imageUrl.includes('.mp4') || imageUrl.startsWith('blob:video'));
+
+        const effectiveImageUrl = imageUrl;
+
+        bgElement.dataset.visualUrl = imageUrl || '';
+        bgElement.dataset.fallbackUrl = fallbackImageUrl || '';
+
+        if (backgroundSettings.isEnabled() && effectiveImageUrl) {
+            if (isVideoSource) {
+                removeExistingVideo();
+                bgElement.style.backgroundImage = '';
+
+                const video = document.createElement('video');
+                video.className = 'page-background-video';
+                video.src = imageUrl;
+                video.autoplay = true;
+                video.loop = true;
+                video.muted = true;
+                video.playsInline = true;
+                video.preload = 'metadata';
+
+                video.addEventListener('error', () => {
+                    removeExistingVideo();
+                });
+
+                bgElement.appendChild(video);
+                bgElement.classList.add('has-video');
+            } else {
+                removeExistingVideo();
+                bgElement.style.backgroundImage = `url('${effectiveImageUrl}')`;
+            }
+
             bgElement.classList.add('active');
             document.body.classList.add('has-page-background');
         } else {
+            removeExistingVideo();
             bgElement.classList.remove('active');
             document.body.classList.remove('has-page-background');
             // Delay clearing the image to allow transition
@@ -1054,6 +1111,11 @@ export class UIRenderer {
             image.src = coverUrl;
             overlay.style.setProperty('--bg-image', `url('${coverUrl}')`);
             this.extractAndApplyColor(coverUrl);
+        }
+
+        this.currentTrack = track;
+        if (this.visualizer?.setTrack) {
+            this.visualizer.setTrack(track);
         }
 
         const qualityBadge = createQualityBadgeHTML(track);
@@ -1146,10 +1208,14 @@ export class UIRenderer {
             if (!this.visualizer && audioPlayer) {
                 const canvas = document.getElementById('visualizer-canvas');
                 if (canvas) {
-                    this.visualizer = new Visualizer(canvas, audioPlayer);
+                    this.visualizer = new Visualizer(canvas, audioPlayer, {
+                        api: this.api,
+                        track,
+                    });
                 }
             }
             if (this.visualizer) {
+                this.visualizer.setTrack(track);
                 this.visualizer.start();
             }
         };
@@ -3545,7 +3611,7 @@ export class UIRenderer {
             imageEl.style.backgroundColor = '';
 
             // Set background and vibrant color
-            this.setPageBackground(preferredVisualUrl || coverUrl);
+            this.setPageBackground(preferredVisualUrl || coverUrl, coverUrl);
             if (backgroundSettings.isEnabled() && album.cover) {
                 if (!this.applyApiVibrantColor(album.vibrantColor)) {
                     this.extractAndApplyColor(this.api.getCoverUrl(album.cover, '80'));
@@ -3919,7 +3985,7 @@ export class UIRenderer {
                     imageEl.style.display = 'block';
                     if (collageEl) collageEl.style.display = 'none';
                     const preferredVisualUrl = this.getEntityVisualUrl(playlistData, playlistData.cover);
-                    this.setPageBackground(preferredVisualUrl || playlistData.cover);
+                    this.setPageBackground(preferredVisualUrl || playlistData.cover, playlistData.cover);
                     if (!this.applyApiVibrantColor(playlistData.vibrantColor)) {
                         this.extractAndApplyColor(playlistData.cover);
                     }
@@ -4101,7 +4167,7 @@ export class UIRenderer {
                         },
                         imageId
                     );
-                    this.setPageBackground(preferredVisualUrl || imageEl.src);
+                    this.setPageBackground(preferredVisualUrl || imageEl.src, imageEl.src);
 
                     if (!this.applyApiVibrantColor(playlist.vibrantColor)) {
                         this.extractAndApplyColor(this.api.getCoverUrl(imageId, '160'));
@@ -5543,7 +5609,7 @@ export class UIRenderer {
             }
             if (collageEl) collageEl.style.display = 'none';
             const preferredVisualUrl = this.getEntityVisualUrl(playlist, playlist.cover);
-            this.setPageBackground(preferredVisualUrl || playlist.cover);
+            this.setPageBackground(preferredVisualUrl || playlist.cover, playlist.cover);
             if (!this.applyApiVibrantColor(playlist.vibrantColor)) {
                 this.extractAndApplyColor(playlist.cover);
             }
@@ -6073,7 +6139,7 @@ export class UIRenderer {
             imageEl.src = coverUrl;
             imageEl.style.backgroundColor = '';
 
-            this.setPageBackground(preferredVisualUrl || coverUrl);
+            this.setPageBackground(preferredVisualUrl || coverUrl, coverUrl);
             if (backgroundSettings.isEnabled() && track.album?.cover) {
                 if (!this.applyApiVibrantColor(track.album?.vibrantColor)) {
                     this.extractAndApplyColor(this.api.getCoverUrl(track.album.cover, '80'));

@@ -1338,8 +1338,11 @@ export class LosslessAPI {
             return id;
         }
 
-        const formattedId = String(id).replace(/-/g, '/');
-        return `https://resources.tidal.com/videos/${formattedId}/${size}x${size}.jpg`;
+        const normalizedId = String(id).replace(/\\/g, '/').replace(/-/g, '/').replace(/^\/+|\/+$/g, '');
+        if (!normalizedId) return null;
+
+        const sizeToken = /^\d+x\d+$/i.test(String(size)) ? String(size) : `${size}x${size}`;
+        return `https://resources.tidal.com/videos/${normalizedId}/${sizeToken}.mp4`;
     }
 
     getPreferredVisualUrl(source, size = '1280') {

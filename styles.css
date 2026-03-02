@@ -1314,6 +1314,14 @@ kbd {
     opacity: 1;
 }
 
+#page-background .page-background-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    pointer-events: none;
+}
+
 /* Light mode adjustments */
 :root[data-theme='white'] #page-background {
     mask-image: linear-gradient(to bottom, rgb(0, 0, 0, 1) 0%, rgb(0, 0, 0, 0) 100%);
@@ -5429,6 +5437,26 @@ input:checked+.slider::before {
     pointer-events: none;
 }
 
+.fullscreen-video-visualizer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+#fullscreen-cover-overlay.video-visualizer-active .fullscreen-video-visualizer {
+    opacity: 1;
+}
+
+#fullscreen-cover-overlay.video-visualizer-active #visualizer-canvas {
+    display: none !important;
+}
+
 .fullscreen-cover-content {
     display: flex;
     flex-direction: row;
@@ -9223,6 +9251,7 @@ body.auth-locked .auth-email-form .template-input {
 
     /* Active line lifts up and becomes opaque */
     .karaoke-line-enhanced[data-active='true'],
+    .karaoke-line-enhanced.karaoke-active-line,
     .karaoke-line-enhanced.active {
         opacity: 1;
         filter: none;
@@ -9246,22 +9275,74 @@ body.auth-locked .auth-email-form .template-input {
         transform-origin: bottom center;
     }
 
-    /* Highlight word when line becomes active */
-    .karaoke-line-enhanced.active .karaoke-word-enhanced,
-    .karaoke-line-enhanced[data-active='true'] .karaoke-word-enhanced {
-        animation: lyric-word-lift 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-        animation-delay: calc(var(--word-index, 0) * 40ms);
+    .karaoke-char-enhanced {
+        display: inline-block;
+        transform-origin: 50% 100%;
+        will-change: transform, opacity, filter;
     }
 
-    @keyframes lyric-word-lift {
+    /* Highlight word when line becomes active */
+    .karaoke-line-enhanced.active .karaoke-word-enhanced,
+    .karaoke-line-enhanced.karaoke-active-line .karaoke-word-enhanced,
+    .karaoke-line-enhanced[data-active='true'] .karaoke-word-enhanced {
+        animation: lyric-word-bubble-drop 0.86s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+        animation-delay: calc(var(--word-index, 0) * 36ms);
+        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.22));
+    }
+
+    .karaoke-line-enhanced.active .karaoke-char-enhanced,
+    .karaoke-line-enhanced.karaoke-active-line .karaoke-char-enhanced,
+    .karaoke-line-enhanced[data-active='true'] .karaoke-char-enhanced {
+        animation: lyric-char-lift 0.72s cubic-bezier(0.22, 0.9, 0.2, 1) both;
+        animation-delay: calc(var(--word-index, 0) * 30ms + var(--char-index, 0) * 14ms);
+    }
+
+    @keyframes lyric-word-bubble-drop {
         0% {
-            transform: translateY(6px) rotateX(12deg);
-            opacity: 0.4;
+            transform: translate3d(0, 0, 0) scale(0.98);
+            opacity: 0.7;
+        }
+
+        30% {
+            transform: translate3d(0, -6px, 0) scale(1.06);
+            opacity: 1;
+        }
+
+        58% {
+            transform: translate3d(0, 2px, 0) scale(0.99);
+        }
+
+        80% {
+            transform: translate3d(0, -1.2px, 0) scale(1.02);
         }
 
         100% {
-            transform: translateY(0) rotateX(0deg);
+            transform: translate3d(0, 0, 0) scale(1);
             opacity: 1;
+        }
+    }
+
+    @keyframes lyric-char-lift {
+        0% {
+            transform: translate3d(0, 4px, 0) scale(0.95);
+            opacity: 0.72;
+            filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+        }
+
+        34% {
+            transform: translate3d(0, -5.5px, 0) scale(1.08);
+            opacity: 1;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.34));
+        }
+
+        62% {
+            transform: translate3d(0, 1.4px, 0) scale(0.99);
+        }
+
+        100% {
+            transform: translate3d(0, 0, 0) scale(1);
+            opacity: 1;
+            filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.2));
         }
     }
 

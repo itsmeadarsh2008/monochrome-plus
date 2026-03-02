@@ -691,10 +691,77 @@ export class LyricsManager {
             line.classList.add('karaoke-line-enhanced');
             line.style.setProperty('--line-stagger', String(lineIndex % 24));
 
-            const words = Array.from(line.querySelectorAll('.word, .lyric-word'));
+            let words = Array.from(line.querySelectorAll('.word, .lyric-word, .karaoke-word-enhanced'));
+
+            if (words.length === 0 && line.dataset.karaokeTokenized !== '1') {
+                const skipClassPattern = /(time|timestamp)/i;
+                const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+                const textNodes = [];
+                let node = walker.nextNode();
+                while (node) {
+                    textNodes.push(node);
+                    node = walker.nextNode();
+                }
+
+                let generatedWordIndex = 0;
+                textNodes.forEach((textNode) => {
+                    const text = textNode.textContent || '';
+                    if (!text.trim()) return;
+
+                    const parentElement = textNode.parentElement;
+                    if (parentElement) {
+                        const className = parentElement.className || '';
+                        if (skipClassPattern.test(String(className))) return;
+                    }
+
+                    const parts = text.split(/(\s+)/);
+                    const fragment = document.createDocumentFragment();
+
+                    parts.forEach((part) => {
+                        if (!part) return;
+                        if (/^\s+$/.test(part)) {
+                            fragment.appendChild(document.createTextNode(part));
+                            return;
+                        }
+
+                        const wordSpan = document.createElement('span');
+                        wordSpan.className = 'karaoke-word-enhanced karaoke-word-generated';
+                        wordSpan.style.setProperty('--word-index', String(generatedWordIndex));
+                        generatedWordIndex += 1;
+                        wordSpan.textContent = part;
+                        fragment.appendChild(wordSpan);
+                    });
+
+                    textNode.parentNode?.replaceChild(fragment, textNode);
+                });
+
+                line.dataset.karaokeTokenized = '1';
+                words = Array.from(line.querySelectorAll('.word, .lyric-word, .karaoke-word-enhanced'));
+            }
+
             words.forEach((word, wordIndex) => {
                 word.classList.add('karaoke-word-enhanced');
                 word.style.setProperty('--word-index', String(wordIndex));
+
+                if (word.dataset.karaokeChars !== '1') {
+                    const text = word.textContent || '';
+                    if (text.trim().length > 0) {
+                        const frag = document.createDocumentFragment();
+                        const chars = Array.from(text);
+
+                        chars.forEach((char, charIndex) => {
+                            const charSpan = document.createElement('span');
+                            charSpan.className = 'karaoke-char-enhanced';
+                            charSpan.style.setProperty('--char-index', String(charIndex));
+                            charSpan.textContent = char;
+                            frag.appendChild(charSpan);
+                        });
+
+                        word.textContent = '';
+                        word.appendChild(frag);
+                        word.dataset.karaokeChars = '1';
+                    }
+                }
             });
         });
     }
@@ -1121,21 +1188,34 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     margin-inline-end: 0.06em;
                     transform: translate3d(0, 0, 0);
                     backface-visibility: hidden;
+                    transform-origin: 50% 100%;
                 }
 
                 .word:last-child, .lyric-word:last-child, .karaoke-word-enhanced:last-child {
                     margin-inline-end: 0;
                 }
 
-                /* Active line water-wave motion */
-                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active {
+                .karaoke-char-enhanced {
+                    display: inline-block;
+                    transform: translate3d(0, 0, 0);
                     will-change: transform, opacity, filter;
-                    transform: translate3d(0, 0, 0) scale(1.022);
-                    animation: karaoke-wave-line 2050ms cubic-bezier(0.36, 0.03, 0.21, 0.99) infinite;
-                    filter: saturate(1.08);
+                    backface-visibility: hidden;
+                    transform-origin: 50% 100%;
                 }
 
-                p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after {
+                /* Active line water-wave motion */
+                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active, .karaoke-active-line {
+                    will-change: transform, opacity, filter;
+                    transform: translate3d(0, 0, 0) scale(1.03);
+                    animation: karaoke-line-bounce 1780ms cubic-bezier(0.22, 0.9, 0.22, 1) infinite;
+                    filter: saturate(1.12) brightness(1.08);
+                    text-shadow:
+                        0 0 10px rgba(255, 255, 255, 0.28),
+                        0 0 18px rgba(var(--palette-rgb, 99, 102, 241), 0.22),
+                        0 0 28px rgba(var(--palette-rgb, 99, 102, 241), 0.15);
+                }
+
+                p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after, .karaoke-active-line::after {
                     content: '';
                     position: absolute;
                     pointer-events: none;
@@ -1154,38 +1234,99 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     background-size: 190% 100%;
                     background-position: calc(var(--karaoke-wave-ms) * 0.032px) 50%;
                     mix-blend-mode: screen;
-                    opacity: 0.55;
+                    opacity: 0.62;
                     will-change: transform, opacity;
-                    animation: karaoke-wave-shimmer 1400ms linear infinite;
+                    animation: karaoke-bubble-shimmer 1250ms linear infinite;
                 }
 
                 p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                 p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
-                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
+                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line .karaoke-word-enhanced {
                     will-change: transform, filter;
-                    animation: karaoke-word-wave 1180ms cubic-bezier(0.27, 0.1, 0.23, 1) infinite;
-                    animation-delay: calc(var(--word-index, 0) * 34ms + var(--line-stagger, 0) * 14ms);
+                    animation: karaoke-word-bubble-drop 940ms cubic-bezier(0.2, 0.92, 0.2, 1) infinite;
+                    animation-delay: calc(var(--word-index, 0) * 32ms + var(--line-stagger, 0) * 13ms);
+                    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.22));
                 }
 
-                @keyframes karaoke-wave-line {
-                    0% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 0 rgba(255, 255, 255, 0); }
-                    25% { transform: translate3d(0, -1px, 0) scale(1.028); text-shadow: 0 0 14px rgba(255, 255, 255, 0.18); }
-                    50% { transform: translate3d(0, 0.8px, 0) scale(1.021); text-shadow: 0 0 11px rgba(255, 255, 255, 0.13); }
-                    75% { transform: translate3d(0, -0.7px, 0) scale(1.026); text-shadow: 0 0 16px rgba(255, 255, 255, 0.2); }
-                    100% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 12px rgba(255, 255, 255, 0.14); }
+                p[active] .karaoke-char-enhanced, p[data-active] .karaoke-char-enhanced, p[data-active="true"] .karaoke-char-enhanced, .is-active .karaoke-char-enhanced, p.active .karaoke-char-enhanced, .line.active .karaoke-char-enhanced, .lyric-line.active .karaoke-char-enhanced, .lrc-line.active .karaoke-char-enhanced, .karaoke-active-line .karaoke-char-enhanced {
+                    animation: karaoke-char-lift 760ms cubic-bezier(0.23, 0.9, 0.2, 1) infinite;
+                    animation-delay: calc(
+                        var(--word-index, 0) * 34ms +
+                        var(--char-index, 0) * 15ms +
+                        var(--line-stagger, 0) * 10ms
+                    );
                 }
 
-                @keyframes karaoke-wave-shimmer {
-                    0% { opacity: 0.3; transform: translate3d(0, 0, 0); }
-                    50% { opacity: 0.58; transform: translate3d(0, -0.6px, 0); }
-                    100% { opacity: 0.3; transform: translate3d(0, 0, 0); }
+                @keyframes karaoke-line-bounce {
+                    0% {
+                        transform: translate3d(0, 0, 0) scale(1.02);
+                        text-shadow:
+                            0 0 8px rgba(255, 255, 255, 0.15),
+                            0 0 16px rgba(var(--palette-rgb, 99, 102, 241), 0.1);
+                    }
+                    22% {
+                        transform: translate3d(0, -2.7px, 0) scale(1.042);
+                        text-shadow:
+                            0 0 13px rgba(255, 255, 255, 0.28),
+                            0 0 24px rgba(var(--palette-rgb, 99, 102, 241), 0.2);
+                    }
+                    48% {
+                        transform: translate3d(0, 1.35px, 0) scale(1.028);
+                    }
+                    72% {
+                        transform: translate3d(0, -1.15px, 0) scale(1.035);
+                    }
+                    100% {
+                        transform: translate3d(0, 0, 0) scale(1.02);
+                    }
                 }
 
-                @keyframes karaoke-word-wave {
-                    0% { transform: translate3d(0, 0, 0); }
-                    30% { transform: translate3d(0, -1.5px, 0); }
-                    60% { transform: translate3d(0, 0.7px, 0); }
-                    100% { transform: translate3d(0, 0, 0); }
+                @keyframes karaoke-bubble-shimmer {
+                    0% { opacity: 0.34; transform: translate3d(0, 0, 0) scale(1); }
+                    50% { opacity: 0.7; transform: translate3d(0, -0.75px, 0) scale(1.01); }
+                    100% { opacity: 0.34; transform: translate3d(0, 0, 0) scale(1); }
+                }
+
+                @keyframes karaoke-word-bubble-drop {
+                    0% {
+                        transform: translate3d(0, 0, 0) scale(0.98);
+                    }
+                    26% {
+                        transform: translate3d(0, -6px, 0) scale(1.045);
+                    }
+                    52% {
+                        transform: translate3d(0, 2.5px, 0) scale(0.99);
+                    }
+                    72% {
+                        transform: translate3d(0, -1.9px, 0) scale(1.015);
+                    }
+                    100% {
+                        transform: translate3d(0, 0, 0) scale(1);
+                    }
+                }
+
+                @keyframes karaoke-char-lift {
+                    0% {
+                        transform: translate3d(0, 4.8px, 0) scale(0.96);
+                        opacity: 0.72;
+                        filter: drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+                    }
+                    28% {
+                        transform: translate3d(0, -6px, 0) scale(1.08);
+                        opacity: 1;
+                        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.36));
+                    }
+                    56% {
+                        transform: translate3d(0, 1.8px, 0) scale(0.985);
+                    }
+                    78% {
+                        transform: translate3d(0, -1.25px, 0) scale(1.02);
+                    }
+                    100% {
+                        transform: translate3d(0, 0, 0) scale(1);
+                        opacity: 1;
+                        filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.2));
+                    }
                 }
 
                 @media (max-height: 760px) {
@@ -1199,7 +1340,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active,
                     p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                     p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
-                    p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
+                    p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line, .karaoke-active-line .karaoke-word-enhanced, .karaoke-active-line .karaoke-char-enhanced {
                         animation: none !important;
                         transform: none !important;
                     }
@@ -1271,6 +1412,8 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let lastHapticLineIndex = -1;
     let lastHapticAt = 0;
     let lastBeatPulseAt = 0;
+    let lyricLineElements = [];
+    let activeKaraokeLineIndex = -1;
     let hapticsEnabled = lyricsSettings.isHapticSyncEnabled();
     let hapticEnhancementEnabled = lyricsSettings.isHapticEnhancementEnabled();
     let analyser = null;
@@ -1318,6 +1461,39 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         } else {
             syncedLyricLines = [];
         }
+
+        const root = amLyrics.shadowRoot || amLyrics;
+        lyricLineElements = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
+    };
+
+    const updateKaraokeActiveLine = (syncedTimeMs) => {
+        if (!lyricLineElements.length) return;
+
+        const nextActive = getLineIndexAtTime(syncedTimeMs / 1000);
+        if (nextActive === activeKaraokeLineIndex) return;
+
+        if (activeKaraokeLineIndex >= 0) {
+            const prevLine = lyricLineElements[activeKaraokeLineIndex];
+            if (prevLine) {
+                prevLine.classList.remove('karaoke-active-line');
+                prevLine.dataset.active = 'false';
+            }
+        }
+
+        activeKaraokeLineIndex = nextActive;
+
+        lyricLineElements.forEach((line, lineIndex) => {
+            if (!line) return;
+            if (lineIndex === nextActive) {
+                line.classList.add('karaoke-active-line');
+                line.dataset.active = 'true';
+            } else {
+                line.classList.remove('karaoke-active-line');
+                line.dataset.active = 'false';
+            }
+
+            line.dataset.prev = lineIndex === nextActive - 1 ? 'true' : 'false';
+        });
     };
 
     const getLineIndexAtTime = (seconds) => {
@@ -1456,6 +1632,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
         const syncedTimeMs = currentMs - getTimingOffset();
         amLyrics.currentTime = syncedTimeMs;
         lastHapticLineIndex = getLineIndexAtTime(syncedTimeMs / 1000);
+        updateKaraokeActiveLine(syncedTimeMs);
     };
 
     const tick = () => {
@@ -1466,6 +1643,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
             // Apply timing offset: positive offset delays lyrics, negative advances them
             const syncedTimeMs = nextMs - getTimingOffset();
             amLyrics.currentTime = syncedTimeMs;
+            updateKaraokeActiveLine(syncedTimeMs);
 
             // High-refresh visual phase update for wave shimmer (up to ~120Hz)
             if (now - lastWaveCssUpdate >= 8) {
