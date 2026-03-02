@@ -661,7 +661,7 @@ body.tauri-desktop .app-container {
 
 #tauri-window-chrome {
     position: fixed;
-    inset: 0 0 auto 0;
+    inset: 0 0 auto;
     height: var(--tauri-titlebar-height);
     display: grid;
     grid-template-columns: auto 1fr auto;

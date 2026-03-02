@@ -1199,13 +1199,19 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         const hasLyricsContent = () => {
             return Boolean(
                 amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
-                    amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
-                    (amLyrics.textContent && amLyrics.textContent.length > 50)
+                amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
+                (amLyrics.textContent && amLyrics.textContent.length > 50)
             );
         };
 
         if (!hasLyricsContent() && isTauriRuntime) {
-            return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Using desktop fallback');
+            return await renderFallbackLyricsComponent(
+                container,
+                track,
+                audioPlayer,
+                lyricsManager,
+                'Using desktop fallback'
+            );
         }
 
         const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
