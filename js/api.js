@@ -140,8 +140,155 @@ export class LosslessAPI {
         return this.buildSearchResponse(section);
     }
 
+    normalizeHifiArtist(artist) {
+        if (!artist || typeof artist !== 'object') return artist;
+
+        const normalizedTypes = Array.isArray(artist.artistTypes)
+            ? artist.artistTypes.filter(Boolean)
+            : artist.type
+              ? [artist.type]
+              : [];
+
+        return {
+            ...artist,
+            id: artist.id ?? null,
+            name: artist.name || 'Unknown Artist',
+            handle: artist.handle ?? null,
+            type: artist.type || normalizedTypes[0] || null,
+            picture: artist.picture || artist.image || null,
+            artistTypes: normalizedTypes,
+            url: artist.url || null,
+            selectedAlbumCoverFallback: artist.selectedAlbumCoverFallback ?? null,
+            popularity: Number.isFinite(artist.popularity) ? artist.popularity : null,
+            artistRoles: Array.isArray(artist.artistRoles) ? artist.artistRoles : [],
+            mixes: artist.mixes && typeof artist.mixes === 'object' ? artist.mixes : {},
+            userId: artist.userId ?? null,
+            spotlighted: !!artist.spotlighted,
+        };
+    }
+
+    normalizeHifiAlbum(album) {
+        if (!album || typeof album !== 'object') return album;
+
+        const artists = Array.isArray(album.artists)
+            ? album.artists.map((artist) => this.normalizeHifiArtist(artist)).filter(Boolean)
+            : [];
+        const artist = album.artist ? this.normalizeHifiArtist(album.artist) : artists.length > 0 ? artists[0] : null;
+
+        const mediaMetadata =
+            album.mediaMetadata && typeof album.mediaMetadata === 'object'
+                ? {
+                      ...album.mediaMetadata,
+                      tags: Array.isArray(album.mediaMetadata.tags) ? album.mediaMetadata.tags : [],
+                  }
+                : null;
+
+        return {
+            ...album,
+            id: album.id ?? null,
+            title: album.title || 'Unknown Album',
+            cover: album.cover || null,
+            vibrantColor: album.vibrantColor || null,
+            videoCover: album.videoCover || null,
+            artist,
+            artists,
+            releaseDate: album.releaseDate || null,
+            numberOfTracks: Number.isFinite(album.numberOfTracks) ? album.numberOfTracks : null,
+            explicit: !!album.explicit,
+            audioQuality: album.audioQuality || null,
+            audioModes: Array.isArray(album.audioModes) ? album.audioModes : [],
+            mediaMetadata,
+            url: album.url || null,
+            type: album.type || null,
+        };
+    }
+
+    normalizeHifiTrack(track) {
+        if (!track || typeof track !== 'object') return track;
+
+        const artists = Array.isArray(track.artists)
+            ? track.artists.map((artist) => this.normalizeHifiArtist(artist)).filter(Boolean)
+            : [];
+        const artist = track.artist ? this.normalizeHifiArtist(track.artist) : artists.length > 0 ? artists[0] : null;
+
+        const mediaMetadata =
+            track.mediaMetadata && typeof track.mediaMetadata === 'object'
+                ? {
+                      ...track.mediaMetadata,
+                      tags: Array.isArray(track.mediaMetadata.tags) ? track.mediaMetadata.tags : [],
+                  }
+                : null;
+
+        const normalized = {
+            ...track,
+            id: track.id ?? null,
+            title: track.title || 'Unknown Track',
+            duration: Number.isFinite(track.duration) ? track.duration : 0,
+            replayGain: Number.isFinite(track.replayGain) ? track.replayGain : null,
+            peak: Number.isFinite(track.peak) ? track.peak : null,
+            allowStreaming: track.allowStreaming !== false,
+            streamReady: track.streamReady !== false,
+            payToStream: !!track.payToStream,
+            adSupportedStreamReady: !!track.adSupportedStreamReady,
+            djReady: !!track.djReady,
+            stemReady: !!track.stemReady,
+            streamStartDate: track.streamStartDate || null,
+            premiumStreamingOnly: !!track.premiumStreamingOnly,
+            trackNumber: Number.isFinite(track.trackNumber) ? track.trackNumber : null,
+            volumeNumber: Number.isFinite(track.volumeNumber) ? track.volumeNumber : null,
+            discNumber: Number.isFinite(track.discNumber)
+                ? track.discNumber
+                : Number.isFinite(track.volumeNumber)
+                  ? track.volumeNumber
+                  : null,
+            version: track.version || null,
+            popularity: Number.isFinite(track.popularity) ? track.popularity : null,
+            copyright: track.copyright || null,
+            bpm: Number.isFinite(track.bpm) ? track.bpm : null,
+            key: track.key || null,
+            keyScale: track.keyScale || null,
+            url: track.url || null,
+            isrc: track.isrc || null,
+            editable: !!track.editable,
+            explicit: !!track.explicit,
+            audioQuality: track.audioQuality || null,
+            audioModes: Array.isArray(track.audioModes) ? track.audioModes : [],
+            mediaMetadata,
+            upload: !!track.upload,
+            accessType: track.accessType ?? null,
+            spotlighted: !!track.spotlighted,
+            artist,
+            artists,
+            album: track.album ? this.normalizeHifiAlbum(track.album) : null,
+            mixes: track.mixes && typeof track.mixes === 'object' ? track.mixes : {},
+        };
+
+        return normalized;
+    }
+
+    normalizeHifiTrackStreamInfo(info) {
+        if (!info || typeof info !== 'object') return info;
+
+        return {
+            ...info,
+            trackId: info.trackId ?? null,
+            assetPresentation: info.assetPresentation || null,
+            audioMode: info.audioMode || null,
+            audioQuality: info.audioQuality || null,
+            manifestMimeType: info.manifestMimeType || null,
+            manifestHash: info.manifestHash || null,
+            manifest: info.manifest || null,
+            albumReplayGain: Number.isFinite(info.albumReplayGain) ? info.albumReplayGain : null,
+            albumPeakAmplitude: Number.isFinite(info.albumPeakAmplitude) ? info.albumPeakAmplitude : null,
+            trackReplayGain: Number.isFinite(info.trackReplayGain) ? info.trackReplayGain : null,
+            trackPeakAmplitude: Number.isFinite(info.trackPeakAmplitude) ? info.trackPeakAmplitude : null,
+            bitDepth: Number.isFinite(info.bitDepth) ? info.bitDepth : null,
+            sampleRate: Number.isFinite(info.sampleRate) ? info.sampleRate : null,
+        };
+    }
+
     prepareTrack(track) {
-        let normalized = track;
+        let normalized = this.normalizeHifiTrack(track);
 
         if (!track.artist && Array.isArray(track.artists) && track.artists.length > 0) {
             normalized = { ...track, artist: track.artists[0] };
@@ -158,10 +305,7 @@ export class LosslessAPI {
     }
 
     prepareAlbum(album) {
-        if (!album.artist && Array.isArray(album.artists) && album.artists.length > 0) {
-            return { ...album, artist: album.artists[0] };
-        }
-        return album;
+        return this.normalizeHifiAlbum(album);
     }
 
     preparePlaylist(playlist) {
@@ -169,10 +313,7 @@ export class LosslessAPI {
     }
 
     prepareArtist(artist) {
-        if (!artist.type && Array.isArray(artist.artistTypes) && artist.artistTypes.length > 0) {
-            return { ...artist, type: artist.artistTypes[0] };
-        }
-        return artist;
+        return this.normalizeHifiArtist(artist);
     }
 
     async enrichTracksWithAlbumDates(tracks, maxRequests = 20) {
@@ -344,7 +485,9 @@ export class LosslessAPI {
             const normalized = this.normalizeSearchResponse(data, 'artists');
             const result = {
                 ...normalized,
-                items: normalized.items.map((a) => this.prepareArtist(a)),
+                items: normalized.items
+                    .map((a) => this.prepareArtist(a))
+                    .filter((a) => a?.id && a?.name && !a?.duration),
             };
 
             await this.cache.set('search_artists', query, result);
@@ -939,6 +1082,8 @@ export class LosslessAPI {
         // unwrap { version, data } if present
         const raw = apiResponse.data ?? apiResponse;
 
+        const normalizedInfo = this.normalizeHifiTrackStreamInfo(raw);
+
         // fabricate the track object expected by parseTrackLookup
         const trackStub = {
             duration: raw.duration ?? 0,
@@ -946,7 +1091,41 @@ export class LosslessAPI {
         };
 
         // return exactly what parseTrackLookup expects
-        return [trackStub, raw];
+        return [trackStub, normalizedInfo];
+    }
+
+    async getRecommendations(trackId, options = {}) {
+        if (!trackId) return { items: [], limit: 0, offset: 0, totalNumberOfItems: 0 };
+
+        const cacheKey = `track_recommendations_${trackId}`;
+        const cached = await this.cache.get('recommendations', cacheKey);
+        if (cached) return cached;
+
+        try {
+            const response = await this.fetchWithRetry(`/recommendations/?id=${trackId}`, options);
+            const payload = await response.json();
+            const data = payload?.data || payload;
+            const items = Array.isArray(data?.items) ? data.items : [];
+
+            const tracks = items
+                .map((entry) => entry?.track || entry?.item || entry)
+                .map((track) => this.prepareTrack(track))
+                .filter((track) => track?.id);
+
+            const result = {
+                items: tracks,
+                limit: data?.limit ?? tracks.length,
+                offset: data?.offset ?? 0,
+                totalNumberOfItems: data?.totalNumberOfItems ?? tracks.length,
+            };
+
+            await this.cache.set('recommendations', cacheKey, result);
+            return result;
+        } catch (error) {
+            if (error?.name === 'AbortError') throw error;
+            console.warn('Failed to fetch recommendations:', error);
+            return { items: [], limit: 0, offset: 0, totalNumberOfItems: 0 };
+        }
     }
 
     async getTrackMetadata(id) {
@@ -978,7 +1157,9 @@ export class LosslessAPI {
         if (cached) return cached;
 
         const loudnessParam = isPure ? '&loudnessNormalization=false' : '';
-        const response = await this.fetchWithRetry(`/track/?id=${id}&quality=${quality}${loudnessParam}`, { type: 'streaming' });
+        const response = await this.fetchWithRetry(`/track/?id=${id}&quality=${quality}${loudnessParam}`, {
+            type: 'streaming',
+        });
         const jsonResponse = await response.json();
         const result = this.parseTrackLookup(this.normalizeTrackResponse(jsonResponse));
 
@@ -1148,6 +1329,25 @@ export class LosslessAPI {
 
         const formattedId = id.replace(/-/g, '/');
         return `https://resources.tidal.com/images/${formattedId}/${size}x${size}.jpg`;
+    }
+
+    getVideoCoverUrl(id, size = '1280') {
+        if (!id) return null;
+
+        if (typeof id === 'string' && (id.startsWith('http') || id.startsWith('blob:') || id.startsWith('assets/'))) {
+            return id;
+        }
+
+        const formattedId = String(id).replace(/-/g, '/');
+        return `https://resources.tidal.com/videos/${formattedId}/${size}x${size}.jpg`;
+    }
+
+    getPreferredVisualUrl(source, size = '1280') {
+        if (!source || typeof source !== 'object') return null;
+
+        const videoUrl = this.getVideoCoverUrl(source.videoCover, size);
+        if (videoUrl) return videoUrl;
+        return this.getCoverUrl(source.cover, size);
     }
 
     getArtistPictureUrl(id, size = '320') {

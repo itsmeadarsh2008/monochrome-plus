@@ -73,6 +73,35 @@ const collections = [
         ],
     },
     {
+        id: 'DB_collaborative_playlists',
+        name: 'Collaborative Playlists',
+        permissions: [
+            Permission.read(Role.users()),
+            Permission.create(Role.users()),
+            Permission.update(Role.users()),
+            Permission.delete(Role.users()),
+        ],
+        documentSecurity: true,
+        attributes: [
+            { key: 'id', type: 'string', size: 255, required: true },
+            { key: 'owner_id', type: 'string', size: 255, required: true },
+            { key: 'name', type: 'string', size: 255, required: true },
+            { key: 'description', type: 'string', size: 2000, required: false },
+            { key: 'cover', type: 'string', size: 1000, required: false },
+            { key: 'tracks', type: 'string', size: 65535, required: false, x_large: true },
+            { key: 'members', type: 'string', size: 65535, required: false, x_large: true },
+            { key: 'created_at', type: 'integer', required: true },
+            { key: 'updated_at', type: 'integer', required: true },
+            { key: 'is_collaborative', type: 'boolean', required: false, default: true },
+        ],
+        indexes: [
+            { key: 'idx_collab_playlist_id', attributes: ['id'], type: 'key' },
+            { key: 'idx_collab_owner', attributes: ['owner_id'], type: 'key' },
+            { key: 'idx_collab_updated', attributes: ['updated_at'], type: 'key' },
+            { key: 'idx_collab_type', attributes: ['is_collaborative'], type: 'key' },
+        ],
+    },
+    {
         id: 'DB_friend_requests',
         name: 'Friend Requests',
         permissions: [

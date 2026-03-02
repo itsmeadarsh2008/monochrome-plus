@@ -13,7 +13,7 @@ import {
     getShareUrl,
     escapeHtml,
 } from './utils.js';
-import { lastFMStorage, libreFmSettings, waveformSettings } from './storage.js';
+import { lastFMStorage, libreFmSettings, waveformSettings, hifiVisualSettings } from './storage.js';
 import { showNotification, downloadTrackWithMetadata, downloadAlbumAsZip, downloadPlaylistAsZip } from './downloads.js';
 import { downloadQualitySettings } from './storage.js';
 import { updateTabTitle, navigate } from './router.js';
@@ -1269,6 +1269,48 @@ export async function handleTrackAction(
             const dateDisplay = releaseDate ? new Date(releaseDate).toLocaleDateString() : 'Unknown';
             const quality = item.audioQuality || 'Unknown';
             const bitrate = item.bitrate ? `${item.bitrate} kbps` : '';
+            const mediaTags = Array.isArray(item.mediaMetadata?.tags) ? item.mediaMetadata.tags : [];
+            const audioModes = Array.isArray(item.audioModes) ? item.audioModes : [];
+            const showFullHifiMetadata = hifiVisualSettings.showsFullMetadata();
+
+            const normalizedPayload = {
+                id: item.id,
+                title: item.title,
+                duration: item.duration,
+                replayGain: item.replayGain,
+                peak: item.peak,
+                allowStreaming: item.allowStreaming,
+                streamReady: item.streamReady,
+                payToStream: item.payToStream,
+                adSupportedStreamReady: item.adSupportedStreamReady,
+                djReady: item.djReady,
+                stemReady: item.stemReady,
+                streamStartDate: item.streamStartDate,
+                premiumStreamingOnly: item.premiumStreamingOnly,
+                trackNumber: item.trackNumber,
+                volumeNumber: item.volumeNumber,
+                discNumber: item.discNumber,
+                version: item.version,
+                popularity: item.popularity,
+                copyright: item.copyright,
+                bpm: item.bpm,
+                key: item.key,
+                keyScale: item.keyScale,
+                url: item.url,
+                isrc: item.isrc,
+                editable: item.editable,
+                explicit: item.explicit,
+                audioQuality: item.audioQuality,
+                audioModes: item.audioModes,
+                mediaMetadata: item.mediaMetadata,
+                upload: item.upload,
+                accessType: item.accessType,
+                spotlighted: item.spotlighted,
+                mixes: item.mixes,
+                artists: item.artists,
+                album: item.album,
+                info: item.info,
+            };
 
             infoHTML = `
                 <div style="padding: 1.5rem; max-width: 500px; max-height: 80vh; overflow-y: auto;">
@@ -1285,6 +1327,13 @@ export async function handleTrackAction(
                             ${item.version ? `<p><strong style="color: var(--foreground);">Version:</strong> ${escapeHtml(item.version)}</p>` : ''}
                             ${item.explicit ? `<p><strong style="color: var(--foreground);">Explicit:</strong> Yes</p>` : ''}
                             <p><strong style="color: var(--foreground);">Quality:</strong> ${escapeHtml(quality)} ${bitrate ? `(${escapeHtml(bitrate)})` : ''}</p>
+                            ${audioModes.length > 0 ? `<p><strong style="color: var(--foreground);">Audio Modes:</strong> ${escapeHtml(audioModes.join(', '))}</p>` : ''}
+                            ${mediaTags.length > 0 ? `<p><strong style="color: var(--foreground);">Media Tags:</strong> ${escapeHtml(mediaTags.join(', '))}</p>` : ''}
+                            ${item.isrc ? `<p><strong style="color: var(--foreground);">ISRC:</strong> ${escapeHtml(item.isrc)}</p>` : ''}
+                            ${item.replayGain != null ? `<p><strong style="color: var(--foreground);">Replay Gain:</strong> ${escapeHtml(String(item.replayGain))}</p>` : ''}
+                            ${item.peak != null ? `<p><strong style="color: var(--foreground);">Peak:</strong> ${escapeHtml(String(item.peak))}</p>` : ''}
+                            ${item.album?.vibrantColor ? `<p><strong style="color: var(--foreground);">Vibrant Color:</strong> ${escapeHtml(item.album.vibrantColor)}</p>` : ''}
+                            ${item.album?.videoCover ? `<p><strong style="color: var(--foreground);">Video Cover:</strong> ${escapeHtml(String(item.album.videoCover))}</p>` : ''}
                         </div>
                         
                         ${
@@ -1320,6 +1369,19 @@ export async function handleTrackAction(
                         
                         ${item.id ? `<p style="margin-top: 1rem; font-size: 0.8rem; color: var(--muted);"><strong>Track ID:</strong> ${escapeHtml(item.id)}</p>` : ''}
                         ${item.album?.id ? `<p style="font-size: 0.8rem; color: var(--muted);"><strong>Album ID:</strong> ${escapeHtml(item.album.id)}</p>` : ''}
+
+                        ${
+                            showFullHifiMetadata
+                                ? `
+                            <div style="margin-top: 1rem; padding: 0.75rem; background: var(--accent); border-radius: 8px;">
+                                <p style="color: var(--foreground); font-weight: 500; margin-bottom: 0.5rem;">Full HiFi Metadata</p>
+                                <pre style="margin: 0; font-size: 0.75rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: var(--foreground);">${escapeHtml(
+                                    JSON.stringify(normalizedPayload, null, 2)
+                                )}</pre>
+                            </div>
+                        `
+                                : ''
+                        }
                     </div>
                     <button class="btn-primary track-info-close-btn" style="margin-top: 1.5rem; width: 100%;">Close</button>
                 </div>

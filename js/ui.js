@@ -26,6 +26,7 @@ import {
     recentActivityManager,
     backgroundSettings,
     dynamicColorSettings,
+    hifiVisualSettings,
     cardSettings,
     visualizerSettings,
     homePageSettings,
@@ -136,6 +137,10 @@ export class UIRenderer {
 
         window.addEventListener('rotating-cover-changed', () => {
             this.refreshFullscreenDiscScrubbing();
+        });
+
+        window.addEventListener('hifi-visual-settings-changed', () => {
+            this.updateGlobalTheme();
         });
     }
 
@@ -300,11 +305,80 @@ export class UIRenderer {
             return;
         }
 
-        if (backgroundSettings.isEnabled() && this.currentTrack?.album?.cover) {
-            this.extractAndApplyColor(this.api.getCoverUrl(this.currentTrack.album.cover, '80'));
+        const album = this.currentTrack?.album;
+        if (backgroundSettings.isEnabled() && album?.cover) {
+            if (hifiVisualSettings.usesApiVibrantColor() && this.applyApiVibrantColor(album.vibrantColor)) {
+                return;
+            }
+            this.extractAndApplyColor(this.api.getCoverUrl(album.cover, '80'));
         } else {
             this.resetVibrantColor();
         }
+    }
+
+    getTrackVisualUrl(track, size = '1280') {
+        if (!track?.album) return null;
+
+        if (hifiVisualSettings.prefersVideoCover()) {
+            return (
+                this.api.getVideoCoverUrl(track.album.videoCover, size) || this.api.getCoverUrl(track.album.cover, size)
+            );
+        }
+
+        return this.api.getCoverUrl(track.album.cover, size);
+    }
+
+    getEntityVisualUrl(entity, fallbackCover = null, size = '1280') {
+        const fallbackUrl = fallbackCover
+            ? this.api.getCoverUrl(fallbackCover, size)
+            : entity?.cover
+              ? this.api.getCoverUrl(entity.cover, size)
+              : null;
+
+        if (!entity || !hifiVisualSettings.prefersVideoCover()) {
+            return fallbackUrl;
+        }
+
+        if (typeof this.api?.getPreferredVisualUrl === 'function') {
+            return this.api.getPreferredVisualUrl(entity, size) || fallbackUrl;
+        }
+
+        if (typeof this.api?.getVideoCoverUrl === 'function' && entity?.videoCover) {
+            return this.api.getVideoCoverUrl(entity.videoCover, size) || fallbackUrl;
+        }
+
+        return fallbackUrl;
+    }
+
+    applyApiVibrantColor(vibrantColor) {
+        if (!hifiVisualSettings.usesApiVibrantColor()) return false;
+        if (!vibrantColor || typeof vibrantColor !== 'string') return false;
+
+        const normalized = vibrantColor.trim();
+        const hex = /^#([\da-f]{6}|[\da-f]{3})$/i.test(normalized) ? normalized : null;
+        if (!hex) return false;
+
+        const expandHex = (value) =>
+            value.length === 4 ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}` : value;
+
+        const color = expandHex(hex);
+        const r = parseInt(color.slice(1, 3), 16);
+        const g = parseInt(color.slice(3, 5), 16);
+        const b = parseInt(color.slice(5, 7), 16);
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        const root = document.documentElement;
+        root.style.setProperty('--primary', color);
+        root.style.setProperty('--primary-foreground', brightness > 128 ? '#000000' : '#ffffff');
+        root.style.setProperty('--highlight', color);
+        root.style.setProperty('--highlight-rgb', `${r}, ${g}, ${b}`);
+        root.style.setProperty('--active-highlight', color);
+        root.style.setProperty('--ring', color);
+        root.style.setProperty('--accent-color', color);
+        root.style.setProperty('--accent-glow', `${color}44`);
+        root.style.setProperty('--accent-dim', `${color}88`);
+        root.style.setProperty('--track-hover-bg', `rgba(${r},${g},${b}, ${brightness > 200 ? 0.25 : 0.15})`);
+        return true;
     }
 
     createExplicitBadge() {
@@ -3466,13 +3540,16 @@ export class UIRenderer {
             const { album, tracks } = await this.api.getAlbum(albumId, provider);
 
             const coverUrl = this.api.getCoverUrl(album.cover);
+            const preferredVisualUrl = this.getEntityVisualUrl(album, album.cover);
             imageEl.src = coverUrl;
             imageEl.style.backgroundColor = '';
 
             // Set background and vibrant color
-            this.setPageBackground(coverUrl);
+            this.setPageBackground(preferredVisualUrl || coverUrl);
             if (backgroundSettings.isEnabled() && album.cover) {
-                this.extractAndApplyColor(this.api.getCoverUrl(album.cover, '80'));
+                if (!this.applyApiVibrantColor(album.vibrantColor)) {
+                    this.extractAndApplyColor(this.api.getCoverUrl(album.cover, '80'));
+                }
             }
 
             const explicitBadge = hasExplicitContent(album) ? this.createExplicitBadge() : '';
@@ -3627,7 +3704,7 @@ export class UIRenderer {
 
                         if (filteredSimilar.length > 0 && similarArtistsContainer && similarArtistsSection) {
                             similarArtistsContainer.innerHTML = filteredSimilar
-                                .map((a) => this.createArtistCardHTML(a))
+                                .map((a) => this.createArtistCircularCardHTML(a))
                                 .join('');
                             similarArtistsSection.style.display = 'block';
 
@@ -3841,8 +3918,11 @@ export class UIRenderer {
                     imageEl.src = playlistData.cover;
                     imageEl.style.display = 'block';
                     if (collageEl) collageEl.style.display = 'none';
-                    this.setPageBackground(playlistData.cover);
-                    this.extractAndApplyColor(playlistData.cover);
+                    const preferredVisualUrl = this.getEntityVisualUrl(playlistData, playlistData.cover);
+                    this.setPageBackground(preferredVisualUrl || playlistData.cover);
+                    if (!this.applyApiVibrantColor(playlistData.vibrantColor)) {
+                        this.extractAndApplyColor(playlistData.cover);
+                    }
                 } else {
                     const tracksWithCovers = (playlistData.tracks || []).filter((t) => t.album && t.album.cover);
                     const uniqueCovers = [];
@@ -4014,9 +4094,18 @@ export class UIRenderer {
                 const imageId = playlist.squareImage || playlist.image;
                 if (imageId) {
                     imageEl.src = this.api.getCoverUrl(imageId, '1080');
-                    this.setPageBackground(imageEl.src);
+                    const preferredVisualUrl = this.getEntityVisualUrl(
+                        {
+                            cover: imageId,
+                            videoCover: playlist.videoCover,
+                        },
+                        imageId
+                    );
+                    this.setPageBackground(preferredVisualUrl || imageEl.src);
 
-                    this.extractAndApplyColor(this.api.getCoverUrl(imageId, '160'));
+                    if (!this.applyApiVibrantColor(playlist.vibrantColor)) {
+                        this.extractAndApplyColor(this.api.getCoverUrl(imageId, '160'));
+                    }
                 } else {
                     imageEl.src = '/assets/appicon.png';
                     this.setPageBackground(null);
@@ -4463,7 +4552,7 @@ export class UIRenderer {
 
                         if (filteredSimilar.length > 0) {
                             similarContainer.innerHTML = filteredSimilar
-                                .map((a) => this.createArtistCardHTML(a))
+                                .map((a) => this.createArtistCircularCardHTML(a))
                                 .join('');
                             similarSection.style.display = 'block';
 
@@ -5021,16 +5110,17 @@ export class UIRenderer {
 
             if (friends && friends.length > 0) {
                 friendsGrid.innerHTML = friends
-                    .map((friend) => {
+                    .map((friend, index) => {
                         const username = friend.username || '';
                         const safeDisplayName = escapeHtml(friend.displayName || username || 'Friend');
                         const safeUsername = escapeHtml(username);
                         const statusText = friend.status || '';
                         const safeStatus = statusText ? escapeHtml(statusText) : '';
+                        const staggerClass = index < 10 ? `stagger-item` : '';
                         return `
-                            <div class="friend-card" data-uid="${friend.uid}" data-username="${safeUsername}">
+                            <div class="friend-card ${staggerClass}" data-uid="${friend.uid}" data-username="${safeUsername}" style="animation-delay: ${Math.min(index * 0.05, 0.5)}s">
                                 <div class="friend-avatar">
-                                    <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}">
+                                    <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}" loading="lazy">
                                 </div>
                                 <div class="friend-card-body">
                                     <div class="friend-name">${safeDisplayName}</div>
@@ -5060,10 +5150,10 @@ export class UIRenderer {
                 const incomingHTML = hasIncoming
                     ? incomingRequests
                           .map(
-                              (request) => `
-                            <div class="friend-request-item" data-uid="${request.uid}">
+                              (request, index) => `
+                            <div class="friend-request-item stagger-item" data-uid="${request.uid}" style="animation-delay: ${index * 0.1}s">
                                 <div class="friend-request-avatar">
-                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}">
+                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
                                 </div>
                                 <div class="friend-request-info">
                                     <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
@@ -5084,10 +5174,10 @@ export class UIRenderer {
                         <div class="friend-requests-subtitle">Outgoing Requests</div>
                         ${outgoingRequests
                             .map(
-                                (request) => `
-                            <div class="friend-request-item pending" data-uid="${request.uid}">
+                                (request, index) => `
+                            <div class="friend-request-item pending stagger-item" data-uid="${request.uid}" style="animation-delay: ${(incomingRequests.length + index) * 0.1}s">
                                 <div class="friend-request-avatar">
-                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}">
+                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
                                 </div>
                                 <div class="friend-request-info">
                                     <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
@@ -5132,25 +5222,24 @@ export class UIRenderer {
             if (collabPlaylists && collabPlaylists.length > 0) {
                 collabPlaylistsSection.style.display = 'block';
                 collabPlaylistsGrid.innerHTML = collabPlaylists
-                    .map((playlist) => {
+                    .map((playlist, index) => {
                         const trackCount = playlist.tracks?.length || 0;
                         const memberCount = playlist.members?.length || 0;
                         const totalDuration = calculateTotalDuration(playlist.tracks || []);
+                        const subtitle = `${trackCount} tracks • ${memberCount} members${totalDuration ? ` • ${formatDuration(totalDuration)}` : ''}`;
                         return `
-                            <div class="card collab-playlist-card" data-id="${playlist.id}">
-                                <div class="card-image">
-                                    <img src="${playlist.cover || '/assets/appicon.png'}" alt="${escapeHtml(playlist.name)}">
-                                    <div class="card-play-overlay">
-                                        <button class="card-play-btn" title="Play">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                                <polygon points="7 3 21 12 7 21 7 3"></polygon>
-                                            </svg>
-                                        </button>
-                                    </div>
+                            <div class="card collab-playlist-card stagger-item" data-id="${playlist.id}" style="animation-delay: ${index * 0.08}s">
+                                <div class="card-image-wrapper">
+                                    <img src="${playlist.cover || '/assets/appicon.png'}" alt="${escapeHtml(playlist.name)}" class="card-image" loading="lazy">
+                                    <button class="card-play-btn" title="Play">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                            <polygon points="7 3 21 12 7 21 7 3"></polygon>
+                                        </svg>
+                                    </button>
                                 </div>
                                 <div class="card-info">
                                     <div class="card-title">${escapeHtml(playlist.name)}</div>
-                                    <div class="card-meta">${trackCount} tracks • ${memberCount} members${totalDuration ? ` • ${formatDuration(totalDuration)}` : ''}</div>
+                                    <div class="card-meta">${escapeHtml(subtitle)}</div>
                                 </div>
                             </div>
                         `;
@@ -5197,6 +5286,7 @@ export class UIRenderer {
 
     setupFriendsPageEventListeners({ useCloudSocial = !!authManager.user } = {}) {
         const rerender = () => this.renderFriendsPage(this._getFriendsRouteParam());
+        const friendsPage = document.getElementById('page-friends');
 
         const addFriendBtn = document.getElementById('add-friend-btn');
         const addFriendModal = document.getElementById('add-friend-modal');
@@ -5243,7 +5333,9 @@ export class UIRenderer {
             }
         }
 
-        document.querySelectorAll('.accept-friend-btn').forEach((btn) => {
+        if (!friendsPage) return;
+
+        friendsPage.querySelectorAll('.accept-friend-btn').forEach((btn) => {
             btn.onclick = async () => {
                 try {
                     if (useCloudSocial && btn.dataset.requestId) {
@@ -5258,7 +5350,7 @@ export class UIRenderer {
             };
         });
 
-        document.querySelectorAll('.reject-friend-btn').forEach((btn) => {
+        friendsPage.querySelectorAll('.reject-friend-btn').forEach((btn) => {
             btn.onclick = async () => {
                 try {
                     if (useCloudSocial && btn.dataset.requestId) {
@@ -5273,7 +5365,7 @@ export class UIRenderer {
             };
         });
 
-        document.querySelectorAll('.cancel-friend-btn').forEach((btn) => {
+        friendsPage.querySelectorAll('.cancel-friend-btn').forEach((btn) => {
             btn.onclick = async () => {
                 try {
                     if (useCloudSocial && btn.dataset.requestId) {
@@ -5288,7 +5380,7 @@ export class UIRenderer {
             };
         });
 
-        document.querySelectorAll('.friend-open-profile-btn').forEach((btn) => {
+        friendsPage.querySelectorAll('.friend-open-profile-btn').forEach((btn) => {
             btn.onclick = (event) => {
                 event.stopPropagation();
                 const username = btn.dataset.username;
@@ -5298,7 +5390,7 @@ export class UIRenderer {
             };
         });
 
-        document.querySelectorAll('.friend-card').forEach((card) => {
+        friendsPage.querySelectorAll('.friend-card').forEach((card) => {
             card.onclick = () => {
                 const username = card.dataset.username;
                 if (username) {
@@ -5373,7 +5465,7 @@ export class UIRenderer {
             }
         }
 
-        document.querySelectorAll('.collab-playlist-card').forEach((card) => {
+        friendsPage.querySelectorAll('.collab-playlist-card').forEach((card) => {
             card.onclick = () => {
                 const playlistId = card.dataset.id;
                 if (playlistId) {
@@ -5395,6 +5487,7 @@ export class UIRenderer {
         const emptyEl = document.getElementById('collab-playlist-empty');
         const playBtn = document.getElementById('collab-play-btn');
         const shuffleBtn = document.getElementById('collab-shuffle-btn');
+        const editBtn = document.getElementById('collab-edit-btn');
         const deleteBtn = document.getElementById('collab-delete-btn');
 
         // Set loading state
@@ -5449,8 +5542,11 @@ export class UIRenderer {
                 imageEl.style.display = 'block';
             }
             if (collageEl) collageEl.style.display = 'none';
-            this.setPageBackground(playlist.cover);
-            this.extractAndApplyColor(playlist.cover);
+            const preferredVisualUrl = this.getEntityVisualUrl(playlist, playlist.cover);
+            this.setPageBackground(preferredVisualUrl || playlist.cover);
+            if (!this.applyApiVibrantColor(playlist.vibrantColor)) {
+                this.extractAndApplyColor(playlist.cover);
+            }
         } else {
             // Create collage from track covers
             const tracksWithCovers = tracks.filter((t) => t.album && t.album.cover);
@@ -5552,6 +5648,39 @@ export class UIRenderer {
                     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
                     window.monochromePlayer.setQueue(shuffled, 0);
                     window.monochromePlayer.playTrackFromQueue();
+                }
+            };
+        }
+
+        if (editBtn) {
+            editBtn.onclick = async () => {
+                const nameInput = prompt('Playlist name', playlist.name || '');
+                if (nameInput === null) return;
+
+                const trimmedName = nameInput.trim();
+                if (!trimmedName) {
+                    alert('Playlist name is required.');
+                    return;
+                }
+
+                const descriptionInput = prompt('Playlist description (optional)', playlist.description || '');
+                if (descriptionInput === null) return;
+
+                const coverInput = prompt('Cover image URL (optional)', playlist.cover || '');
+                if (coverInput === null) return;
+
+                try {
+                    await db.updateCollaborativePlaylist({
+                        ...playlist,
+                        name: trimmedName,
+                        description: descriptionInput.trim(),
+                        cover: coverInput.trim(),
+                    });
+                    this.renderCollabPlaylistPage(playlistId);
+                    this.renderFriendsPage(this._getFriendsRouteParam());
+                } catch (error) {
+                    console.error('Failed to update collaborative playlist:', error);
+                    alert('Failed to update playlist.');
                 }
             };
         }
@@ -5940,12 +6069,15 @@ export class UIRenderer {
             }
 
             const coverUrl = this.api.getCoverUrl(track.album?.cover);
+            const preferredVisualUrl = this.getTrackVisualUrl(track);
             imageEl.src = coverUrl;
             imageEl.style.backgroundColor = '';
 
-            this.setPageBackground(coverUrl);
+            this.setPageBackground(preferredVisualUrl || coverUrl);
             if (backgroundSettings.isEnabled() && track.album?.cover) {
-                this.extractAndApplyColor(this.api.getCoverUrl(track.album.cover, '80'));
+                if (!this.applyApiVibrantColor(track.album?.vibrantColor)) {
+                    this.extractAndApplyColor(this.api.getCoverUrl(track.album.cover, '80'));
+                }
             }
 
             const explicitBadge = hasExplicitContent(track) ? this.createExplicitBadge() : '';
@@ -5982,6 +6114,15 @@ export class UIRenderer {
                 if (tracks && tracks.length > 0) {
                     albumSection.style.display = 'block';
                     this.renderListWithTracks(albumTracksContainer, tracks, false);
+                }
+            }
+
+            const recommendations = await this.api.getRecommendations(track.id);
+            if (recommendations?.items?.length > 0) {
+                const deduped = recommendations.items.filter((entry) => entry?.id && entry.id !== track.id);
+                if (deduped.length > 0) {
+                    similarSection.style.display = 'block';
+                    this.renderListWithTracks(similarTracksContainer, deduped.slice(0, 25), false);
                 }
             }
 

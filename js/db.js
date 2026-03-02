@@ -563,6 +563,23 @@ export class MusicDatabase {
         );
     }
 
+    async _syncCollaborativePlaylist(action, playlist) {
+        window.dispatchEvent(
+            new CustomEvent('sync-collab-playlist-change', {
+                detail: { action, playlist },
+            })
+        );
+
+        try {
+            const { syncManager } = await import('./accounts/appwrite-sync.js');
+            if (syncManager?.syncCollaborativePlaylist) {
+                await syncManager.syncCollaborativePlaylist(playlist, action);
+            }
+        } catch (error) {
+            console.warn('[Collaborative Sync] Failed to sync collaborative playlist change:', error);
+        }
+    }
+
     // User Playlists API
     async createPlaylist(name, tracks = [], cover = '', description = '') {
         const id = crypto.randomUUID();
@@ -1003,19 +1020,35 @@ export class MusicDatabase {
     // Create collaborative playlist
     async createCollaborativePlaylist(name, memberIds = []) {
         const id = crypto.randomUUID();
+        let ownerId = '';
+        try {
+            const { authManager } = await import('./accounts/auth.js');
+            ownerId = authManager?.user?.$id || '';
+        } catch {
+            ownerId = '';
+        }
+
+        const uniqueMembers = Array.from(
+            new Set((Array.isArray(memberIds) ? memberIds : []).map((memberId) => String(memberId || '').trim()))
+        ).filter(Boolean);
+        if (ownerId && !uniqueMembers.includes(ownerId)) {
+            uniqueMembers.unshift(ownerId);
+        }
+
         const playlist = {
             id: id,
             name: name,
             description: '',
             cover: '',
             tracks: [],
-            members: memberIds,
-            owner: memberIds[0] || '',
+            members: uniqueMembers,
+            owner: ownerId || uniqueMembers[0] || '',
             createdAt: Date.now(),
             updatedAt: Date.now(),
             isCollaborative: true,
         };
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+        this._syncCollaborativePlaylist('create', playlist);
         return playlist;
     }
 
@@ -1045,6 +1078,7 @@ export class MusicDatabase {
                 playlist.members.push(memberId);
                 playlist.updatedAt = Date.now();
                 await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+                this._syncCollaborativePlaylist('update', playlist);
             }
         }
         return playlist;
@@ -1057,6 +1091,7 @@ export class MusicDatabase {
             playlist.members = playlist.members.filter((m) => m !== memberId);
             playlist.updatedAt = Date.now();
             await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+            this._syncCollaborativePlaylist('update', playlist);
         }
         return playlist;
     }
@@ -1075,6 +1110,7 @@ export class MusicDatabase {
         }
         playlist.updatedAt = Date.now();
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+        this._syncCollaborativePlaylist('update', playlist);
         return playlist;
     }
 
@@ -1086,18 +1122,33 @@ export class MusicDatabase {
         playlist.tracks = playlist.tracks.filter((t) => t.id !== trackId);
         playlist.updatedAt = Date.now();
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+        this._syncCollaborativePlaylist('update', playlist);
         return playlist;
     }
 
     // Delete collaborative playlist
     async deleteCollaborativePlaylist(playlistId) {
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.delete(playlistId));
+        this._syncCollaborativePlaylist('delete', { id: playlistId });
     }
 
     // Update collaborative playlist
     async updateCollaborativePlaylist(playlist) {
+        if (Array.isArray(playlist.members)) {
+            playlist.members = Array.from(
+                new Set(playlist.members.map((memberId) => String(memberId || '').trim()))
+            ).filter(Boolean);
+        } else {
+            playlist.members = [];
+        }
+
+        if (playlist.owner && !playlist.members.includes(playlist.owner)) {
+            playlist.members.unshift(playlist.owner);
+        }
+
         playlist.updatedAt = Date.now();
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
+        this._syncCollaborativePlaylist('update', playlist);
         return playlist;
     }
 }

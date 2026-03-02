@@ -8,6 +8,7 @@ import { getShareUrl, getTrackArtists } from '../utils.js';
 const DATABASE_ID = 'monochrome-plus';
 const USERS_COLLECTION = 'DB_users';
 const PUBLIC_PLAYLISTS_COLLECTION = 'DB_public_playlists';
+const COLLABORATIVE_PLAYLISTS_COLLECTION = 'DB_collaborative_playlists';
 const FRIEND_REQUESTS_COLLECTION = 'DB_friend_requests';
 const CHAT_MESSAGES_COLLECTION = 'DB_chat_messages';
 
@@ -21,6 +22,8 @@ const MAX_PLAYLIST_SYNC = 600;
 const MAX_MIX_SYNC = 400;
 const MAX_PUBLIC_PLAYLIST_TRACKS = 500;
 const MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
+const MAX_COLLAB_PLAYLIST_TRACKS = 700;
+const MAX_COLLAB_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -43,6 +46,8 @@ const syncManager = {
     _cloudPullPromise: null,
     _publicPlaylistSyncPromise: null,
     _publicPlaylistSyncTimeoutId: null,
+    _collaborativePlaylistSyncPromise: null,
+    _collaborativePlaylistSyncTimeoutId: null,
 
     _safeParseJSON(value, fallback) {
         if (value === null || value === undefined || value === '') return fallback;
@@ -173,6 +178,32 @@ const syncManager = {
         };
     },
 
+    _mapCollaborativePlaylistDoc(doc) {
+        const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
+        const parsedMembers = this._safeArray(doc?.members, [])
+            .map((memberId) => String(memberId || '').trim())
+            .filter(Boolean);
+        const ownerId = String(doc?.owner_id || parsedMembers[0] || '').trim();
+        const members = Array.from(new Set([ownerId, ...parsedMembers].filter(Boolean)));
+        const createdAtRaw = Number(doc?.created_at);
+        const updatedAtRaw = Number(doc?.updated_at);
+        const fallbackCreatedAt = doc?.$createdAt ? Date.parse(doc.$createdAt) : Date.now();
+        const fallbackUpdatedAt = doc?.$updatedAt ? Date.parse(doc.$updatedAt) : Date.now();
+
+        return {
+            id: doc?.id || doc?.$id,
+            name: doc?.name || 'Untitled Collaborative Playlist',
+            description: doc?.description || '',
+            cover: doc?.cover || '',
+            tracks,
+            members,
+            owner: ownerId,
+            createdAt: Number.isFinite(createdAtRaw) ? createdAtRaw : fallbackCreatedAt,
+            updatedAt: Number.isFinite(updatedAtRaw) ? updatedAtRaw : fallbackUpdatedAt,
+            isCollaborative: true,
+        };
+    },
+
     _playlistSyncSignature(playlist) {
         if (!playlist) return '';
         return JSON.stringify({
@@ -183,6 +214,21 @@ const syncManager = {
             numberOfTracks: playlist.numberOfTracks || 0,
             tracks: playlist.tracks || [],
             isPublic: !!playlist.isPublic,
+        });
+    },
+
+    _collaborativePlaylistSyncSignature(playlist) {
+        if (!playlist) return '';
+        return JSON.stringify({
+            id: playlist.id,
+            name: playlist.name || '',
+            description: playlist.description || '',
+            cover: playlist.cover || '',
+            tracks: playlist.tracks || [],
+            members: playlist.members || [],
+            owner: playlist.owner || '',
+            updatedAt: playlist.updatedAt || 0,
+            isCollaborative: !!playlist.isCollaborative,
         });
     },
 
@@ -243,6 +289,57 @@ const syncManager = {
         }
 
         return { serialized: '[]', kept: 0, total: normalized.length };
+    },
+
+    _serializeCollaborativePlaylistTracks(tracks = []) {
+        const normalized = (Array.isArray(tracks) ? tracks : [])
+            .map((track) => this._minifyPublicPlaylistTrack(track))
+            .filter((track) => track?.id);
+
+        if (!normalized.length) {
+            return { serialized: '[]', kept: 0, total: 0 };
+        }
+
+        let keepCount = Math.min(normalized.length, MAX_COLLAB_PLAYLIST_TRACKS);
+        while (keepCount > 0) {
+            const serialized = JSON.stringify(normalized.slice(0, keepCount));
+            if (serialized.length <= MAX_COLLAB_PLAYLIST_TRACKS_PAYLOAD_CHARS) {
+                return { serialized, kept: keepCount, total: normalized.length };
+            }
+
+            keepCount = keepCount > 300 ? keepCount - 50 : keepCount > 120 ? keepCount - 25 : keepCount - 10;
+        }
+
+        return { serialized: '[]', kept: 0, total: normalized.length };
+    },
+
+    _normalizeCollaborativeMembers(members, ownerId = '') {
+        const normalizedOwnerId = String(ownerId || '').trim();
+        const memberList = (Array.isArray(members) ? members : [])
+            .map((memberId) => String(memberId || '').trim())
+            .filter(Boolean);
+        const uniqueMembers = Array.from(new Set([normalizedOwnerId, ...memberList].filter(Boolean)));
+        return {
+            ownerId: normalizedOwnerId || uniqueMembers[0] || '',
+            members: uniqueMembers,
+            serialized: JSON.stringify(uniqueMembers),
+        };
+    },
+
+    _buildCollaborativePlaylistPermissions(ownerId, members = []) {
+        const users = Array.from(new Set([ownerId, ...(Array.isArray(members) ? members : [])].filter(Boolean)));
+        const permissions = [];
+
+        for (const userId of users) {
+            permissions.push(Permission.read(Role.user(userId)));
+            permissions.push(Permission.update(Role.user(userId)));
+        }
+
+        if (ownerId) {
+            permissions.push(Permission.delete(Role.user(ownerId)));
+        }
+
+        return Array.from(new Set(permissions));
     },
 
     async _withRetry(operation, { retries = 2, baseDelay = 450, label = 'Appwrite request' } = {}) {
@@ -490,6 +587,16 @@ const syncManager = {
                         databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id)
                     )
                 );
+
+                const collaborative = await databases.listDocuments(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, [
+                    Query.equal('owner_id', user.$id),
+                    Query.limit(300),
+                ]);
+                await Promise.allSettled(
+                    collaborative.documents.map((doc) =>
+                        databases.deleteDocument(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, doc.$id)
+                    )
+                );
             }
 
             return true;
@@ -731,6 +838,79 @@ const syncManager = {
             Query.limit(1),
         ]);
         return res.documents[0] || null;
+    },
+
+    async _findCollaborativePlaylistDoc(playlistId) {
+        if (!playlistId) return null;
+        const res = await databases.listDocuments(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, [
+            Query.equal('id', playlistId),
+            Query.limit(1),
+        ]);
+        return res.documents[0] || null;
+    },
+
+    async syncCollaborativePlaylist(playlist, action = 'update') {
+        await authManager.initialized.catch(() => {});
+        const user = authManager.user;
+        const playlistId = playlist?.id;
+        if (!user || !playlistId) return null;
+
+        try {
+            if (action === 'delete') {
+                const existing = await this._findCollaborativePlaylistDoc(playlistId);
+                if (!existing) return null;
+                return await databases.deleteDocument(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, existing.$id);
+            }
+
+            const ownerId = String(playlist?.owner || user.$id || '').trim() || user.$id;
+            const memberPayload = this._normalizeCollaborativeMembers(playlist?.members || [], ownerId);
+            const tracksPayload = this._serializeCollaborativePlaylistTracks(playlist?.tracks || []);
+
+            if (tracksPayload.kept < tracksPayload.total) {
+                console.warn(
+                    `[Appwrite Sync] Collaborative playlist "${playlistId}" track list truncated for cloud payload (${tracksPayload.kept}/${tracksPayload.total}).`
+                );
+            }
+
+            const createdAt = Number(playlist?.createdAt) || Date.now();
+            const updatedAt = Number(playlist?.updatedAt) || Date.now();
+
+            const payload = {
+                id: playlistId,
+                owner_id: ownerId,
+                name: playlist?.name || 'Untitled Collaborative Playlist',
+                description: playlist?.description || '',
+                cover: playlist?.cover || '',
+                tracks: tracksPayload.serialized,
+                members: memberPayload.serialized,
+                created_at: createdAt,
+                updated_at: updatedAt,
+                is_collaborative: true,
+            };
+
+            const permissions = this._buildCollaborativePlaylistPermissions(ownerId, memberPayload.members);
+            const existing = await this._findCollaborativePlaylistDoc(playlistId);
+            if (existing) {
+                return await databases.updateDocument(
+                    DATABASE_ID,
+                    COLLABORATIVE_PLAYLISTS_COLLECTION,
+                    existing.$id,
+                    payload,
+                    permissions
+                );
+            }
+
+            return await databases.createDocument(
+                DATABASE_ID,
+                COLLABORATIVE_PLAYLISTS_COLLECTION,
+                ID.unique(),
+                payload,
+                permissions
+            );
+        } catch (error) {
+            console.warn('[Appwrite Sync] Failed to sync collaborative playlist:', error);
+            throw error;
+        }
     },
 
     async publishPlaylist(playlist) {
@@ -1269,6 +1449,85 @@ const syncManager = {
         return this._publicPlaylistSyncPromise;
     },
 
+    async syncCloudCollaborativePlaylistsToLocal() {
+        const user = authManager.user;
+        if (!user) return false;
+
+        if (this._collaborativePlaylistSyncPromise) {
+            return this._collaborativePlaylistSyncPromise;
+        }
+
+        this._collaborativePlaylistSyncPromise = (async () => {
+            try {
+                const response = await this._withRetry(
+                    () =>
+                        databases.listDocuments(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, [
+                            Query.equal('is_collaborative', true),
+                            Query.limit(500),
+                        ]),
+                    { label: 'sync cloud collaborative playlists' }
+                );
+
+                const cloudPlaylists = response.documents
+                    .map((doc) => this._mapCollaborativePlaylistDoc(doc))
+                    .filter((playlist) => playlist.id);
+
+                const dbHandle = await database.open();
+                const didChange = await new Promise((resolve, reject) => {
+                    const tx = dbHandle.transaction('collaborative_playlists', 'readwrite');
+                    const store = tx.objectStore('collaborative_playlists');
+                    let changed = false;
+
+                    const allReq = store.getAll();
+                    allReq.onsuccess = () => {
+                        const existing = allReq.result || [];
+                        const existingById = new Map(
+                            existing
+                                .filter((playlist) => playlist?.id)
+                                .map((playlist) => [String(playlist.id), playlist])
+                        );
+
+                        cloudPlaylists.forEach((playlist) => {
+                            const existingPlaylist = existingById.get(String(playlist.id));
+                            const mergedPlaylist = {
+                                ...(existingPlaylist || {}),
+                                ...playlist,
+                                isCollaborative: true,
+                            };
+
+                            if (
+                                !existingPlaylist ||
+                                this._collaborativePlaylistSyncSignature(existingPlaylist) !==
+                                    this._collaborativePlaylistSyncSignature(mergedPlaylist)
+                            ) {
+                                store.put(mergedPlaylist);
+                                changed = true;
+                            }
+                        });
+                    };
+                    allReq.onerror = () => reject(allReq.error || tx.error);
+
+                    tx.oncomplete = () => resolve(changed);
+                    tx.onerror = (event) => reject(event.target.error || tx.error);
+                    tx.onabort = (event) => reject(event.target.error || tx.error);
+                });
+
+                if (didChange) {
+                    window.dispatchEvent(new CustomEvent('library-changed'));
+                }
+
+                return didChange;
+            } catch (error) {
+                console.warn('[Appwrite Sync] Failed to sync cloud collaborative playlists:', error);
+                return false;
+            } finally {
+                this._collaborativePlaylistSyncPromise = null;
+            }
+        })();
+
+        return this._collaborativePlaylistSyncPromise;
+    },
+
     _scheduleCloudPublicPlaylistSync(delayMs = 700) {
         if (this._publicPlaylistSyncTimeoutId) {
             clearTimeout(this._publicPlaylistSyncTimeoutId);
@@ -1278,6 +1537,19 @@ const syncManager = {
             this._publicPlaylistSyncTimeoutId = null;
             this.syncCloudPublicPlaylistsToLocal().catch((error) => {
                 console.warn('[Appwrite Sync] Delayed public playlist sync failed:', error);
+            });
+        }, delayMs);
+    },
+
+    _scheduleCloudCollaborativePlaylistSync(delayMs = 700) {
+        if (this._collaborativePlaylistSyncTimeoutId) {
+            clearTimeout(this._collaborativePlaylistSyncTimeoutId);
+        }
+
+        this._collaborativePlaylistSyncTimeoutId = setTimeout(() => {
+            this._collaborativePlaylistSyncTimeoutId = null;
+            this.syncCloudCollaborativePlaylistsToLocal().catch((error) => {
+                console.warn('[Appwrite Sync] Delayed collaborative playlist sync failed:', error);
             });
         }, delayMs);
     },
@@ -1315,15 +1587,16 @@ const syncManager = {
                 if (syncPublicPlaylists) {
                     playlistChanged = await this.syncCloudPublicPlaylistsToLocal();
                 }
+                const collaborativeChanged = await this.syncCloudCollaborativePlaylistsToLocal();
 
                 if (didImport) {
                     window.dispatchEvent(new CustomEvent('library-changed'));
                     window.dispatchEvent(new CustomEvent('history-changed'));
-                } else if (playlistChanged) {
+                } else if (playlistChanged || collaborativeChanged) {
                     window.dispatchEvent(new CustomEvent('library-changed'));
                 }
 
-                return didImport || playlistChanged;
+                return didImport || playlistChanged || collaborativeChanged;
             } catch (error) {
                 console.warn('[Appwrite Sync] Failed to pull cloud data:', error);
                 return false;
@@ -1344,6 +1617,7 @@ const syncManager = {
                 [
                     `databases.${DATABASE_ID}.collections.${USERS_COLLECTION}.documents`,
                     `databases.${DATABASE_ID}.collections.${PUBLIC_PLAYLISTS_COLLECTION}.documents`,
+                    `databases.${DATABASE_ID}.collections.${COLLABORATIVE_PLAYLISTS_COLLECTION}.documents`,
                     `databases.${DATABASE_ID}.collections.${FRIEND_REQUESTS_COLLECTION}.documents`,
                     `databases.${DATABASE_ID}.collections.${CHAT_MESSAGES_COLLECTION}.documents`,
                 ],
@@ -1395,6 +1669,27 @@ const syncManager = {
                         if (doc.owner_id === user.$id) {
                             this._scheduleCloudPublicPlaylistSync();
                         }
+                        return;
+                    }
+
+                    if (
+                        Object.prototype.hasOwnProperty.call(doc, 'owner_id') &&
+                        Object.prototype.hasOwnProperty.call(doc, 'id') &&
+                        Object.prototype.hasOwnProperty.call(doc, 'is_collaborative')
+                    ) {
+                        const collaborativePlaylist = this._mapCollaborativePlaylistDoc(doc);
+                        window.dispatchEvent(
+                            new CustomEvent('pb-collab-playlist-updated', {
+                                detail: {
+                                    playlistId: collaborativePlaylist.id,
+                                    ownerId: doc.owner_id,
+                                    playlist: collaborativePlaylist,
+                                    events: response.events || [],
+                                },
+                            })
+                        );
+
+                        this._scheduleCloudCollaborativePlaylistSync();
                         return;
                     }
 
@@ -1477,9 +1772,14 @@ const syncManager = {
             this._isSyncing = false;
             this._cloudPullPromise = null;
             this._publicPlaylistSyncPromise = null;
+            this._collaborativePlaylistSyncPromise = null;
             if (this._publicPlaylistSyncTimeoutId) {
                 clearTimeout(this._publicPlaylistSyncTimeoutId);
                 this._publicPlaylistSyncTimeoutId = null;
+            }
+            if (this._collaborativePlaylistSyncTimeoutId) {
+                clearTimeout(this._collaborativePlaylistSyncTimeoutId);
+                this._collaborativePlaylistSyncTimeoutId = null;
             }
             if (this._realtimeUnsubscribe) {
                 this._realtimeUnsubscribe();
@@ -1519,6 +1819,7 @@ const syncManager = {
                 await this.pullCloudData({ syncPublicPlaylists: true });
             } else {
                 await this.syncCloudPublicPlaylistsToLocal();
+                await this.syncCloudCollaborativePlaylistsToLocal();
             }
         } catch (error) {
             console.error('[Appwrite Sync] Sync error:', error);
@@ -1641,6 +1942,17 @@ const syncManager = {
                     await Promise.allSettled(publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist)));
                 } catch (playlistError) {
                     console.warn('[Appwrite Sync] Periodic public playlist sync failed:', playlistError);
+                }
+
+                try {
+                    const collaborativePlaylists = await database.getCollaborativePlaylists();
+                    if (Array.isArray(collaborativePlaylists) && collaborativePlaylists.length > 0) {
+                        await Promise.allSettled(
+                            collaborativePlaylists.map((playlist) => this.syncCollaborativePlaylist(playlist, 'update'))
+                        );
+                    }
+                } catch (collabError) {
+                    console.warn('[Appwrite Sync] Periodic collaborative playlist sync failed:', collabError);
                 }
 
                 this._userRecordCache = updated;

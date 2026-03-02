@@ -1446,27 +1446,16 @@
 
                 <!-- Friends Request Section -->
                 <section class="content-section" id="friends-requests-section" style="display: none">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
+                    <div class="friends-section-head">
                         <h2 class="section-title" style="margin-bottom: 0">Friend Requests</h2>
                         <span id="friend-requests-count" class="badge" style="display: none">0</span>
                     </div>
-                    <div class="friends-requests-grid" id="friend-requests-list"
-                        style="display: flex; flex-direction: column; gap: 0.75rem"></div>
+                    <div class="friends-requests-grid" id="friend-requests-list"></div>
                 </section>
 
                 <!-- Shared Tracks Section -->
                 <section class="content-section" id="shared-tracks-section" style="display: none">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
+                    <div class="friends-section-head">
                         <h2 class="section-title" style="margin-bottom: 0">Shared with You</h2>
                     </div>
                     <div class="track-list" id="shared-tracks-list"></div>
@@ -1498,18 +1487,13 @@
                             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
                             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                         </svg>
-                        <p style="font-weight: 500; margin-bottom: 0.25rem">No friends yet</p>
-                        <p style="font-size: 0.875rem">Search for people to add as friends</p>
+                        <p class="friends-empty-title">No friends yet</p>
+                        <p class="friends-empty-copy">Search for people to add as friends</p>
                     </div>
                 </section>
 
                 <section class="content-section" id="friends-discover-section" style="display: none">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
+                    <div class="friends-section-head">
                         <h2 class="section-title" style="margin-bottom: 0">Discover People</h2>
                     </div>
                     <div class="friends-discover-panel">
@@ -1525,12 +1509,7 @@
 
                 <!-- Collaborative Playlists Section -->
                 <section class="content-section" id="collab-playlists-section">
-                    <div style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: space-between;
-                                margin-bottom: 1rem;
-                            ">
+                    <div class="friends-section-head">
                         <h2 class="section-title" style="margin-bottom: 0">Collaborative Playlists</h2>
                         <button class="btn-primary" id="create-collab-playlist-btn"
                             title="Create Collaborative Playlist">
@@ -1588,6 +1567,14 @@
 
                             <!-- Secondary Action Group -->
                             <div class="btn-group btn-group-secondary">
+                                <button id="collab-edit-btn" class="btn-group-item" title="Edit Playlist">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <path d="M12 20h9" />
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                                    </svg>
+                                </button>
                                 <button id="collab-download-btn" class="btn-group-item" title="Download">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -3118,6 +3105,36 @@
                                 </div>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="show-quality-badges-toggle" checked />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Prefer Video Cover</span>
+                                    <span class="description">Use videoCover artwork where available</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="prefer-video-cover-toggle" />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Use API Vibrant Color</span>
+                                    <span class="description">Use API-provided vibrantColor for dynamic accent</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="use-api-vibrant-color-toggle" checked />
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="info">
+                                    <span class="label">Show Full HiFi Metadata</span>
+                                    <span class="description">Display complete HiFi fields in Track Info</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="show-full-hifi-metadata-toggle" checked />
                                     <span class="slider"></span>
                                 </label>
                             </div>

@@ -2434,13 +2434,15 @@ html.carousel-mode .card-grid,
     display: flex !important;
     flex-wrap: nowrap !important;
     overflow-x: auto !important;
+    overflow-y: visible !important;
     scroll-behavior: smooth;
     scrollbar-width: none;
     -ms-overflow-style: none;
     scroll-snap-type: x mandatory;
     gap: var(--card-gap-fluid);
+    padding-top: var(--space-2);
     padding-bottom: var(--space-2);
-    margin: 0 calc(-1 * var(--container-padding));
+    margin: calc(-1 * var(--space-2)) calc(-1 * var(--container-padding)) 0;
     padding-left: var(--container-padding);
     padding-right: var(--container-padding);
     -webkit-overflow-scrolling: touch;
@@ -7264,6 +7266,62 @@ input:checked+.slider::before {
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
 }
 
+.collab-playlist-card .card-info {
+    padding: 0.95rem 1rem 1.05rem;
+}
+
+.collab-playlist-card .card-title {
+    margin-bottom: 0.28rem;
+}
+
+.collab-playlist-card .card-meta {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+#page-home .card:not(.artist-circular) {
+    overflow: visible;
+}
+
+#page-home .card:not(.artist-circular) .card-content {
+    position: static;
+    background: transparent;
+    padding: 0.95rem 1rem 1.05rem;
+}
+
+#page-home .card:not(.artist-circular) .card-title {
+    color: var(--foreground);
+    text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-line-clamp: 1;
+}
+
+#page-home .card:not(.artist-circular) .card-subtitle {
+    color: var(--muted-foreground);
+    text-shadow: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#artist-detail-similar,
+#album-detail-similar-artists {
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    gap: 0.95rem;
+    overflow: visible;
+    padding-top: var(--space-2);
+    margin-top: calc(-1 * var(--space-2));
+}
+
 /* Window Controls Overlay */
 
 .now-playing-bar .artist .artist-link {
@@ -11685,4 +11743,1177 @@ input[type="search"]::-webkit-search-results-decoration {
     display: none;
     -webkit-appearance: none;
 }
+
+/* ==========================================================================
+   AESTHETIC DESIGN SYSTEM - Monochrome+
+   Modern glassmorphism aesthetics with enhanced visual hierarchy
+   ========================================================================== */
+
+/* -------------------------------------------------------------------------
+   ENHANCED CSS VARIABLES - Design Tokens
+   ------------------------------------------------------------------------- */
+
+:root {
+    /* Glassmorphism Surfaces */
+    --glass-bg: color-mix(in srgb, var(--card) 62%, transparent);
+    --glass-bg-hover: color-mix(in srgb, var(--card) 82%, transparent);
+    --glass-border: color-mix(in srgb, var(--border) 60%, transparent);
+    --glass-border-hover: color-mix(in srgb, var(--primary) 30%, transparent);
+    --glass-blur: 14px;
+    --glass-blur-heavy: 22px;
+    
+    /* Enhanced Shadows - Layered depth system */
+    --shadow-surface: 0 1px 3px rgb(0 0 0 / 0.12), 0 1px 2px rgb(0 0 0 / 0.08);
+    --shadow-card: 0 6px 18px -8px rgb(0 0 0 / 0.32), 0 0 0 1px var(--glass-border), inset 0 1px 0 rgb(255 255 255 / 0.04);
+    --shadow-card-hover: 0 16px 28px -12px rgb(0 0 0 / 0.46), 0 0 0 1px var(--glass-border-hover), inset 0 1px 0 rgb(255 255 255 / 0.06);
+    --shadow-elevated: 0 20px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-glow-sm: 0 0 15px rgb(var(--highlight-rgb) / 0.3);
+    --shadow-glow-md: 0 0 25px rgb(var(--highlight-rgb) / 0.4);
+    --shadow-glow-lg: 0 0 40px rgb(var(--highlight-rgb) / 0.5);
+    
+    /* Interactive States */
+    --state-hover-bg: color-mix(in srgb, var(--primary) 8%, transparent);
+    --state-active-bg: color-mix(in srgb, var(--primary) 12%, transparent);
+    --state-focus-ring: 0 0 0 3px rgb(var(--highlight-rgb) / 0.25);
+    
+    /* Border Radius Scale - Modern */
+    --radius-smooth: 0.875rem;
+    --radius-soft: 1.125rem;
+    --radius-pill: 9999px;
+    
+    /* Animation Curves - Premium feel */
+    --ease-spring-soft: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --ease-spring-bounce: cubic-bezier(0.68, -0.15, 0.265, 1.35);
+    
+    /* Spacing - Harmonious scale */
+    --space-xs: 0.375rem;
+    --space-sm: 0.625rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2.25rem;
+    --space-2xl: 3.5rem;
+}
+
+/* -------------------------------------------------------------------------
+   MODERN BUTTON COMPONENTS
+   ------------------------------------------------------------------------- */
+
+/* Primary Button - Enhanced with glow effects */
+.btn-primary {
+    position: relative;
+    background: linear-gradient(140deg, color-mix(in srgb, var(--primary) 92%, white) 0%, color-mix(in srgb, var(--primary) 78%, black) 100%);
+    color: var(--primary-foreground);
+    border: 1px solid color-mix(in srgb, var(--primary) 66%, white);
+    border-radius: var(--radius-pill);
+    padding: 0.72rem 1.6rem;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: 
+        transform 0.2s var(--ease-spring-soft),
+        box-shadow 0.3s var(--ease-out),
+        filter 0.2s var(--ease-out);
+    box-shadow:
+        0 10px 18px -10px rgb(var(--highlight-rgb) / 0.62),
+        0 2px 5px rgb(0 0 0 / 0.34),
+        inset 0 1px 0 rgb(255 255 255 / 0.28);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.btn-primary::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, rgb(255 255 255 / 0.2) 0%, rgb(255 255 255 / 0) 58%);
+    opacity: 0;
+    transition: opacity 0.3s var(--ease-out);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px) scale(1.015);
+    box-shadow:
+        0 14px 26px -12px rgb(var(--highlight-rgb) / 0.72),
+        0 6px 10px -6px rgb(0 0 0 / 0.35),
+        inset 0 1px 0 rgb(255 255 255 / 0.34);
+    filter: brightness(1.06);
+}
+
+.btn-primary:hover::before {
+    opacity: 1;
+}
+
+.btn-primary:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 
+        0 1px 4px rgb(var(--highlight-rgb) / 0.2),
+        inset 0 2px 4px rgb(0 0 0 / 0.1);
+}
+
+/* Secondary Button - Glassmorphism style */
+.btn-secondary {
+    background: var(--glass-bg);
+    color: var(--foreground);
+    border: 1px solid var(--glass-border);
+    border-radius: calc(var(--radius-pill) - 0.2rem);
+    padding: 0.61rem 1.25rem;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: 
+        background 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft),
+        box-shadow 0.2s var(--ease-out);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.btn-secondary:hover {
+    background: color-mix(in srgb, var(--glass-bg-hover) 86%, var(--primary) 7%);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px -12px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+.btn-secondary:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Ghost Button - Minimal with subtle hover */
+.btn-ghost {
+    background: transparent;
+    color: var(--muted-foreground);
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 0.625rem 1.25rem;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: 
+        color 0.2s var(--ease-out),
+        background 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft);
+}
+
+.btn-ghost:hover {
+    color: var(--foreground);
+    background: var(--state-hover-bg);
+}
+
+/* Icon Button - Circular with enhanced interactions */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--foreground);
+    cursor: pointer;
+    transition: 
+        background 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft),
+        box-shadow 0.2s var(--ease-out);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.btn-icon:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    transform: scale(1.1) translateY(-1px);
+    box-shadow: var(--shadow-card);
+}
+
+.btn-icon:active {
+    transform: scale(0.95);
+}
+
+/* -------------------------------------------------------------------------
+   MODERN CARD COMPONENTS
+   ------------------------------------------------------------------------- */
+
+/* Base Card - Glassmorphism with depth */
+.card {
+    background: linear-gradient(160deg, color-mix(in srgb, var(--glass-bg) 92%, transparent) 0%, color-mix(in srgb, var(--card) 72%, transparent) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-soft);
+    overflow: hidden;
+    transition: 
+        transform 0.3s var(--ease-spring-soft),
+        box-shadow 0.3s var(--ease-out),
+        border-color 0.2s var(--ease-out);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--shadow-card);
+}
+
+.card:hover {
+    transform: translateY(-4px) scale(1.01);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--shadow-card-hover);
+}
+
+.card:active {
+    transform: translateY(-2px) scale(0.99);
+}
+
+/* Card Image Wrapper with overlay effects */
+.card-image-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-smooth);
+    background: color-mix(in srgb, var(--card) 74%, black);
+}
+
+.card-image-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        transparent 0%,
+        transparent 50%,
+        rgb(0 0 0 / 0.3) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.3s var(--ease-out);
+    pointer-events: none;
+}
+
+.card:hover .card-image-wrapper::after {
+    opacity: 1;
+}
+
+.card-image {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    transition: 
+        transform 0.5s var(--ease-out),
+        filter 0.3s var(--ease-out);
+}
+
+.card:hover .card-image {
+    transform: scale(1.05);
+}
+
+/* Card Play Button - Enhanced animation */
+.card-play-btn {
+    position: absolute;
+    bottom: 0.75rem;
+    right: 0.75rem;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(8px) scale(0.9);
+    transition: 
+        opacity 0.3s var(--ease-out),
+        transform 0.3s var(--ease-spring-bounce),
+        box-shadow 0.3s var(--ease-out);
+    box-shadow:
+        0 4px 12px rgb(var(--highlight-rgb) / 0.4),
+        0 2px 4px rgb(0 0 0 / 0.2);
+}
+
+.card:hover .card-play-btn {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.card-play-btn:hover {
+    transform: scale(1.15) !important;
+    box-shadow: 
+        0 6px 20px rgb(var(--highlight-rgb) / 0.5),
+        0 4px 8px rgb(0 0 0 / 0.25);
+}
+
+/* Card Info - Modern typography */
+.card-info {
+    padding: 1rem;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--foreground);
+    margin: 0 0 0.25rem 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.01em;
+}
+
+.card-subtitle {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* -------------------------------------------------------------------------
+   MODERN INPUT COMPONENTS
+   ------------------------------------------------------------------------- */
+
+.input {
+    width: 100%;
+    padding: 0.875rem 1.125rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: calc(var(--radius-pill) - 0.18rem);
+    color: var(--foreground);
+    font-size: 0.9375rem;
+    font-family: inherit;
+    outline: none;
+    transition: 
+        background 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        box-shadow 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.input:hover {
+    background: color-mix(in srgb, var(--glass-bg-hover) 88%, transparent);
+    border-color: color-mix(in srgb, var(--border) 80%, var(--primary) 20%);
+}
+
+.input:focus {
+    background: color-mix(in srgb, var(--glass-bg-hover) 90%, transparent);
+    border-color: var(--primary);
+    box-shadow: 
+        var(--state-focus-ring),
+        0 2px 8px rgb(var(--highlight-rgb) / 0.1);
+    transform: translateY(-1px);
+}
+
+.input::placeholder {
+    color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+
+/* Search Bar - Enhanced with glassmorphism */
+.search-bar {
+    position: relative;
+    flex: 1;
+}
+
+.search-bar input {
+    width: 100%;
+    padding: 0.875rem 1rem 0.875rem 2.75rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    color: var(--foreground);
+    font-size: 0.9375rem;
+    transition: 
+        background 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        box-shadow 0.2s var(--ease-out);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.search-bar input:focus {
+    background: var(--glass-bg-hover);
+    border-color: var(--primary);
+    box-shadow: var(--state-focus-ring);
+    outline: none;
+}
+
+.search-bar .search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted-foreground);
+    pointer-events: none;
+    transition: color 0.2s var(--ease-out);
+}
+
+.search-bar input:focus + .search-icon,
+.search-bar:has(input:focus) .search-icon {
+    color: var(--primary);
+}
+
+/* -------------------------------------------------------------------------
+   ENHANCED FRIENDS TAB - AESTHETIC DESIGN
+   ------------------------------------------------------------------------- */
+
+/* Friends Page Container */
+#page-friends {
+    padding: var(--space-lg);
+}
+
+#page-friends.page.active {
+    display: grid;
+    gap: 1.4rem;
+}
+
+/* Friends Hero - Gradient background with depth */
+.friends-hero {
+    position: relative;
+    padding: 2.35rem 2rem;
+    margin-bottom: 0;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(
+        132deg,
+        color-mix(in srgb, var(--card) 90%, var(--primary) 8%) 0%,
+        color-mix(in srgb, var(--card) 76%, transparent) 48%,
+        color-mix(in srgb, var(--primary) 7%, var(--card) 76%) 100%
+    );
+    border: 1px solid var(--glass-border);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+
+.friends-hero::before {
+    content: '';
+    position: absolute;
+    top: -48%;
+    right: -16%;
+    width: 360px;
+    height: 360px;
+    background: radial-gradient(
+        circle,
+        rgb(var(--highlight-rgb) / 0.08) 0%,
+        transparent 70%
+    );
+    pointer-events: none;
+}
+
+.friends-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(90deg, rgb(255 255 255 / 0.05), transparent 22%, transparent 78%, rgb(255 255 255 / 0.03)),
+        repeating-linear-gradient(135deg, rgb(255 255 255 / 0.02) 0 1px, transparent 1px 12px);
+    pointer-events: none;
+}
+
+.friends-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.friends-section-title-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.friends-requests-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.friends-hero-title {
+    font-size: clamp(1.75rem, 5vw, 2.5rem);
+    font-weight: 700;
+    color: var(--foreground);
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.02em;
+    position: relative;
+}
+
+.friends-hero-subtitle {
+    font-size: 1.0625rem;
+    color: var(--muted-foreground);
+    margin: 0;
+    position: relative;
+}
+
+/* Friends Section Headers */
+.friends-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.friends-section-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--foreground);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.friends-section-header .badge {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-radius: var(--radius-pill);
+}
+
+/* Friends Grid - Adaptive layout */
+.friends-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+/* Friend Card - Enhanced glassmorphism */
+.friend-card {
+    position: relative;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    cursor: pointer;
+    transition: 
+        transform 0.3s var(--ease-spring-soft),
+        box-shadow 0.3s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        background 0.2s var(--ease-out);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    overflow: hidden;
+}
+
+.friend-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s var(--ease-out);
+}
+
+.friend-card:hover {
+    transform: translateY(-3px) scale(1.008);
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--shadow-card-hover);
+}
+
+.friend-card:hover::before {
+    opacity: 0.6;
+}
+
+.friend-card:active {
+    transform: translateY(-1px) scale(0.99);
+}
+
+/* Friend Avatar - Enhanced with ring */
+.friend-card .friend-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+    border: 2px solid transparent;
+    transition: 
+        border-color 0.2s var(--ease-out),
+        transform 0.3s var(--ease-spring-soft);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+}
+
+.friend-card:hover .friend-avatar {
+    border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+    transform: scale(1.05);
+}
+
+.friend-card .friend-avatar::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: border-color 0.3s var(--ease-out);
+}
+
+.friend-card:hover .friend-avatar::after {
+    border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.friend-card .friend-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Friend Card Body - Improved typography */
+.friend-card .friend-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.friend-card .friend-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.2rem;
+    letter-spacing: -0.01em;
+}
+
+.friend-card .friend-username {
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.375rem;
+}
+
+/* Friend Status - Animated indicator */
+.friend-card .friend-status {
+    font-size: 0.8125rem;
+    color: var(--primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.friend-card .friend-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgb(var(--highlight-rgb) / 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgb(var(--highlight-rgb) / 0);
+    }
+}
+
+/* Friend Card Actions */
+.friend-card .friend-card-actions {
+    flex-shrink: 0;
+    opacity: 0.92;
+    transform: translateX(0);
+    transition: 
+        opacity 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft);
+}
+
+.friend-card:hover .friend-card-actions {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.friend-card .friend-card-actions .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+}
+
+/* Friend Request Section */
+#friends-requests-section {
+    margin-bottom: 2rem;
+}
+
+.friend-request-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.125rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    transition: 
+        transform 0.2s var(--ease-spring-soft),
+        box-shadow 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.friend-request-item:hover {
+    transform: translateX(3px);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--shadow-card);
+}
+
+.friend-request-item.pending {
+    opacity: 0.9;
+    border-style: dashed;
+}
+
+.friend-request-item .friend-request-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
+}
+
+.friend-request-item .friend-request-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.friend-request-item .friend-request-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.friend-request-item .friend-request-name {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    color: var(--foreground);
+    margin-bottom: 0.25rem;
+}
+
+.friend-request-item .friend-request-username {
+    font-size: 0.8125rem;
+    color: var(--muted-foreground);
+}
+
+.friend-request-item .friend-request-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* Discover Panel - Enhanced search */
+.friends-discover-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--shadow-card);
+}
+
+#friends-discover-input {
+    background: color-mix(in srgb, var(--input) 70%, transparent);
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: var(--radius-pill);
+    padding: 1rem 1.25rem;
+    font-size: 0.9375rem;
+}
+
+#friends-discover-input:focus {
+    background: color-mix(in srgb, var(--input) 85%, transparent);
+    border-color: var(--primary);
+    box-shadow: var(--state-focus-ring);
+}
+
+.friends-suggestions-status {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+}
+
+/* Friend Suggestions List */
+.friends-suggestions-list {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.friend-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--card) 50%, transparent);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    transition: 
+        background 0.2s var(--ease-out),
+        border-color 0.2s var(--ease-out),
+        transform 0.2s var(--ease-spring-soft);
+}
+
+.friend-suggestion-item:hover {
+    background: color-mix(in srgb, var(--card) 70%, transparent);
+    border-color: var(--glass-border-hover);
+    transform: translateX(4px);
+}
+
+.friend-suggestion-item.self {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--secondary) 25%, transparent);
+}
+
+.friend-suggestion-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    flex-shrink: 0;
+}
+
+.friend-suggestion-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.friend-suggestion-name {
+    font-weight: 600;
+    color: var(--foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-suggestion-username {
+    color: var(--muted-foreground);
+    font-size: 0.81rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.friend-suggestion-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.friend-suggestion-actions .btn-primary,
+.friend-suggestion-actions .btn-secondary {
+    min-width: 0;
+    padding: 0.46rem 0.84rem;
+    font-size: 0.81rem;
+}
+
+/* Empty State - Enhanced */
+.friends-empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted-foreground);
+    background: var(--glass-bg);
+    border: 2px dashed var(--glass-border);
+    border-radius: var(--radius-xl);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.friends-empty-state svg {
+    margin-bottom: 1.25rem;
+    opacity: 0.6;
+    transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-spring-soft);
+}
+
+.friends-empty-state:hover svg {
+    opacity: 0.8;
+    transform: scale(1.1);
+}
+
+.friends-empty-state p:first-of-type {
+    font-weight: 600;
+    font-size: 1.0625rem;
+    color: var(--foreground);
+    margin-bottom: 0.5rem;
+}
+
+.friends-empty-state p:last-of-type {
+    font-size: 0.9375rem;
+}
+
+.friends-empty-title {
+    font-weight: 600;
+    font-size: 1.0625rem;
+    color: var(--foreground);
+    margin-bottom: 0.5rem;
+}
+
+.friends-empty-copy {
+    font-size: 0.9375rem;
+    color: var(--muted-foreground);
+}
+
+/* -------------------------------------------------------------------------
+   RESPONSIVE ADAPTIVE STYLES
+   ------------------------------------------------------------------------- */
+
+/* Large Screens - Enhanced spacing */
+@media (min-width: 1400px) {
+    .friends-grid {
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 1.25rem;
+    }
+    
+    .card {
+        border-radius: calc(var(--radius-soft) + 0.25rem);
+    }
+    
+    .friends-hero {
+        padding: 3rem 2.5rem;
+    }
+}
+
+/* Tablet Adjustments */
+@media (max-width: 1024px) {
+    .friends-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+    
+    .friend-card .friend-card-actions {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    :root {
+        --glass-blur: 12px;
+    }
+    
+    .friends-grid {
+        grid-template-columns: 1fr;
+        gap: 0.875rem;
+    }
+    
+    .friend-card {
+        padding: 1rem;
+    }
+    
+    .friend-card .friend-avatar {
+        width: 48px;
+        height: 48px;
+    }
+    
+    .friends-hero {
+        padding: 1.75rem 1.25rem;
+        margin-bottom: 0;
+    }
+    
+    .friends-hero-title {
+        font-size: 1.5rem;
+    }
+    
+    .friends-section-header {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    
+    .friend-request-item {
+        flex-wrap: wrap;
+    }
+    
+    .friend-request-item .friend-request-actions {
+        width: 100%;
+        justify-content: flex-start;
+        margin-top: 0.75rem;
+    }
+    
+    .card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+        padding: 0.625rem 1.25rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+    .friends-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .friend-card {
+        padding: 0.875rem;
+    }
+    
+    .friend-card .friend-card-actions {
+        display: block;
+        width: 100%;
+        margin-top: 0.65rem;
+    }
+
+    .friend-card {
+        flex-wrap: wrap;
+    }
+
+    .friend-card .friend-card-actions .btn-secondary {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .friends-discover-panel {
+        padding: 1rem;
+    }
+    
+    .friend-suggestion-item {
+        padding: 0.875rem;
+        flex-wrap: wrap;
+    }
+
+    .friend-suggestion-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) {
+    .card-play-btn {
+        opacity: 1;
+        transform: none;
+        bottom: 0.5rem;
+        right: 0.5rem;
+        width: 40px;
+        height: 40px;
+    }
+    
+    .friend-card .friend-card-actions {
+        opacity: 1;
+        transform: none;
+    }
+    
+    .card:hover {
+        transform: none;
+    }
+    
+    .friend-card:hover {
+        transform: none;
+    }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .friend-card,
+    .card,
+    .btn-primary,
+    .btn-secondary,
+    .input {
+        transition: none;
+    }
+    
+    .friend-card .friend-status::before {
+        animation: none;
+    }
+}
+
+/* Dark mode enhancements */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --glass-bg: color-mix(in srgb, var(--card) 65%, transparent);
+        --glass-border: color-mix(in srgb, var(--border) 50%, transparent);
+    }
+}
+
+/* -------------------------------------------------------------------------
+   UTILITY CLASSES
+   ------------------------------------------------------------------------- */
+
+.glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.glass-heavy {
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    backdrop-filter: blur(var(--glass-blur-heavy));
+    -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
+}
+
+.glow-hover:hover {
+    box-shadow: var(--shadow-glow-sm);
+}
+
+.text-gradient {
+    background: linear-gradient(135deg, var(--foreground) 0%, var(--muted-foreground) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* -------------------------------------------------------------------------
+   ANIMATIONS
+   ------------------------------------------------------------------------- */
+
+@keyframes slide-up-fade {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.animate-slide-up {
+    animation: slide-up-fade 0.4s var(--ease-out-back) forwards;
+}
+
+.animate-scale-in {
+    animation: scale-in 0.3s var(--ease-out-back) forwards;
+}
+
+/* Stagger animation for lists */
+.stagger-item {
+    opacity: 0;
+    animation: slide-up-fade 0.4s var(--ease-out-back) forwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0.05s; }
+.stagger-item:nth-child(2) { animation-delay: 0.1s; }
+.stagger-item:nth-child(3) { animation-delay: 0.15s; }
+.stagger-item:nth-child(4) { animation-delay: 0.2s; }
+.stagger-item:nth-child(5) { animation-delay: 0.25s; }
+.stagger-item:nth-child(6) { animation-delay: 0.3s; }
+
+/* stylelint-enable no-descending-specificity */
 

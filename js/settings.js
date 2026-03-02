@@ -6,6 +6,7 @@ import {
     lyricsSettings,
     backgroundSettings,
     dynamicColorSettings,
+    hifiVisualSettings,
     cardSettings,
     waveformSettings,
     replayGainSettings,
@@ -836,6 +837,40 @@ export function initializeSettings(scrobbler, player, api, ui) {
             qualityBadgeSettings.setEnabled(e.target.checked);
             // Re-render queue if available, but don't force navigation to library
             if (window.renderQueueFunction) window.renderQueueFunction();
+        });
+    }
+
+    const preferVideoCoverToggle = document.getElementById('prefer-video-cover-toggle');
+    if (preferVideoCoverToggle) {
+        preferVideoCoverToggle.checked = hifiVisualSettings.prefersVideoCover();
+        preferVideoCoverToggle.addEventListener('change', (e) => {
+            hifiVisualSettings.setPrefersVideoCover(e.target.checked);
+            window.dispatchEvent(
+                new CustomEvent('hifi-visual-settings-changed', {
+                    detail: { setting: 'prefer-video-cover', enabled: e.target.checked },
+                })
+            );
+        });
+    }
+
+    const useApiVibrantColorToggle = document.getElementById('use-api-vibrant-color-toggle');
+    if (useApiVibrantColorToggle) {
+        useApiVibrantColorToggle.checked = hifiVisualSettings.usesApiVibrantColor();
+        useApiVibrantColorToggle.addEventListener('change', (e) => {
+            hifiVisualSettings.setUsesApiVibrantColor(e.target.checked);
+            window.dispatchEvent(
+                new CustomEvent('hifi-visual-settings-changed', {
+                    detail: { setting: 'use-api-vibrant-color', enabled: e.target.checked },
+                })
+            );
+        });
+    }
+
+    const showFullHifiMetadataToggle = document.getElementById('show-full-hifi-metadata-toggle');
+    if (showFullHifiMetadataToggle) {
+        showFullHifiMetadataToggle.checked = hifiVisualSettings.showsFullMetadata();
+        showFullHifiMetadataToggle.addEventListener('change', (e) => {
+            hifiVisualSettings.setShowsFullMetadata(e.target.checked);
         });
     }
 

@@ -528,6 +528,48 @@ export const dynamicColorSettings = {
     },
 };
 
+export const hifiVisualSettings = {
+    PREFER_VIDEO_COVER_KEY: 'hifi-prefer-video-cover',
+    USE_API_VIBRANT_COLOR_KEY: 'hifi-use-api-vibrant-color',
+    SHOW_FULL_METADATA_KEY: 'hifi-show-full-metadata',
+
+    prefersVideoCover() {
+        try {
+            return localStorage.getItem(this.PREFER_VIDEO_COVER_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    },
+
+    setPrefersVideoCover(enabled) {
+        localStorage.setItem(this.PREFER_VIDEO_COVER_KEY, enabled ? 'true' : 'false');
+    },
+
+    usesApiVibrantColor() {
+        try {
+            return localStorage.getItem(this.USE_API_VIBRANT_COLOR_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setUsesApiVibrantColor(enabled) {
+        localStorage.setItem(this.USE_API_VIBRANT_COLOR_KEY, enabled ? 'true' : 'false');
+    },
+
+    showsFullMetadata() {
+        try {
+            return localStorage.getItem(this.SHOW_FULL_METADATA_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    },
+
+    setShowsFullMetadata(enabled) {
+        localStorage.setItem(this.SHOW_FULL_METADATA_KEY, enabled ? 'true' : 'false');
+    },
+};
+
 export const cardSettings = {
     COMPACT_ARTIST_KEY: 'card-compact-artist',
     COMPACT_ALBUM_KEY: 'card-compact-album',
