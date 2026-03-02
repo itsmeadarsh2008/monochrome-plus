@@ -151,6 +151,7 @@ export class LyricsManager {
         this.currentGeniusData = null;
         this.timingOffset = 0; // Offset in milliseconds (positive = delay lyrics, negative = advance lyrics)
         this._karaokeLayoutRaf = null;
+        this.useLiteKaraoke = false;
     }
 
     // Get timing offset for current track
@@ -693,7 +694,7 @@ export class LyricsManager {
 
             let words = Array.from(line.querySelectorAll('.word, .lyric-word, .karaoke-word-enhanced'));
 
-            if (words.length === 0 && line.dataset.karaokeTokenized !== '1') {
+            if (!this.useLiteKaraoke && words.length === 0 && line.dataset.karaokeTokenized !== '1') {
                 const skipClassPattern = /(time|timestamp)/i;
                 const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
                 const textNodes = [];
@@ -743,7 +744,7 @@ export class LyricsManager {
                 word.classList.add('karaoke-word-enhanced');
                 word.style.setProperty('--word-index', String(wordIndex));
 
-                if (word.dataset.karaokeChars !== '1') {
+                if (!this.useLiteKaraoke && word.dataset.karaokeChars !== '1') {
                     const text = word.textContent || '';
                     if (text.trim().length > 0) {
                         const frag = document.createDocumentFragment();
@@ -1145,6 +1146,14 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
         await waitForLyrics();
 
+        const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
+        const isStandalonePwa =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.navigator.standalone === true;
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        lyricsManager.useLiteKaraoke = isMobileViewport || isStandalonePwa || prefersReducedMotion;
+
         // Inject GPU-accelerated, high-refresh karaoke styles into am-lyrics Shadow DOM
         const root = amLyrics.shadowRoot || amLyrics;
         if (!root.querySelector('#custom-lyrics-tuning')) {
@@ -1345,6 +1354,39 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                         transform: none !important;
                     }
                 }
+
+                ${lyricsManager.useLiteKaraoke
+                    ? `
+                :host {
+                    --karaoke-wave-ms: 0;
+                }
+
+                p, .line, .lyric-line, .lrc-line, .karaoke-line-enhanced {
+                    opacity: 0.88 !important;
+                    filter: none !important;
+                    transform: none !important;
+                    text-shadow: none !important;
+                    transition: opacity 140ms ease, color 140ms ease !important;
+                }
+
+                p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active, .karaoke-active-line,
+                p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
+                p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
+                p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced, .karaoke-active-line, .karaoke-active-line .karaoke-word-enhanced, .karaoke-active-line .karaoke-char-enhanced {
+                    animation: none !important;
+                    transform: none !important;
+                    filter: none !important;
+                    text-shadow: none !important;
+                }
+
+                .karaoke-word-enhanced,
+                .karaoke-char-enhanced {
+                    animation: none !important;
+                    transition: none !important;
+                    filter: none !important;
+                }
+                `
+                    : ''}
             `;
             root.appendChild(style);
         }
@@ -1422,6 +1464,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let lowMidBinCount = 0;
     let energyBaseline = 0;
     let lastEnergySampleAt = 0;
+    const waveUpdateIntervalMs = lyricsManager?.useLiteKaraoke ? 40 : 8;
 
     const onHapticsChanged = (e) => {
         hapticsEnabled = Boolean(e?.detail?.enabled);
@@ -1646,7 +1689,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
             updateKaraokeActiveLine(syncedTimeMs);
 
             // High-refresh visual phase update for wave shimmer (up to ~120Hz)
-            if (now - lastWaveCssUpdate >= 8) {
+            if (now - lastWaveCssUpdate >= waveUpdateIntervalMs) {
                 amLyrics.style.setProperty('--karaoke-wave-ms', now.toFixed(2));
                 lastWaveCssUpdate = now;
             }

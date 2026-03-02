@@ -1461,10 +1461,7 @@ const syncManager = {
                     () =>
                         databases.listDocuments(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, [
                             Query.equal('is_collaborative', true),
-                            Query.or([
-                                Query.equal('owner_id', user.$id),
-                                Query.contains('members', user.$id),
-                            ]),
+                            Query.or([Query.equal('owner_id', user.$id), Query.contains('members', user.$id)]),
                             Query.limit(500),
                         ]),
                     { label: 'sync cloud collaborative playlists' }

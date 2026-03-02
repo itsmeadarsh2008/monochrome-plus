@@ -19,6 +19,13 @@ export class SidePanelManager {
         if (this.resizer) {
             this.resizer.addEventListener('mousedown', this.initResize.bind(this));
         }
+
+        this._updateBodyPanelState();
+    }
+
+    _updateBodyPanelState() {
+        document.body.classList.toggle('side-panel-open', this.panel.classList.contains('active'));
+        document.body.classList.toggle('side-panel-lyrics-open', this.currentView === 'lyrics');
     }
 
     initResize(e) {
@@ -93,11 +100,13 @@ export class SidePanelManager {
         if (renderContentCallback) renderContentCallback(this.contentElement);
 
         this.panel.classList.add('active');
+        this._updateBodyPanelState();
     }
 
     close() {
         this.panel.classList.remove('active');
         this.currentView = null;
+        this._updateBodyPanelState();
         // Optionally clear content after transition
         setTimeout(() => {
             if (!this.panel.classList.contains('active')) {

@@ -9100,7 +9100,7 @@ body.auth-locked .auth-email-form .template-input {
         bottom: 0;
         height: 100vh;
         height: 100dvh;
-        z-index: 2300;
+        z-index: 10003;
     }
 
     .side-panel[data-view='lyrics'] {
@@ -9139,6 +9139,13 @@ body.auth-locked .auth-email-form .template-input {
         position: relative;
         z-index: 1;
         background: transparent;
+    }
+
+    .side-panel[data-view='lyrics'] am-lyrics {
+        display: block;
+        width: 100%;
+        min-height: 100%;
+        opacity: 1;
     }
 
     .side-panel[data-view='lyrics'] .panel-header {
@@ -9207,6 +9214,10 @@ body.auth-locked .auth-email-form .template-input {
     }
 
     body:has(#side-panel.active) .now-playing-bar {
+        display: none;
+    }
+
+    body.side-panel-open .now-playing-bar {
         display: none;
     }
 
@@ -9748,6 +9759,11 @@ body:has(#fullscreen-cover-overlay:not([style*='display: none'])) .now-playing-b
     left: 2% !important;
 }
 
+body.side-panel-open .now-playing-bar {
+    width: 96% !important;
+    left: 2% !important;
+}
+
 @media (max-width: 768px) {
     .now-playing-bar {
         width: 96% !important;
@@ -10080,11 +10096,27 @@ body:has(#side-panel.active) .fullscreen-main-view {
     padding-right: 600px;
 }
 
+body.side-panel-open .fullscreen-main-view {
+    transition:
+        flex 0.3s ease,
+        padding-right 0.3s ease,
+        margin-right 0.3s ease;
+    padding-right: 600px;
+}
+
 body:has(#side-panel.active) .fullscreen-lyrics-toggle {
     right: calc(600px + 4.5rem);
 }
 
+body.side-panel-open .fullscreen-lyrics-toggle {
+    right: calc(600px + 4.5rem);
+}
+
 body:has(#side-panel.active) #close-fullscreen-cover-btn {
+    right: calc(600px + 1rem);
+}
+
+body.side-panel-open #close-fullscreen-cover-btn {
     right: calc(600px + 1rem);
 }
 
@@ -10093,11 +10125,23 @@ body:has(#side-panel.active) #close-fullscreen-cover-btn {
         padding-right: 50vw;
     }
 
+    body.side-panel-open .fullscreen-main-view {
+        padding-right: 50vw;
+    }
+
     body:has(#side-panel.active) .fullscreen-lyrics-toggle {
         right: calc(50vw + 4.5rem);
     }
 
+    body.side-panel-open .fullscreen-lyrics-toggle {
+        right: calc(50vw + 4.5rem);
+    }
+
     body:has(#side-panel.active) #close-fullscreen-cover-btn {
+        right: calc(50vw + 1rem);
+    }
+
+    body.side-panel-open #close-fullscreen-cover-btn {
         right: calc(50vw + 1rem);
     }
 }
@@ -10107,9 +10151,18 @@ body:has(#side-panel.active) #close-fullscreen-cover-btn {
         padding-right: 0;
     }
 
+    body.side-panel-open .fullscreen-main-view {
+        padding-right: 0;
+    }
+
     /* Hide fullscreen specific buttons on mobile when panel is open */
     body:has(#side-panel.active) .fullscreen-lyrics-toggle,
     body:has(#side-panel.active) #close-fullscreen-cover-btn {
+        display: none;
+    }
+
+    body.side-panel-open .fullscreen-lyrics-toggle,
+    body.side-panel-open #close-fullscreen-cover-btn {
         display: none;
     }
 }
