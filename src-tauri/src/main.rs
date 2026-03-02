@@ -125,9 +125,8 @@ fn update_discord_presence(
         Ok(()) => Ok(()),
         Err(first_error) => {
             *client_guard = None;
-            let mut last_error = format!(
-                "Failed to set Discord RPC activity ({first_error}) and could not recover"
-            );
+            let mut last_error =
+                format!("Failed to set Discord RPC activity ({first_error}) and could not recover");
 
             for attempt in 0..3 {
                 match DiscordIpcClient::new(DISCORD_CLIENT_ID) {

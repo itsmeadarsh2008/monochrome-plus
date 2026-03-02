@@ -29,6 +29,22 @@ export function initializeDiscordRPC(player) {
         return text.length > max ? `${text.slice(0, max - 1)}…` : text;
     };
 
+    const getTrackCoverUrl = (track) => {
+        const domCover = document.querySelector('.now-playing-bar .cover')?.src;
+        if (domCover && /^https?:\/\//i.test(domCover)) return domCover;
+
+        const candidates = [
+            track?.album?.coverUrl,
+            track?.album?.image,
+            track?.album?.artwork,
+            track?.coverUrl,
+            track?.image,
+            track?.artwork,
+        ].filter(Boolean);
+
+        return candidates.find((url) => /^https?:\/\//i.test(String(url))) || null;
+    };
+
     async function sendUpdate(track, isPaused = false) {
         if (!track) return;
 
@@ -45,6 +61,15 @@ export function initializeDiscordRPC(player) {
             state: clamp(getTrackArtists(track), 128) || 'Playing music',
             instance: false,
         };
+
+        const coverUrl = getTrackCoverUrl(track);
+        if (coverUrl) {
+            data.largeImageKey = `mp:${coverUrl}`;
+            data.largeImageText = clamp(getTrackTitle(track), 128) || 'Monochrome+';
+        } else {
+            data.largeImageKey = 'appicon';
+            data.largeImageText = 'Monochrome+';
+        }
 
         if (!isPaused && trackDurationSeconds > 0 && currentTimeSeconds >= 0) {
             const elapsed = Math.min(currentTimeSeconds, trackDurationSeconds);

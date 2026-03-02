@@ -74,6 +74,7 @@ async function initFramelessWindowChrome() {
             </div>
             <button id="tauri-window-minimize" class="tauri-window-btn" type="button" aria-label="Minimize">—</button>
             <button id="tauri-window-maximize" class="tauri-window-btn" type="button" aria-label="Maximize">▢</button>
+            <button id="tauri-window-fullscreen" class="tauri-window-btn" type="button" aria-label="Enter Fullscreen">⤢</button>
             <button id="tauri-window-close" class="tauri-window-btn close" type="button" aria-label="Close">✕</button>
         </div>
     `;
@@ -84,7 +85,10 @@ async function initFramelessWindowChrome() {
         const { getCurrentWindow } = await import('@tauri-apps/api/window');
         const appWindow = getCurrentWindow();
         const dragRegion = bar.querySelector('.tauri-window-drag-region');
+        const brandRegion = bar.querySelector('.tauri-window-brand');
+        const holderHandle = bar.querySelector('.tauri-window-grab-handle');
         const maximizeBtn = bar.querySelector('#tauri-window-maximize');
+        const fullscreenBtn = bar.querySelector('#tauri-window-fullscreen');
         const zoomOutBtn = bar.querySelector('#tauri-zoom-out');
         const zoomInBtn = bar.querySelector('#tauri-zoom-in');
         const zoomResetBtn = bar.querySelector('#tauri-zoom-reset');
@@ -130,6 +134,12 @@ async function initFramelessWindowChrome() {
             maximizeBtn.setAttribute('aria-label', isMaximized ? 'Restore' : 'Maximize');
         };
 
+        const syncFullscreenState = async () => {
+            const isFullscreen = await appWindow.isFullscreen();
+            fullscreenBtn.textContent = isFullscreen ? '⤡' : '⤢';
+            fullscreenBtn.setAttribute('aria-label', isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen');
+        };
+
         bar.querySelector('#tauri-window-minimize')?.addEventListener('click', async () => {
             await appWindow.minimize();
         });
@@ -137,6 +147,12 @@ async function initFramelessWindowChrome() {
         maximizeBtn?.addEventListener('click', async () => {
             await appWindow.toggleMaximize();
             await syncMaximizeState();
+        });
+
+        fullscreenBtn?.addEventListener('click', async () => {
+            const isFullscreen = await appWindow.isFullscreen();
+            await appWindow.setFullscreen(!isFullscreen);
+            await syncFullscreenState();
         });
 
         bar.querySelector('#tauri-window-close')?.addEventListener('click', async () => {
@@ -175,6 +191,34 @@ async function initFramelessWindowChrome() {
             });
         }
 
+        if (!window.__monochromeDesktopWindowHotkeysBound) {
+            window.__monochromeDesktopWindowHotkeysBound = true;
+            window.addEventListener('keydown', async (event) => {
+                if (event.key !== 'F11') return;
+                event.preventDefault();
+                const isFullscreen = await appWindow.isFullscreen();
+                await appWindow.setFullscreen(!isFullscreen);
+                await syncFullscreenState();
+            });
+        }
+
+        const triggerDrag = async (event) => {
+            if (event.target.closest('button') && !event.target.closest('.tauri-window-grab-handle')) return;
+            if (event.button !== 0) return;
+            try {
+                await appWindow.startDragging();
+            } catch {
+                // no-op fallback to data-tauri-drag-region
+            }
+        };
+
+        holderHandle?.addEventListener('mousedown', (event) => {
+            void triggerDrag(event);
+        });
+        brandRegion?.addEventListener('mousedown', (event) => {
+            void triggerDrag(event);
+        });
+
         revealHitbox.addEventListener('mouseenter', showChrome);
         bar.addEventListener('mouseenter', showChrome);
         bar.addEventListener('mouseleave', hideChromeSoon);
@@ -193,8 +237,12 @@ async function initFramelessWindowChrome() {
         hideChromeSoon();
         syncZoomUI();
         await syncMaximizeState();
+        await syncFullscreenState();
         appWindow.onResized(() => {
             void syncMaximizeState();
+        });
+        appWindow.onMoved(() => {
+            void syncFullscreenState();
         });
     } catch (error) {
         console.warn('[Desktop] Failed to initialize custom window controls:', error);

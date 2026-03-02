@@ -1250,6 +1250,36 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
             );
         }
 
+        let contentWatchdogId = null;
+        if (isTauriRuntime) {
+            contentWatchdogId = window.setInterval(async () => {
+                const panelStillActive = sidePanelManager.isActive('lyrics');
+                if (!panelStillActive) {
+                    clearInterval(contentWatchdogId);
+                    return;
+                }
+
+                const rootNode = amLyrics.shadowRoot || amLyrics;
+                const existsInDom = document.contains(amLyrics);
+                if (!existsInDom) {
+                    clearInterval(contentWatchdogId);
+                    return;
+                }
+
+                const lineCount = rootNode.querySelectorAll('p, .line, .lyric-line, .lrc-line').length;
+                if (lineCount > 0) return;
+
+                clearInterval(contentWatchdogId);
+                await renderFallbackLyricsComponent(
+                    container,
+                    track,
+                    audioPlayer,
+                    lyricsManager,
+                    'Reconnected desktop lyrics'
+                );
+            }, 5000);
+        }
+
         const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
         const isStandalonePwa =
             window.matchMedia('(display-mode: standalone)').matches ||
@@ -1481,7 +1511,13 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         const cleanup = setupSync(track, audioPlayer, amLyrics, lyricsManager);
 
         // Attach cleanup to container for easy access
-        container.lyricsCleanup = cleanup;
+        container.lyricsCleanup = () => {
+            if (contentWatchdogId) {
+                clearInterval(contentWatchdogId);
+                contentWatchdogId = null;
+            }
+            cleanup();
+        };
         container.lyricsManager = lyricsManager;
 
         // Tap-to-seek: clicking any lyric line seeks audio to that line's time
