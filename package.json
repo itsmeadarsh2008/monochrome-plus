@@ -7,6 +7,8 @@
     "scripts": {
         "dev": "vite",
         "dev:tauri": "tauri dev",
+        "dev:tauri:polling": "VITE_USE_POLLING=true npm run dev:tauri",
+        "dev:tauri:wsl": "TAURI_DEV_HOST=127.0.0.1 VITE_USE_POLLING=true npm run dev:tauri",
         "build:web": "vite build",
         "build:tauri": "tauri build",
         "build": "vite build",

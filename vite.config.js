@@ -3,6 +3,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
 
 export default defineConfig(() => {
+    const hmrHost = process.env.TAURI_DEV_HOST || 'localhost';
+
     return {
         base: '/',
         resolve: {
@@ -15,6 +17,17 @@ export default defineConfig(() => {
         },
         server: {
             host: true,
+            port: 5173,
+            strictPort: true,
+            watch: {
+                usePolling: process.env.VITE_USE_POLLING === 'true',
+                interval: 100,
+            },
+            hmr: {
+                host: hmrHost,
+                protocol: 'ws',
+                port: 5173,
+            },
             allowedHosts: true,
             historyApiFallback: true,
             fs: {

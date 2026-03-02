@@ -477,6 +477,32 @@ export class LyricsManager {
                         return lyricsData;
                     }
                 }
+
+                const searchEndpoint = `https://lrclib.net/api/search?${params.toString()}`;
+                let searchResponse = await fetch(searchEndpoint).catch(() => null);
+
+                if (!searchResponse?.ok) {
+                    searchResponse = await fetch(
+                        `https://api.allorigins.win/raw?url=${encodeURIComponent(searchEndpoint)}`
+                    ).catch(() => null);
+                }
+
+                if (searchResponse?.ok) {
+                    const searchResults = await searchResponse.json();
+                    const firstSynced = Array.isArray(searchResults)
+                        ? searchResults.find((item) => item?.syncedLyrics)
+                        : null;
+
+                    if (firstSynced?.syncedLyrics) {
+                        const lyricsData = {
+                            subtitles: firstSynced.syncedLyrics,
+                            lyricsProvider: 'LRCLIB',
+                        };
+
+                        this.lyricsCache.set(trackId, lyricsData);
+                        return lyricsData;
+                    }
+                }
             } catch (error) {
                 console.warn('LRCLIB fetch failed:', error);
             }
@@ -1108,6 +1134,10 @@ themeObserver.observe(document.documentElement, {
 
 async function renderLyricsComponent(container, track, audioPlayer, lyricsManager) {
     container.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
+
+    if (isTauriRuntime) {
+        return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Desktop lyrics mode');
+    }
 
     try {
         await lyricsManager.ensureComponentLoaded();

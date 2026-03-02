@@ -109,9 +109,9 @@ fn update_discord_presence(
             recreated
                 .connect()
                 .map_err(|e| format!("Failed to reconnect Discord RPC client: {e}"))?;
-            recreated
-                .set_activity(activity)
-                .map_err(|e| format!("Failed to set Discord RPC activity after reconnect ({first_error}): {e}"))?;
+            recreated.set_activity(activity).map_err(|e| {
+                format!("Failed to set Discord RPC activity after reconnect ({first_error}): {e}")
+            })?;
             *client_guard = Some(recreated);
             Ok(())
         }
