@@ -32,7 +32,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -56,7 +60,7 @@ jobs:
             patchelf
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -65,8 +69,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__
-          releaseName: "Monochrome+ v__VERSION__"
+          tagName: ${{ github.ref_name }}
+          releaseName: "Monochrome+ ${{ github.ref_name }}"
           releaseBody: "Download the installer for your platform. Auto-updates are built-in."
           releaseDraft: false
           prerelease: false
