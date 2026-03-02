@@ -1240,7 +1240,13 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         const hasLyricsContent = () => hasRenderableLyricLines();
 
         if (!hasLyricsContent() && isTauriRuntime) {
-            return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Using desktop fallback');
+            return await renderFallbackLyricsComponent(
+                container,
+                track,
+                audioPlayer,
+                lyricsManager,
+                'Using desktop fallback'
+            );
         }
 
         const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
