@@ -13,6 +13,7 @@ desktop-dist
 
 # Desktop packaging
 release-artifacts/
+release-assets/
 wixobj/
 installers/
 

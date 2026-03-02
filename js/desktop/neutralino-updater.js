@@ -3,6 +3,25 @@ import { isNeutralinoRuntime } from './runtime.js';
 const DEFAULT_UPDATE_MANIFEST_URL =
     'https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json';
 
+function compareVersions(left, right) {
+    const leftParts = String(left || '0')
+        .split('.')
+        .map((part) => Number.parseInt(part, 10) || 0);
+    const rightParts = String(right || '0')
+        .split('.')
+        .map((part) => Number.parseInt(part, 10) || 0);
+    const max = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < max; index += 1) {
+        const leftPart = leftParts[index] ?? 0;
+        const rightPart = rightParts[index] ?? 0;
+        if (leftPart > rightPart) return 1;
+        if (leftPart < rightPart) return -1;
+    }
+
+    return 0;
+}
+
 export async function checkForDesktopUpdates() {
     if (!isNeutralinoRuntime()) return;
 
@@ -15,7 +34,13 @@ export async function checkForDesktopUpdates() {
         }
 
         const manifest = await window.Neutralino.updater.checkForUpdates(updateManifestUrl);
-        if (!manifest || manifest.version === window.NL_APPVERSION) {
+        if (!manifest || !manifest.version) {
+            console.log('[Desktop][Updater] No valid update manifest found.');
+            return;
+        }
+
+        const currentVersion = window.NL_APPVERSION;
+        if (compareVersions(manifest.version, currentVersion) <= 0) {
             console.log('[Desktop][Updater] App is up to date.');
             return;
         }

@@ -16,7 +16,15 @@
     "singlePageServe": true,
     "tokenSecurity": "one-time",
     "enableExtensions": false,
-    "nativeAllowList": ["app.*", "events.*", "extensions.*", "os.*", "updater.*", "window.*"],
+    "nativeAllowList": [
+        "app.*",
+        "events.*",
+        "extensions.*",
+        "filesystem.writeBinaryFile",
+        "os.*",
+        "updater.*",
+        "window.*"
+    ],
     "globalVariables": {
         "MONOCHROME_DESKTOP_RUNTIME": "neutralino"
     },

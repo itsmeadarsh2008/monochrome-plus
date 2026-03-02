@@ -112,12 +112,23 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
             - name: Download all artifacts
               uses: actions/download-artifact@v4
               with:
                   path: desktop-dist
                   pattern: desktop-*
                   merge-multiple: true
+
+            - name: Generate updater manifest and update bundle
+              run: node ./scripts/generate-update-manifest.mjs
 
             - name: Publish GitHub release assets
               uses: softprops/action-gh-release@v2
@@ -126,4 +137,6 @@ jobs:
                   body: Download the desktop package for your platform (NeutralinoJS runtime).
                   draft: false
                   prerelease: false
-                  files: desktop-dist/**
+                  files: |
+                      desktop-dist/**
+                      release-assets/**
