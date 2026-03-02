@@ -68,7 +68,7 @@ $wixProduct = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*" Name="Monochrome+" Language="1033" Version="$appVersion" Manufacturer="Monochrome+ Team" UpgradeCode="5A03B1E8-78A1-4AE7-B70D-56E9ABF77E9F">
-    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of Monochrome+ is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
@@ -118,6 +118,11 @@ $wixObjOutDir = Join-Path $wixObjDir ''
 & $isccExe $innoPath
 
 & $heatExe dir $sourceDir -cg AppFiles -dr INSTALLDIR -gg -srd -sfrag -sreg -var var.SourceDir -out $wixFilesPath
+
+$appFilesContent = Get-Content -Path $wixFilesPath -Raw
+$appFilesContent = $appFilesContent -replace '<Component ', '<Component Win64="yes" '
+Set-Content -Path $wixFilesPath -Value $appFilesContent -Encoding UTF8
+
 & $candleExe "-dSourceDir=$sourceDir" -out $wixObjOutDir $wixProductPath $wixFilesPath
 & $lightExe -ext WixUIExtension -out (Join-Path $artifactDir "MonochromePlus-$appVersion.msi") "$wixObjDir\Product.wixobj" "$wixObjDir\AppFiles.wixobj"
 
