@@ -14,7 +14,13 @@ async function initFramelessWindowChrome() {
             <span class="tauri-window-brand-dot"></span>
             <span class="tauri-window-brand-text">Monochrome+</span>
         </div>
-        <div class="tauri-window-drag-region" data-tauri-drag-region></div>
+        <div class="tauri-window-drag-region" data-tauri-drag-region>
+            <button class="tauri-window-grab-handle" type="button" aria-label="Drag window" data-tauri-drag-region>
+                <span data-tauri-drag-region></span>
+                <span data-tauri-drag-region></span>
+                <span data-tauri-drag-region></span>
+            </button>
+        </div>
         <div class="tauri-window-controls">
             <button id="tauri-window-minimize" class="tauri-window-btn" type="button" aria-label="Minimize">—</button>
             <button id="tauri-window-maximize" class="tauri-window-btn" type="button" aria-label="Maximize">▢</button>

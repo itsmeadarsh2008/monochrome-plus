@@ -1164,16 +1164,27 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
             })
             .catch((e) => console.warn('Background lyrics fetch failed', e));
 
+        const hasRenderableLyricLines = () => {
+            const root = amLyrics.shadowRoot || amLyrics;
+            const lyricLikeNodes = Array.from(root.querySelectorAll('p, .line, .lyric-line, .lrc-line'));
+            if (!lyricLikeNodes.length) return false;
+
+            const meaningfulLines = lyricLikeNodes.filter((node) => {
+                const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!text || text.length < 2) return false;
+                if (text === 'Auto') return false;
+                return /[\p{L}\p{N}]/u.test(text);
+            });
+
+            return meaningfulLines.length >= 2;
+        };
+
         // Wait for lyrics to appear, then do an immediate conversion
         const waitForLyrics = () => {
             return new Promise((resolve) => {
                 // Check if lyrics are already loaded
                 const checkForLyrics = () => {
-                    const hasLyrics =
-                        amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
-                        amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
-                        (amLyrics.textContent && amLyrics.textContent.length > 50);
-                    return hasLyrics;
+                    return hasRenderableLyricLines();
                 };
 
                 if (checkForLyrics()) {
@@ -1196,13 +1207,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
         await waitForLyrics();
 
-        const hasLyricsContent = () => {
-            return Boolean(
-                amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
-                    amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
-                    (amLyrics.textContent && amLyrics.textContent.length > 50)
-            );
-        };
+        const hasLyricsContent = () => hasRenderableLyricLines();
 
         if (!hasLyricsContent() && isTauriRuntime) {
             return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Using desktop fallback');

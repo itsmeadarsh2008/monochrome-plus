@@ -20,10 +20,6 @@ export function initializeDiscordRPC(player) {
         const data = {
             details: getTrackTitle(track),
             state: getTrackArtists(track),
-            largeImageKey: 'monochrome',
-            largeImageText: track.album?.title || 'Monochrome+',
-            smallImageKey: isPaused ? 'pause' : 'play',
-            smallImageText: isPaused ? 'Paused' : 'Playing',
             instance: false,
         };
 
@@ -51,10 +47,6 @@ export function initializeDiscordRPC(player) {
             await sendViaTauri({
                 details: 'Idling',
                 state: 'Monochrome+',
-                largeImageKey: 'monochrome',
-                largeImageText: 'Monochrome+',
-                smallImageKey: 'pause',
-                smallImageText: 'Paused',
                 instance: false,
             });
         } catch {

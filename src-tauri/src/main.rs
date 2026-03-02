@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
-const DISCORD_CLIENT_ID: &str = "1310811711661619200";
+const DISCORD_CLIENT_ID: &str = "1466351059843809282";
 
 #[derive(Default)]
 struct RpcState {
@@ -67,20 +67,26 @@ fn update_discord_presence(
         activity = activity.state(s.as_str());
     }
 
-    let mut assets = Assets::new();
-    if let Some(ref k) = large_image_key {
-        assets = assets.large_image(k.as_str());
+    if large_image_key.is_some()
+        || large_image_text.is_some()
+        || small_image_key.is_some()
+        || small_image_text.is_some()
+    {
+        let mut assets = Assets::new();
+        if let Some(ref k) = large_image_key {
+            assets = assets.large_image(k.as_str());
+        }
+        if let Some(ref t) = large_image_text {
+            assets = assets.large_text(t.as_str());
+        }
+        if let Some(ref k) = small_image_key {
+            assets = assets.small_image(k.as_str());
+        }
+        if let Some(ref t) = small_image_text {
+            assets = assets.small_text(t.as_str());
+        }
+        activity = activity.assets(assets);
     }
-    if let Some(ref t) = large_image_text {
-        assets = assets.large_text(t.as_str());
-    }
-    if let Some(ref k) = small_image_key {
-        assets = assets.small_image(k.as_str());
-    }
-    if let Some(ref t) = small_image_text {
-        assets = assets.small_text(t.as_str());
-    }
-    activity = activity.assets(assets);
 
     if payload.start_timestamp.is_some() || payload.end_timestamp.is_some() {
         let mut timestamps = Timestamps::new();
@@ -93,9 +99,23 @@ fn update_discord_presence(
         activity = activity.timestamps(timestamps);
     }
 
-    client
-        .set_activity(activity)
-        .map_err(|e| format!("Failed to set Discord RPC activity: {e}"))
+    match client.set_activity(activity.clone()) {
+        Ok(()) => Ok(()),
+        Err(first_error) => {
+            *client_guard = None;
+
+            let mut recreated = DiscordIpcClient::new(DISCORD_CLIENT_ID)
+                .map_err(|e| format!("Failed to recreate Discord RPC client: {e}"))?;
+            recreated
+                .connect()
+                .map_err(|e| format!("Failed to reconnect Discord RPC client: {e}"))?;
+            recreated
+                .set_activity(activity)
+                .map_err(|e| format!("Failed to set Discord RPC activity after reconnect ({first_error}): {e}"))?;
+            *client_guard = Some(recreated);
+            Ok(())
+        }
+    }
 }
 
 #[tauri::command]

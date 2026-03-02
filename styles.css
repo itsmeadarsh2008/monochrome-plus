@@ -699,7 +699,33 @@ body.tauri-desktop .app-container {
 }
 
 .tauri-window-drag-region {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     height: 100%;
+}
+
+.tauri-window-grab-handle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    border-radius: var(--radius-full);
+    padding: 0.32rem 0.65rem;
+    background: color-mix(in srgb, var(--secondary) 66%, transparent);
+    cursor: grab;
+    pointer-events: auto;
+}
+
+.tauri-window-grab-handle:active {
+    cursor: grabbing;
+}
+
+.tauri-window-grab-handle span {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--foreground) 72%, transparent);
 }
 
 .tauri-window-controls {
