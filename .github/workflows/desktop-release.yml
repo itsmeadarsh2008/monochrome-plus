@@ -1,173 +1,186 @@
 name: Desktop Release
 
 on:
-    push:
-        tags:
-            - "v*"
-    workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 permissions:
-    contents: write
+  contents: write
 
 jobs:
-    build-desktop:
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - platform: ubuntu-latest
-                    - platform: windows-latest
-                    - platform: macos-latest
+  build-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+          - platform: windows-latest
+          - platform: macos-latest
 
-        runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.platform }}
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: latest
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-            - name: Install dependencies
-              run: bun install --frozen-lockfile
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-            - name: Update Neutralino framework binaries
-              run: npx @neutralinojs/neu update --latest
+      - name: Update Neutralino framework binaries
+        run: npx @neutralinojs/neu update --latest
 
-            - name: Sync app version from tag
-              if: startsWith(github.ref, 'refs/tags/v')
-              shell: bash
-              run: |
-                  APP_VERSION="${GITHUB_REF_NAME#v}"
-                  echo "Syncing app version to ${APP_VERSION}"
-                  APP_VERSION="${APP_VERSION}" node -e "const fs=require('fs');const version=process.env.APP_VERSION;if(!version||version==='undefined'){throw new Error('APP_VERSION is missing or invalid');}const pkgPath='package.json';const nlPath='neutralino.config.json';const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));pkg.version=version;fs.writeFileSync(pkgPath,JSON.stringify(pkg,null,4)+'\\n');const nl=JSON.parse(fs.readFileSync(nlPath,'utf8'));nl.version=version;fs.writeFileSync(nlPath,JSON.stringify(nl,null,4)+'\\n');"
-
-            - name: Build Neutralino desktop app
-              run: bun run build:desktop:release
-
-            - name: Install Linux packaging tools
-              if: matrix.platform == 'ubuntu-latest'
-              shell: bash
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y ruby ruby-dev build-essential rpm
-                  sudo gem install --no-document fpm
-
-            - name: Build Linux installers (.deb + .rpm)
-              if: matrix.platform == 'ubuntu-latest'
-              shell: bash
-              run: bash ./scripts/build-linux-installers.sh
-
-            - name: Build macOS installers (.dmg)
-              if: matrix.platform == 'macos-latest'
-              shell: bash
-              run: bash ./scripts/build-macos-installer.sh
-
-            - name: Install Windows packaging tools
-              if: matrix.platform == 'windows-latest'
-              shell: powershell
-              run: |
-                  choco install innosetup -y
-                  choco install wixtoolset -y
-
-            - name: Build Windows installers (.exe + .msi)
-              if: matrix.platform == 'windows-latest'
-              shell: powershell
-              run: ./scripts/build-windows-installers.ps1
-
-            - name: Upload desktop artifacts
-              uses: actions/upload-artifact@v4
-              with:
-                  name: desktop-${{ matrix.platform }}
-                  path: desktop-dist/**
-
-            - name: Upload Windows installer artifacts
-              if: matrix.platform == 'windows-latest'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: desktop-windows-installers
-                  path: release-artifacts/**
-
-            - name: Upload Linux installer artifacts
-              if: matrix.platform == 'ubuntu-latest'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: desktop-linux-installers
-                  path: release-artifacts/**
-
-            - name: Upload macOS installer artifacts
-              if: matrix.platform == 'macos-latest'
-              uses: actions/upload-artifact@v4
-              with:
-                  name: desktop-macos-installers
-                  path: release-artifacts/**
-
-    publish-release:
-        needs: build-desktop
+      - name: Sync app version from tag
         if: startsWith(github.ref, 'refs/tags/v')
-        runs-on: ubuntu-latest
+        shell: bash
+        run: |
+          APP_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Syncing app version to ${APP_VERSION}"
+          APP_VERSION="${APP_VERSION}" node -e "const fs=require('fs');const version=process.env.APP_VERSION;if(!version||version==='undefined'){throw new Error('APP_VERSION is missing or invalid');}const pkgPath='package.json';const nlPath='neutralino.config.json';const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));pkg.version=version;fs.writeFileSync(pkgPath,JSON.stringify(pkg,null,4)+'\\n');const nl=JSON.parse(fs.readFileSync(nlPath,'utf8'));nl.version=version;fs.writeFileSync(nlPath,JSON.stringify(nl,null,4)+'\\n');"
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+      - name: Build Neutralino desktop app
+        run: bun run build:desktop:release
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential rpm
+          sudo gem install --no-document fpm
 
-            - name: Download all artifacts
-              uses: actions/download-artifact@v4
-              with:
-                  path: desktop-dist
-                  pattern: desktop-*
-                  merge-multiple: true
+      - name: Build Linux installers (.deb + .rpm)
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        run: bash ./scripts/build-linux-installers.sh
 
-            - name: Generate updater manifest and update bundle
-              run: node ./scripts/generate-update-manifest.mjs
+      - name: Build macOS installers (.dmg)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: bash ./scripts/build-macos-installer.sh
 
-            - name: Create or update GitHub release
-              env:
-                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              shell: bash
-              run: |
-                TAG="${GITHUB_REF_NAME}"
-                TITLE="Monochrome+ ${TAG}"
-                NOTES="Download the desktop package for your platform (NeutralinoJS runtime)."
+      - name: Install Windows packaging tools
+        if: matrix.platform == 'windows-latest'
+        shell: powershell
+        run: |
+          choco install innosetup -y
+          choco install wixtoolset -y
 
-                if gh release view "$TAG" >/dev/null 2>&1; then
-                  gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
-                else
-                  gh release create "$TAG" --title "$TITLE" --notes "$NOTES"
-                fi
+      - name: Build Windows installers (.exe + .msi)
+        if: matrix.platform == 'windows-latest'
+        shell: powershell
+        run: ./scripts/build-windows-installers.ps1
 
-            - name: Upload release assets
-              env:
-                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              shell: bash
-              run: |
-                mapfile -t ASSETS < <(find release-artifacts release-assets -type f)
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: desktop-dist/**
+
+      - name: Upload Windows installer artifacts
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-installers
+          path: release-artifacts/**
+
+      - name: Upload Linux installer artifacts
+        if: matrix.platform == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-installers
+          path: release-artifacts/**
+
+      - name: Upload macOS installer artifacts
+        if: matrix.platform == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-installers
+          path: release-artifacts/**
+
+  publish-release:
+    needs: build-desktop
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: desktop-dist
+          pattern: desktop-*
+          merge-multiple: true
+
+      - name: Generate updater manifest and update bundle
+        run: node ./scripts/generate-update-manifest.mjs
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          TITLE="Monochrome+ ${TAG}"
+          NOTES="Download the desktop package for your platform (NeutralinoJS runtime)."
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES"
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+                mapfile -t INSTALLER_ASSETS < <(
+                  find desktop-dist -type f \( \
+                    -name '*.exe' -o \
+                    -name '*.msi' -o \
+                    -name '*.dmg' -o \
+                    -name '*.deb' -o \
+                    -name '*.rpm' -o \
+                    -name '*.tar.gz' -o \
+                    -name '*.zip' \
+                  \) 2>/dev/null
+                )
+
+                mapfile -t UPDATE_ASSETS < <(find release-assets -type f 2>/dev/null)
+
+                ASSETS=("${INSTALLER_ASSETS[@]}" "${UPDATE_ASSETS[@]}")
+
                 if [ "${#ASSETS[@]}" -eq 0 ]; then
-                  echo "No assets were found to upload."
+                  echo "No release assets found."
+                  echo "Contents of desktop-dist (if present):"
+                  ls -la desktop-dist || true
+                  echo "Contents of release-assets (if present):"
+                  ls -la release-assets || true
                   exit 1
                 fi
 
-                RELEASE_ID="$(gh release view "${GITHUB_REF_NAME}" --json id -q '.id')"
-
                 for asset in "${ASSETS[@]}"; do
                   asset_name="$(basename "$asset")"
-                  existing_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq ".[] | select(.name == \"${asset_name}\") | .id" | head -n1 || true)"
-
-                  if [ -n "${existing_id}" ]; then
-                    gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}"
-                  fi
+                  gh release delete-asset "${GITHUB_REF_NAME}" "$asset_name" --yes >/dev/null 2>&1 || true
                 done
 
                 gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}"
