@@ -62,6 +62,14 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Sync app version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          APP_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Syncing app version to ${APP_VERSION}"
+          APP_VERSION="${APP_VERSION}" node -e "const fs=require('fs');const version=process.env.APP_VERSION;const pkgPath='package.json';const tauriPath='src-tauri/tauri.conf.json';const cargoPath='src-tauri/Cargo.toml';const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));pkg.version=version;fs.writeFileSync(pkgPath,JSON.stringify(pkg,null,4)+'\\n');const tauri=JSON.parse(fs.readFileSync(tauriPath,'utf8'));tauri.version=version;fs.writeFileSync(tauriPath,JSON.stringify(tauri,null,4)+'\\n');const cargo=fs.readFileSync(cargoPath,'utf8').replace(/^version\s*=\s*\"[^\"]+\"/m,`version = \"${version}\"`);fs.writeFileSync(cargoPath,cargo);"
+
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

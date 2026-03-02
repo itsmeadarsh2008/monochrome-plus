@@ -1,6 +1,6 @@
 [package]
 name = "monochrome_plus_desktop"
-version = "1.0.0"
+version = "1.0.3"
 edition = "2021"
 rust-version = "1.77"
 

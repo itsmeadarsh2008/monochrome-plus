@@ -50,7 +50,7 @@ export class ListenBrainzScrobbler {
             track_name: track.cleanTitle || track.title,
             additional_info: {
                 submission_client: 'Monochrome+',
-                submission_client_version: '1.0.0',
+                submission_client_version: '1.0.3',
             },
         };
 

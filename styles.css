@@ -649,6 +649,7 @@ body {
 
 :root {
     --tauri-titlebar-height: 40px;
+    --desktop-zoom-scale: 1;
 }
 
 body.tauri-desktop {
@@ -657,6 +658,7 @@ body.tauri-desktop {
 
 body.tauri-desktop .app-container {
     height: calc(100dvh - var(--tauri-titlebar-height));
+    zoom: var(--desktop-zoom-scale);
 }
 
 #tauri-window-chrome {
@@ -684,12 +686,21 @@ body.tauri-desktop .app-container {
     opacity: 0.9;
 }
 
-.tauri-window-brand-dot {
-    width: 8px;
-    height: 8px;
+.tauri-window-brand-handle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+    padding: 0.18rem 0.4rem;
     border-radius: var(--radius-full);
-    background: var(--highlight);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--highlight) 65%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background: color-mix(in srgb, var(--secondary) 68%, transparent);
+}
+
+.tauri-window-brand-handle span {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--foreground) 74%, transparent);
 }
 
 .tauri-window-brand-text {
@@ -732,6 +743,19 @@ body.tauri-desktop .app-container {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+}
+
+.tauri-window-zoom-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    margin-right: 0.2rem;
+}
+
+.tauri-window-zoom-value {
+    min-width: 52px;
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
 }
 
 .tauri-window-btn {
@@ -5641,8 +5665,8 @@ input:checked + .slider::before {
 }
 
 #fullscreen-cover-image {
-    max-width: 55vw;
-    max-height: 45vh;
+    max-width: min(48vw, 620px);
+    max-height: min(38vh, 520px);
     border-radius: var(--radius);
     box-shadow: 0 20px 50px rgb(0, 0, 0, 0.5);
     object-fit: contain;
@@ -5691,8 +5715,8 @@ input:checked + .slider::before {
 #vinyl-disc-container.rotating-disc {
     --vinyl-rotation-duration: 4s;
 
-    width: var(--vinyl-disc-size, clamp(320px, 46vmin, 620px));
-    height: var(--vinyl-disc-size, clamp(320px, 46vmin, 620px));
+    width: var(--vinyl-disc-size, clamp(240px, 38vmin, 520px));
+    height: var(--vinyl-disc-size, clamp(240px, 38vmin, 520px));
     border-radius: var(--radius-full);
     transition: none;
     will-change: transform, filter;
@@ -5792,8 +5816,8 @@ input:checked + .slider::before {
 
 /* Album art inside vinyl disc - becomes the label */
 #vinyl-disc-container.rotating-disc #fullscreen-cover-image {
-    width: 34%;
-    height: 34%;
+    width: 30%;
+    height: 30%;
     max-width: none;
     max-height: none;
     border-radius: var(--radius-full);
@@ -5813,7 +5837,7 @@ input:checked + .slider::before {
 .fullscreen-track-info {
     text-align: center;
     z-index: 1;
-    max-width: 90%;
+    max-width: min(78vw, 900px);
     background-color: color-mix(in srgb, var(--card) 40%, transparent);
     backdrop-filter: blur(8px);
     padding: 0.75rem 1.5rem;

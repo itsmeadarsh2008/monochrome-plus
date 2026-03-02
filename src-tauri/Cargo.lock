@@ -1852,7 +1852,7 @@ dependencies = [
 
 [[package]]
 name = "monochrome_plus_desktop"
-version = "1.0.0"
+version = "1.0.3"
 dependencies = [
  "discord-rich-presence",
  "serde",

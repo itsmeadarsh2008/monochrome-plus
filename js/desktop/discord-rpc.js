@@ -24,20 +24,24 @@ export function initializeDiscordRPC(player) {
     async function sendUpdate(track, isPaused = false) {
         if (!track) return;
 
+        const rawDuration = Number(track.duration);
+        const trackDurationSeconds = Number.isFinite(rawDuration)
+            ? rawDuration > 10000
+                ? rawDuration / 1000
+                : rawDuration
+            : 0;
+        const currentTimeSeconds = Number(player.audio.currentTime) || 0;
+
         const data = {
             details: clamp(getTrackTitle(track), 128) || 'Monochrome+',
             state: clamp(getTrackArtists(track), 128) || 'Playing music',
             instance: false,
         };
 
-        if (!isPaused && Number.isFinite(track.duration) && track.duration > 0) {
-            const now = Date.now();
-            const elapsed = player.audio.currentTime * 1000;
-            const remaining = (track.duration - player.audio.currentTime) * 1000;
-
-            if (Number.isFinite(elapsed) && Number.isFinite(remaining) && remaining > 0) {
-                data.startTimestamp = Math.floor((now - elapsed) / 1000);
-                data.endTimestamp = Math.floor((now + remaining) / 1000);
+        if (!isPaused && trackDurationSeconds > 0 && currentTimeSeconds >= 0) {
+            const elapsed = Math.min(currentTimeSeconds, trackDurationSeconds);
+            if (Number.isFinite(elapsed)) {
+                data.startTimestamp = Math.floor(Date.now() / 1000 - elapsed);
             }
         }
 

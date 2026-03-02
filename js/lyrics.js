@@ -376,6 +376,7 @@ export class LyricsManager {
         const sources = [
             'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
             'https://unpkg.com/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
+            'https://esm.run/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
         ];
 
         let lastError = null;
@@ -385,10 +386,11 @@ export class LyricsManager {
                     const script = document.createElement('script');
                     script.type = 'module';
                     script.src = source;
+                    script.crossOrigin = 'anonymous';
 
                     const timeout = setTimeout(() => {
                         reject(new Error(`Timed out loading lyrics component from ${source}`));
-                    }, 10000);
+                    }, isTauriRuntime ? 20000 : 10000);
 
                     script.onload = () => {
                         if (typeof customElements !== 'undefined') {
@@ -1135,10 +1137,6 @@ themeObserver.observe(document.documentElement, {
 async function renderLyricsComponent(container, track, audioPlayer, lyricsManager) {
     container.innerHTML = '<div class="lyrics-loading">Loading lyrics...</div>';
 
-    if (isTauriRuntime) {
-        return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Desktop lyrics mode');
-    }
-
     try {
         await lyricsManager.ensureComponentLoaded();
 
@@ -1224,7 +1222,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
                 // Check more frequently (200ms) for faster response
                 let attempts = 0;
-                const maxAttempts = 25; // 5 seconds max
+                const maxAttempts = isTauriRuntime ? 60 : 25;
                 const interval = setInterval(() => {
                     attempts++;
                     if (checkForLyrics() || attempts >= maxAttempts) {
