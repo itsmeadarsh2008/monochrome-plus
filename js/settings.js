@@ -89,11 +89,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
         if (
             code === 'auth/network-request-failed' ||
             code === 0 ||
-            /network|fetch|cors|origin|cookie|blocked|privacy|tracking/i.test(message) ||
+            /network|fetch|cors|origin|cookie|blocked|privacy|tracking|upstream|timeout|disconnect\/reset/i.test(
+                message
+            ) ||
             /general_unknown_origin|user_unauthorized|project_unknown/.test(type)
         ) {
             message =
-                'Network/privacy protection blocked authentication. Disable strict tracking protection or adblock for this site and Appwrite, then try again.';
+                'Authentication failed due to network/provider timeout. Check connectivity, allow Appwrite + Discord in firewall/adblock/privacy settings, then try again.';
         } else if (code === 'auth/popup-blocked') {
             message = 'Popup blocked by browser. Allow popups for this site and try again.';
         }

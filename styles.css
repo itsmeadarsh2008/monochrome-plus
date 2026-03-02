@@ -647,6 +647,90 @@ body {
     width: 100%;
 }
 
+:root {
+    --tauri-titlebar-height: 40px;
+}
+
+body.tauri-desktop {
+    padding-top: var(--tauri-titlebar-height);
+}
+
+body.tauri-desktop .app-container {
+    height: calc(100dvh - var(--tauri-titlebar-height));
+}
+
+#tauri-window-chrome {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: var(--tauri-titlebar-height);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    background: color-mix(in srgb, var(--card) 84%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    backdrop-filter: blur(12px);
+    z-index: 2000;
+    user-select: none;
+}
+
+.tauri-window-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 170px;
+    color: var(--foreground);
+    opacity: 0.9;
+}
+
+.tauri-window-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--highlight);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--highlight) 65%, transparent);
+}
+
+.tauri-window-brand-text {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    letter-spacing: 0.02em;
+}
+
+.tauri-window-drag-region {
+    height: 100%;
+}
+
+.tauri-window-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.tauri-window-btn {
+    width: 32px;
+    height: 26px;
+    border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    color: var(--foreground);
+    cursor: pointer;
+    transition:
+        background-color var(--transition-fast),
+        border-color var(--transition-fast),
+        opacity var(--transition-fast);
+}
+
+.tauri-window-btn:hover {
+    background: color-mix(in srgb, var(--secondary) 90%, transparent);
+}
+
+.tauri-window-btn.close:hover {
+    background: color-mix(in srgb, var(--color-danger) 86%, transparent);
+    border-color: color-mix(in srgb, var(--color-danger) 80%, transparent);
+}
+
 img {
     max-width: 100%;
     display: block;
@@ -4853,8 +4937,8 @@ input:checked + .slider::before {
 }
 
 .track-info .cover-shell {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: var(--radius-sm);
     background-color: var(--muted);
     flex-shrink: 0;
@@ -5581,8 +5665,8 @@ input:checked + .slider::before {
 #vinyl-disc-container.rotating-disc {
     --vinyl-rotation-duration: 4s;
 
-    width: var(--vinyl-disc-size, min(48vh, 48vw));
-    height: var(--vinyl-disc-size, min(48vh, 48vw));
+    width: var(--vinyl-disc-size, clamp(320px, 46vmin, 620px));
+    height: var(--vinyl-disc-size, clamp(320px, 46vmin, 620px));
     border-radius: var(--radius-full);
     transition: none;
     will-change: transform, filter;
@@ -5682,8 +5766,8 @@ input:checked + .slider::before {
 
 /* Album art inside vinyl disc - becomes the label */
 #vinyl-disc-container.rotating-disc #fullscreen-cover-image {
-    width: 32%;
-    height: 32%;
+    width: 34%;
+    height: 34%;
     max-width: none;
     max-height: none;
     border-radius: var(--radius-full);
@@ -6910,6 +6994,63 @@ input:checked + .slider::before {
     text-align: center;
     padding: 2rem;
     color: var(--muted-foreground);
+}
+
+.lyrics-fallback {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.lyrics-fallback-status {
+    padding: 0.4rem 0.8rem;
+    font-size: var(--text-xs);
+    color: var(--muted-foreground);
+    opacity: 0.8;
+}
+
+.lyrics-fallback-scroller {
+    overflow-y: auto;
+    padding: 0.75rem 0.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.lyrics-fallback-line {
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground);
+    text-align: left;
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-lg-fluid);
+    line-height: var(--leading-snug);
+    cursor: pointer;
+    transition:
+        color var(--transition-fast),
+        background-color var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.lyrics-fallback-line:hover {
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    color: var(--foreground);
+}
+
+.lyrics-fallback-line.active {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--highlight) 18%, transparent);
+    transform: scale(1.01);
+}
+
+.lyrics-fallback-line.past {
+    opacity: 0.55;
+}
+
+.lyrics-fallback-line.upcoming {
+    opacity: 0.86;
 }
 
 /* Compact Cards (Artist and Album) */

@@ -9,19 +9,18 @@ export function initializeDiscordRPC(player) {
         await core.invoke('update_discord_presence', { payload });
     };
 
+    const clearViaTauri = async () => {
+        const core = await import('@tauri-apps/api/core');
+        await core.invoke('clear_discord_presence');
+    };
+
     async function sendUpdate(track, isPaused = false) {
         if (!track) return;
-
-        let coverUrl = 'monochrome';
-        if (track.album?.cover) {
-            const coverId = track.album.cover.replace(/-/g, '/');
-            coverUrl = `https://resources.tidal.com/images/${coverId}/320x320.jpg`;
-        }
 
         const data = {
             details: getTrackTitle(track),
             state: getTrackArtists(track),
-            largeImageKey: coverUrl,
+            largeImageKey: 'monochrome',
             largeImageText: track.album?.title || 'Monochrome+',
             smallImageKey: isPaused ? 'pause' : 'play',
             smallImageText: isPaused ? 'Paused' : 'Playing',
@@ -46,6 +45,27 @@ export function initializeDiscordRPC(player) {
         }
     }
 
+    async function sendIdle() {
+        if (!isTauri) return;
+        try {
+            await sendViaTauri({
+                details: 'Idling',
+                state: 'Monochrome+',
+                largeImageKey: 'monochrome',
+                largeImageText: 'Monochrome+',
+                smallImageKey: 'pause',
+                smallImageText: 'Paused',
+                instance: false,
+            });
+        } catch {
+            try {
+                await clearViaTauri();
+            } catch {
+                // no-op
+            }
+        }
+    }
+
     player.audio.addEventListener('play', () => {
         void sendUpdate(player.currentTrack);
     });
@@ -60,20 +80,18 @@ export function initializeDiscordRPC(player) {
         }
     });
 
+    player.audio.addEventListener('ended', () => {
+        void sendIdle();
+    });
+
+    window.addEventListener('beforeunload', () => {
+        void clearViaTauri().catch(() => {});
+    });
+
     // Send initial status
     if (player.currentTrack) {
         void sendUpdate(player.currentTrack, player.audio.paused);
     } else {
-        const idlePayload = {
-            details: 'Idling',
-            state: 'Monochrome+',
-            largeImageKey: 'monochrome',
-            largeImageText: 'Monochrome+',
-            smallImageKey: 'pause',
-            smallImageText: 'Paused',
-        };
-        if (isTauri) {
-            void sendViaTauri(idlePayload).catch(() => {});
-        }
+        void sendIdle();
     }
 }

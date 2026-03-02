@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main desktop window capability set for core APIs, updater, shell/process plugins, and app IPC commands.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "process:default",
+    "shell:default",
+    "updater:default"
+  ]
+}

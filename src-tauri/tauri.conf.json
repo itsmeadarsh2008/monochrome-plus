@@ -18,6 +18,7 @@
                 "height": 900,
                 "minWidth": 1024,
                 "minHeight": 680,
+                "decorations": false,
                 "resizable": true,
                 "fullscreen": false,
                 "dragDropEnabled": true,
@@ -26,7 +27,8 @@
             }
         ],
         "security": {
-            "csp": null
+            "csp": null,
+            "capabilities": ["default"]
         }
     },
     "bundle": {

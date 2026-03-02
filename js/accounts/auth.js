@@ -1,9 +1,11 @@
 // js/accounts/auth.js
 import { account } from '../lib/appwrite.js';
-import { ID } from 'appwrite';
+import { Account, Client, ID } from 'appwrite';
 
 const OAUTH_ATTEMPT_KEY = 'mono-oauth-attempt';
 const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
+const APPWRITE_PROJECT_ID = 'monochrome-plus';
+const APPWRITE_OAUTH_FALLBACK_ENDPOINTS = ['https://cloud.appwrite.io/v1', 'https://sgp.cloud.appwrite.io/v1'];
 
 export class AuthManager {
     constructor() {
@@ -82,14 +84,36 @@ export class AuthManager {
     }
 
     async signInWithDiscord() {
+        const redirectUrl = window.location.origin;
+        const endpointCandidates = [null, ...APPWRITE_OAUTH_FALLBACK_ENDPOINTS];
+
         try {
-            // Use current URL as redirect
-            const redirectUrl = window.location.origin;
             localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'discord', ts: Date.now() }));
-            await account.createOAuth2Session('discord', redirectUrl, redirectUrl);
-            console.log('[Appwrite] Discord login initiated...');
+
+            for (const endpoint of endpointCandidates) {
+                try {
+                    if (!endpoint) {
+                        await account.createOAuth2Session('discord', redirectUrl, redirectUrl);
+                        console.log('[Appwrite] Discord login initiated (primary endpoint)...');
+                        return;
+                    }
+
+                    const fallbackClient = new Client().setEndpoint(endpoint).setProject(APPWRITE_PROJECT_ID);
+                    const fallbackAccount = new Account(fallbackClient);
+                    await fallbackAccount.createOAuth2Session('discord', redirectUrl, redirectUrl);
+                    console.log(`[Appwrite] Discord login initiated (fallback endpoint: ${endpoint})...`);
+                    return;
+                } catch (error) {
+                    console.warn(
+                        `[Appwrite] Discord OAuth endpoint failed${endpoint ? ` (${endpoint})` : ''}:`,
+                        error?.message || error
+                    );
+                }
+            }
+
+            throw new Error('Discord OAuth is temporarily unavailable. Please retry in a moment or use Email/Google.');
         } catch (error) {
-            console.error('[Appwrite] ✗ Discord login failed:', error);
+            console.error('[Appwrite] ✗ Discord login failed after fallback attempts:', error);
             localStorage.removeItem(OAUTH_ATTEMPT_KEY);
             throw error;
         }

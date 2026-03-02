@@ -6,6 +6,10 @@ import { audioContextManager } from './audio-context.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
+const isTauriRuntime =
+    typeof window !== 'undefined' &&
+    (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__ || window.isTauri);
+
 // Check if text contains Japanese, Chinese, or Korean characters
 function containsAsianText(text) {
     if (!text) return false;
@@ -369,28 +373,59 @@ export class LyricsManager {
             return;
         }
 
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.type = 'module';
-            script.src = 'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js';
+        const sources = [
+            'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
+            'https://unpkg.com/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js',
+        ];
 
-            script.onload = () => {
-                if (typeof customElements !== 'undefined') {
-                    customElements
-                        .whenDefined('am-lyrics')
-                        .then(() => {
-                            this.componentLoaded = true;
+        let lastError = null;
+        for (const source of sources) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.type = 'module';
+                    script.src = source;
+
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Timed out loading lyrics component from ${source}`));
+                    }, 10000);
+
+                    script.onload = () => {
+                        if (typeof customElements !== 'undefined') {
+                            customElements
+                                .whenDefined('am-lyrics')
+                                .then(() => {
+                                    clearTimeout(timeout);
+                                    this.componentLoaded = true;
+                                    resolve();
+                                })
+                                .catch((err) => {
+                                    clearTimeout(timeout);
+                                    reject(err);
+                                });
+                        } else {
+                            clearTimeout(timeout);
                             resolve();
-                        })
-                        .catch(reject);
-                } else {
-                    resolve();
-                }
-            };
+                        }
+                    };
 
-            script.onerror = () => reject(new Error('Failed to load lyrics component'));
-            document.head.appendChild(script);
-        });
+                    script.onerror = () => {
+                        clearTimeout(timeout);
+                        reject(new Error(`Failed to load lyrics component from ${source}`));
+                    };
+
+                    document.head.appendChild(script);
+                });
+
+                if (this.componentLoaded) {
+                    return;
+                }
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        throw lastError || new Error('Failed to load lyrics component');
     }
 
     async fetchLyrics(trackId, track = null) {
@@ -420,9 +455,16 @@ export class LyricsManager {
                 if (album) params.append('album_name', album);
                 if (duration) params.append('duration', duration.toString());
 
-                const response = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
+                const endpoint = `https://lrclib.net/api/get?${params.toString()}`;
+                let response = await fetch(endpoint).catch(() => null);
 
-                if (response.ok) {
+                if (!response?.ok) {
+                    response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(endpoint)}`).catch(
+                        () => null
+                    );
+                }
+
+                if (response?.ok) {
                     const data = await response.json();
 
                     if (data.syncedLyrics) {
@@ -1129,7 +1171,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                 const checkForLyrics = () => {
                     const hasLyrics =
                         amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
-                        (amLyrics.shadowRoot && amLyrics.shadowRoot.querySelector("[class*='lyric']")) ||
+                        amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
                         (amLyrics.textContent && amLyrics.textContent.length > 50);
                     return hasLyrics;
                 };
@@ -1153,6 +1195,18 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         };
 
         await waitForLyrics();
+
+        const hasLyricsContent = () => {
+            return Boolean(
+                amLyrics.querySelector(".lyric-line, [class*='lyric']") ||
+                    amLyrics.shadowRoot?.querySelector("[class*='lyric']") ||
+                    (amLyrics.textContent && amLyrics.textContent.length > 50)
+            );
+        };
+
+        if (!hasLyricsContent() && isTauriRuntime) {
+            return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, 'Using desktop fallback');
+        }
 
         const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
         const isStandalonePwa =
@@ -1415,9 +1469,131 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         return amLyrics;
     } catch (error) {
         console.error('Failed to load lyrics:', error);
-        container.innerHTML = '<div class="lyrics-error">Failed to load lyrics</div>';
+        return await renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager);
+    }
+}
+
+async function renderFallbackLyricsComponent(container, track, audioPlayer, lyricsManager, label = '') {
+    const lyricsData =
+        lyricsManager.lyricsCache.get(track.id) ||
+        (await lyricsManager.fetchLyrics(track.id, track).catch(() => null)) ||
+        null;
+
+    if (!lyricsData?.subtitles) {
+        container.innerHTML = '<div class="lyrics-error">Lyrics unavailable for this track</div>';
         return null;
     }
+
+    const parsed = lyricsManager.parseSyncedLyrics(lyricsData.subtitles);
+    if (!parsed.length) {
+        container.innerHTML = '<div class="lyrics-error">Lyrics unavailable for this track</div>';
+        return null;
+    }
+
+    const root = document.createElement('div');
+    root.className = 'lyrics-fallback';
+    root.innerHTML = `<div class="lyrics-fallback-status">${label || 'Fallback lyrics mode'}</div>`;
+
+    const scroller = document.createElement('div');
+    scroller.className = 'lyrics-fallback-scroller';
+    root.appendChild(scroller);
+
+    parsed.forEach((line, index) => {
+        const lineEl = document.createElement('button');
+        lineEl.type = 'button';
+        lineEl.className = 'lyrics-fallback-line';
+        lineEl.dataset.index = String(index);
+        lineEl.dataset.time = String(line.time);
+        lineEl.textContent = line.text || '…';
+        lineEl.addEventListener('click', () => {
+            audioPlayer.currentTime = line.time;
+            void audioPlayer.play();
+        });
+        scroller.appendChild(lineEl);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(root);
+
+    let activeIndex = -1;
+    let rafId = null;
+
+    const computeActive = () => {
+        const current = audioPlayer.currentTime;
+        let found = -1;
+        for (let index = 0; index < parsed.length; index += 1) {
+            if (current >= parsed[index].time) found = index;
+            else break;
+        }
+        return found;
+    };
+
+    const updateLines = () => {
+        const next = computeActive();
+        if (next === activeIndex) return;
+        activeIndex = next;
+
+        scroller.querySelectorAll('.lyrics-fallback-line').forEach((el, index) => {
+            el.classList.toggle('active', index === activeIndex);
+            el.classList.toggle('past', index < activeIndex);
+            el.classList.toggle('upcoming', index > activeIndex);
+        });
+
+        if (activeIndex >= 0) {
+            const currentLine = scroller.querySelector(`.lyrics-fallback-line[data-index="${activeIndex}"]`);
+            currentLine?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    };
+
+    const tick = () => {
+        updateLines();
+        if (!audioPlayer.paused) {
+            rafId = requestAnimationFrame(tick);
+        }
+    };
+
+    const onPlay = () => {
+        if (!rafId) {
+            rafId = requestAnimationFrame(tick);
+        }
+    };
+
+    const onPause = () => {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        updateLines();
+    };
+
+    const onSeek = () => {
+        updateLines();
+    };
+
+    updateLines();
+    audioPlayer.addEventListener('play', onPlay);
+    audioPlayer.addEventListener('pause', onPause);
+    audioPlayer.addEventListener('seeked', onSeek);
+    audioPlayer.addEventListener('timeupdate', onSeek);
+
+    if (!audioPlayer.paused) {
+        rafId = requestAnimationFrame(tick);
+    }
+
+    const cleanup = () => {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        audioPlayer.removeEventListener('play', onPlay);
+        audioPlayer.removeEventListener('pause', onPause);
+        audioPlayer.removeEventListener('seeked', onSeek);
+        audioPlayer.removeEventListener('timeupdate', onSeek);
+    };
+
+    container.lyricsCleanup = cleanup;
+    container.lyricsManager = lyricsManager;
+    return root;
 }
 
 function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
