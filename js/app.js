@@ -390,15 +390,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize tracker
     initTracker(player);
 
-    const isTauriRuntime =
+    const isDesktopRuntime =
         typeof window !== 'undefined' &&
-        (window.__TAURI_INTERNALS__ ||
-            window.__TAURI__ ||
-            window.__TAURI_IPC__ ||
-            /\btauri\b/i.test(navigator.userAgent || ''));
+        typeof window.Neutralino !== 'undefined' &&
+        typeof window.NL_VERSION === 'string';
 
-    // Initialize desktop features if in Tauri mode
-    if (isTauriRuntime) {
+    // Initialize desktop features if in Neutralino mode
+    if (isDesktopRuntime) {
         try {
             const desktopModule = await import('./desktop/desktop.js');
             await desktopModule.initDesktop(player);

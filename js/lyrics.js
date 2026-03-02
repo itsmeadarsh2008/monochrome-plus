@@ -6,9 +6,10 @@ import { audioContextManager } from './audio-context.js';
 
 const SVG_GENIUS_ACTIVE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 24c6.627 0 12-5.373 12-12S18.627 0 12 0 0 5.373 0 12s5.373 12 12 12z" fill="#ffff64"/><path d="M6.3 6.3h11.4v11.4H6.3z" fill="#000"/></svg>`;
 
-const isTauriRuntime =
+const isDesktopRuntime =
     typeof window !== 'undefined' &&
-    (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__ || window.isTauri);
+    typeof window.Neutralino !== 'undefined' &&
+    typeof window.NL_VERSION === 'string';
 
 // Check if text contains Japanese, Chinese, or Korean characters
 function containsAsianText(text) {
@@ -392,7 +393,7 @@ export class LyricsManager {
                         () => {
                             reject(new Error(`Timed out loading lyrics component from ${source}`));
                         },
-                        isTauriRuntime ? 20000 : 10000
+                        isDesktopRuntime ? 20000 : 10000
                     );
 
                     script.onload = () => {
@@ -1225,7 +1226,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
                 // Check more frequently (200ms) for faster response
                 let attempts = 0;
-                const maxAttempts = isTauriRuntime ? 60 : 25;
+                const maxAttempts = isDesktopRuntime ? 60 : 25;
                 const interval = setInterval(() => {
                     attempts++;
                     if (checkForLyrics() || attempts >= maxAttempts) {
@@ -1240,7 +1241,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
         const hasLyricsContent = () => hasRenderableLyricLines();
 
-        if (!hasLyricsContent() && isTauriRuntime) {
+        if (!hasLyricsContent() && isDesktopRuntime) {
             return await renderFallbackLyricsComponent(
                 container,
                 track,
@@ -1251,7 +1252,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         }
 
         let contentWatchdogId = null;
-        if (isTauriRuntime) {
+        if (isDesktopRuntime) {
             contentWatchdogId = window.setInterval(async () => {
                 const panelStillActive = sidePanelManager.isActive('lyrics');
                 if (!panelStillActive) {

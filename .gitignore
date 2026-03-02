@@ -7,10 +7,6 @@ dist
 # Docker
 .env
 
-# Tauri
-src-tauri/target/
-src-tauri/gen/schemas/
-
 # Logs
 *.log
 

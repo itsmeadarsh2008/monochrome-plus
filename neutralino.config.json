@@ -1,0 +1,80 @@
+{
+    "$schema": "https://neutralino.js.org/schemas/neutralino.config.schema.json",
+    "applicationId": "network.appwrite.monochromeplus",
+    "version": "1.0.3",
+    "applicationName": "Monochrome+",
+    "author": "Monochrome+ Team",
+    "description": "Hyper-fast, privacy-respecting, high-fidelity desktop music experience.",
+    "copyright": "Copyright © Monochrome+ Team",
+    "applicationIcon": "buildAssets/appIcon.png",
+    "defaultMode": "window",
+    "port": 0,
+    "documentRoot": "/dist/",
+    "url": "/",
+    "enableServer": true,
+    "enableNativeAPI": true,
+    "singlePageServe": true,
+    "tokenSecurity": "one-time",
+    "enableExtensions": false,
+    "nativeAllowList": [
+        "app.*",
+        "events.*",
+        "extensions.*",
+        "os.*",
+        "updater.*",
+        "window.*"
+    ],
+    "globalVariables": {
+        "MONOCHROME_DESKTOP_RUNTIME": "neutralino"
+    },
+    "modes": {
+        "window": {
+            "title": "Monochrome+",
+            "width": 1280,
+            "height": 820,
+            "minWidth": 480,
+            "minHeight": 320,
+            "resizable": true,
+            "maximizable": true,
+            "minimizable": true,
+            "fullScreen": false,
+            "alwaysOnTop": false,
+            "borderless": true,
+            "center": true,
+            "hidden": false,
+            "exitProcessOnClose": true,
+            "injectClientLibrary": true,
+            "injectGlobals": true,
+            "extendUserAgentWith": "neutralino"
+        }
+    },
+    "cli": {
+        "binaryName": "monochrome-plus",
+        "resourcesPath": "/dist/",
+        "distributionPath": "/desktop-dist/"
+    },
+    "buildScript": {
+        "mac": {
+            "architecture": ["x64", "arm64"],
+            "minimumOS": "10.15.0",
+            "appName": "Monochrome+",
+            "appBundleName": "Monochrome+",
+            "appIdentifier": "network.appwrite.monochromeplus",
+            "appIcon": "buildAssets/appIcon.png"
+        },
+        "win": {
+            "architecture": ["x64", "arm64"],
+            "appName": "Monochrome+",
+            "appIcon": "buildAssets/appIcon.png",
+            "publisher": "Monochrome+ Team"
+        },
+        "linux": {
+            "architecture": ["x64", "arm64"],
+            "appName": "monochrome-plus",
+            "appIcon": "buildAssets/appIcon.png",
+            "appPath": "/usr/share/monochrome-plus",
+            "appIconPath": "/usr/share/monochrome-plus/appIcon.png",
+            "appIconLocation": "/usr/share/monochrome-plus/appIcon.png"
+        }
+    }
+}

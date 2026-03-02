@@ -3,7 +3,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
 
 export default defineConfig(() => {
-    const hmrHost = process.env.TAURI_DEV_HOST || 'localhost';
+    const hmrHost = process.env.NEUTRALINO_DEV_HOST || process.env.DESKTOP_DEV_HOST || 'localhost';
 
     return {
         base: '/',

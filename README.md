@@ -160,6 +160,21 @@ bun run build
 npm run build
 ```
 
+#### Desktop App (NeutralinoJS)
+
+```bash
+# Run desktop app locally (frameless window)
+npm run dev:desktop
+
+# Build desktop bundle for current platform
+npm run build:desktop:release
+
+# Build release bundles for Linux/macOS/Windows targets
+npm run build:desktop:all
+```
+
+Desktop artifacts are generated under `desktop-dist/` with publisher metadata set to **Monochrome+ Team**.
+
 ---
 
 ## Usage
