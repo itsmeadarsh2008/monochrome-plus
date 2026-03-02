@@ -3,7 +3,7 @@ name: Tauri Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -16,11 +16,11 @@ jobs:
       matrix:
         include:
           - platform: ubuntu-22.04
-            args: ''
+            args: ""
           - platform: windows-latest
-            args: ''
+            args: ""
           - platform: macos-latest
-            args: '--target universal-apple-darwin'
+            args: "--target universal-apple-darwin"
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,7 +42,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: "./src-tauri -> target"
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -65,9 +65,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name || 'v__VERSION__' }}
-          releaseName: 'Monochrome+ ${{ github.ref_name || 'v__VERSION__' }}'
-          releaseBody: "## Monochrome+ Desktop\n\nDownload the installer for your platform below.\nAuto-updates are built-in — future updates will be applied automatically.\n\n### Features\n- 🎵 Hyper-optimized pure sound experience\n- 🔄 Automatic updates\n- 🎮 Discord Rich Presence\n- ⚡ Native performance with Tauri"
+          tagName: v__VERSION__
+          releaseName: "Monochrome+ v__VERSION__"
+          releaseBody: "Download the installer for your platform. Auto-updates are built-in."
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
