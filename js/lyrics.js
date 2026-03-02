@@ -388,9 +388,12 @@ export class LyricsManager {
                     script.src = source;
                     script.crossOrigin = 'anonymous';
 
-                    const timeout = setTimeout(() => {
-                        reject(new Error(`Timed out loading lyrics component from ${source}`));
-                    }, isTauriRuntime ? 20000 : 10000);
+                    const timeout = setTimeout(
+                        () => {
+                            reject(new Error(`Timed out loading lyrics component from ${source}`));
+                        },
+                        isTauriRuntime ? 20000 : 10000
+                    );
 
                     script.onload = () => {
                         if (typeof customElements !== 'undefined') {
