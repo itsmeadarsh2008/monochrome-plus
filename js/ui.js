@@ -1039,8 +1039,7 @@ export class UIRenderer {
         };
 
         const isVideoSource =
-            typeof imageUrl === 'string' &&
-            (imageUrl.includes('.mp4') || imageUrl.startsWith('blob:video'));
+            typeof imageUrl === 'string' && (imageUrl.includes('.mp4') || imageUrl.startsWith('blob:video'));
 
         const effectiveImageUrl = imageUrl;
 

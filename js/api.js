@@ -1338,7 +1338,10 @@ export class LosslessAPI {
             return id;
         }
 
-        const normalizedId = String(id).replace(/\\/g, '/').replace(/-/g, '/').replace(/^\/+|\/+$/g, '');
+        const normalizedId = String(id)
+            .replace(/\\/g, '/')
+            .replace(/-/g, '/')
+            .replace(/^\/+|\/+$/g, '');
         if (!normalizedId) return null;
 
         const sizeToken = /^\d+x\d+$/i.test(String(size)) ? String(size) : `${size}x${size}`;

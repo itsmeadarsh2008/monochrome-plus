@@ -326,14 +326,12 @@ const syncManager = {
         };
     },
 
-    _buildCollaborativePlaylistPermissions(ownerId, members = []) {
-        const users = Array.from(new Set([ownerId, ...(Array.isArray(members) ? members : [])].filter(Boolean)));
-        const permissions = [];
-
-        for (const userId of users) {
-            permissions.push(Permission.read(Role.user(userId)));
-            permissions.push(Permission.update(Role.user(userId)));
-        }
+    _buildCollaborativePlaylistPermissions(ownerId, _members = []) {
+        const permissions = [
+            // Client SDK cannot grant per-user permissions for other user IDs.
+            Permission.read(Role.users()),
+            Permission.update(Role.users()),
+        ];
 
         if (ownerId) {
             permissions.push(Permission.delete(Role.user(ownerId)));
@@ -1463,6 +1461,10 @@ const syncManager = {
                     () =>
                         databases.listDocuments(DATABASE_ID, COLLABORATIVE_PLAYLISTS_COLLECTION, [
                             Query.equal('is_collaborative', true),
+                            Query.or([
+                                Query.equal('owner_id', user.$id),
+                                Query.contains('members', user.$id),
+                            ]),
                             Query.limit(500),
                         ]),
                     { label: 'sync cloud collaborative playlists' }
@@ -1912,8 +1914,6 @@ const syncManager = {
                     };
                 }
 
-                const favoriteAlbums = this._normalizeFavoriteAlbums(localData.favorites_albums || []).slice(0, 20);
-
                 const updated = await this._withRetry(
                     () =>
                         databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, {
@@ -1921,7 +1921,6 @@ const syncManager = {
                             history: JSON.stringify(history),
                             user_playlists: JSON.stringify(cloudPlaylistMetadata),
                             user_folders: JSON.stringify(cloudFolderMetadata),
-                            favorite_albums: JSON.stringify(favoriteAlbums),
                         }),
                     { label: 'periodic sync' }
                 );

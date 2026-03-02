@@ -103,9 +103,7 @@ export class VideoCoverPreset {
         if (!videoCoverId || !this.api?.getVideoCoverUrl) return [];
 
         const sizes = ['1280x720', '1920x1080', '1080x1080', '720x720'];
-        const urls = sizes
-            .map((size) => this.api.getVideoCoverUrl(videoCoverId, size))
-            .filter(Boolean);
+        const urls = sizes.map((size) => this.api.getVideoCoverUrl(videoCoverId, size)).filter(Boolean);
 
         return Array.from(new Set(urls));
     }
