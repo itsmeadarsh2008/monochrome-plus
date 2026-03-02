@@ -112,10 +112,13 @@ if (-not $isccExe) {
     throw 'Inno Setup compiler (ISCC.exe) is missing.'
 }
 
+$sourceDir = $appDir.FullName
+$wixObjOutDir = Join-Path $wixObjDir ''
+
 & $isccExe $innoPath
 
-& $heatExe dir $appDir.FullName -cg AppFiles -dr INSTALLDIR -gg -srd -sfrag -var var.SourceDir -out $wixFilesPath
-& $candleExe -dSourceDir=$appDir.FullName -out "$wixObjDir\" $wixProductPath $wixFilesPath
+& $heatExe dir $sourceDir -cg AppFiles -dr INSTALLDIR -gg -srd -sfrag -sreg -var var.SourceDir -out $wixFilesPath
+& $candleExe "-dSourceDir=$sourceDir" -out $wixObjOutDir $wixProductPath $wixFilesPath
 & $lightExe -ext WixUIExtension -out (Join-Path $artifactDir "MonochromePlus-$appVersion.msi") "$wixObjDir\Product.wixobj" "$wixObjDir\AppFiles.wixobj"
 
 Get-ChildItem -Path $artifactDir
