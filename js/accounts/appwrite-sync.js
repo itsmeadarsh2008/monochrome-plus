@@ -786,7 +786,14 @@ const syncManager = {
             };
             await this.publishPlaylist(playlist);
         } else {
-            delete playlists[playlistId];
+            playlists[playlistId] = {
+                id: playlistId,
+                name: playlist.name || playlist.title || 'Untitled Playlist',
+                description: playlist.description || '',
+                cover: playlist.cover || null,
+                numberOfTracks: playlist.tracks?.length || playlist.numberOfTracks || 0,
+                isPublic: false,
+            };
             await this.unpublishPlaylist(playlistId);
         }
 
@@ -1794,18 +1801,9 @@ const syncManager = {
         try {
             await this._getUserRecord();
             this.setupRealtimeSubscriptions();
-            this.startPeriodicSync();
 
             const cloudData = await this.getUserData();
             if (!cloudData) return;
-
-            const localData = await database.exportData();
-            const hasLocalData =
-                (localData?.favorites_tracks?.length || 0) +
-                    (localData?.favorites_albums?.length || 0) +
-                    (localData?.favorites_artists?.length || 0) +
-                    (localData?.history_tracks?.length || 0) >
-                0;
 
             const cloudLibrary = cloudData.library || {};
             const hasCloudData =
@@ -1814,12 +1812,14 @@ const syncManager = {
                 Object.keys(cloudData.userPlaylists || {}).length > 0 ||
                 Object.keys(cloudData.userFolders || {}).length > 0;
 
-            if (!hasLocalData && hasCloudData) {
+            if (hasCloudData) {
                 await this.pullCloudData({ syncPublicPlaylists: true });
             } else {
                 await this.syncCloudPublicPlaylistsToLocal();
                 await this.syncCloudCollaborativePlaylistsToLocal();
             }
+
+            this.startPeriodicSync();
         } catch (error) {
             console.error('[Appwrite Sync] Sync error:', error);
         } finally {

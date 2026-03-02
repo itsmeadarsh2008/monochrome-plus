@@ -1,4 +1,4 @@
-import { Client, Databases, Storage, ID, Permission, Role } from 'node-appwrite';
+import { Client, Databases, Storage, Permission, Role } from 'node-appwrite';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -11,8 +11,16 @@ const client = new Client()
 const databases = new Databases(client);
 const storage = new Storage(client);
 
+const APPLY_COLLECTION_UPDATES =
+    process.argv.includes('--apply-collection-updates') ||
+    process.env.APPWRITE_SETUP_APPLY_COLLECTION_UPDATES === 'true';
+
 const DATABASE_ID = 'monochrome-plus';
 const DATABASE_NAME = 'Monochrome+';
+
+function isNotFoundError(error) {
+    return error?.code === 404 || /not.?found/i.test(String(error?.type || ''));
+}
 
 const collections = [
     {
@@ -169,23 +177,49 @@ const collections = [
 async function setup() {
     try {
         console.log('🚀 Starting Appwrite Setup...');
+        console.log('🛡️ Non-destructive mode enabled (existing data is never deleted).');
+        if (APPLY_COLLECTION_UPDATES) {
+            console.log('⚠️ Collection metadata updates are enabled (--apply-collection-updates).');
+        }
 
         // 1. Create Database if not exists
         try {
             await databases.get(DATABASE_ID);
             console.log(`✅ Database "${DATABASE_ID}" already exists.`);
         } catch (e) {
+            if (!isNotFoundError(e)) {
+                throw e;
+            }
             console.log(`Creating database "${DATABASE_ID}"...`);
             await databases.create(DATABASE_ID, DATABASE_NAME);
         }
 
         // 2. Create Collections
         for (const col of collections) {
+            let collectionExists = false;
             try {
-                const existing = await databases.getCollection(DATABASE_ID, col.id);
-                console.log(`✅ Collection "${col.id}" already exists. Updating permissions...`);
-                await databases.updateCollection(DATABASE_ID, col.id, col.name, col.permissions, col.documentSecurity);
+                await databases.getCollection(DATABASE_ID, col.id);
+                collectionExists = true;
+                console.log(`✅ Collection "${col.id}" already exists.`);
+
+                if (APPLY_COLLECTION_UPDATES) {
+                    console.log(`   Updating collection metadata for "${col.id}"...`);
+                    await databases.updateCollection(
+                        DATABASE_ID,
+                        col.id,
+                        col.name,
+                        col.permissions,
+                        col.documentSecurity
+                    );
+                } else {
+                    console.log(
+                        `   Skipping collection metadata update for "${col.id}" (safe mode). Use --apply-collection-updates to enable.`
+                    );
+                }
             } catch (e) {
+                if (!isNotFoundError(e)) {
+                    throw e;
+                }
                 console.log(`Creating collection "${col.id}"...`);
                 await databases.createCollection(DATABASE_ID, col.id, col.name, col.permissions, col.documentSecurity);
             }
@@ -197,8 +231,15 @@ async function setup() {
             for (const attr of col.attributes) {
                 if (existingKeys.includes(attr.key)) continue;
 
+                const requiredForCreation = collectionExists ? false : attr.required;
+                if (collectionExists && attr.required) {
+                    console.log(
+                        `   ⚠️ Attribute "${attr.key}" is required in schema but will be created as optional to avoid impacting existing documents.`
+                    );
+                }
+
                 console.log(`   Adding attribute "${attr.key}" to "${col.id}"...`);
-                const canUseDefault = Object.prototype.hasOwnProperty.call(attr, 'default') && !attr.required;
+                const canUseDefault = Object.hasOwn(attr, 'default') && !requiredForCreation;
                 if (attr.type === 'string') {
                     if (canUseDefault) {
                         await databases.createStringAttribute(
@@ -206,11 +247,17 @@ async function setup() {
                             col.id,
                             attr.key,
                             attr.size,
-                            attr.required,
+                            requiredForCreation,
                             attr.default
                         );
                     } else {
-                        await databases.createStringAttribute(DATABASE_ID, col.id, attr.key, attr.size, attr.required);
+                        await databases.createStringAttribute(
+                            DATABASE_ID,
+                            col.id,
+                            attr.key,
+                            attr.size,
+                            requiredForCreation
+                        );
                     }
                 } else if (attr.type === 'boolean') {
                     if (canUseDefault) {
@@ -218,11 +265,11 @@ async function setup() {
                             DATABASE_ID,
                             col.id,
                             attr.key,
-                            attr.required,
+                            requiredForCreation,
                             attr.default
                         );
                     } else {
-                        await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, attr.required);
+                        await databases.createBooleanAttribute(DATABASE_ID, col.id, attr.key, requiredForCreation);
                     }
                 } else if (attr.type === 'integer') {
                     if (canUseDefault) {
@@ -230,7 +277,7 @@ async function setup() {
                             DATABASE_ID,
                             col.id,
                             attr.key,
-                            attr.required,
+                            requiredForCreation,
                             null,
                             null,
                             attr.default
@@ -240,7 +287,7 @@ async function setup() {
                             DATABASE_ID,
                             col.id,
                             attr.key,
-                            attr.required,
+                            requiredForCreation,
                             null,
                             null
                         );
@@ -257,7 +304,14 @@ async function setup() {
             for (const idx of col.indexes) {
                 if (existingIdxKeys.includes(idx.key)) continue;
                 console.log(`   Adding index "${idx.key}" to "${col.id}"...`);
-                await databases.createIndex(DATABASE_ID, col.id, idx.key, idx.type, idx.attributes);
+                try {
+                    await databases.createIndex(DATABASE_ID, col.id, idx.key, idx.type, idx.attributes);
+                } catch (indexError) {
+                    console.warn(
+                        `   ⚠️ Skipped index "${idx.key}" on "${col.id}". This can happen with existing data constraints:`,
+                        indexError?.message || indexError
+                    );
+                }
             }
         }
 
@@ -266,7 +320,7 @@ async function setup() {
         try {
             await storage.getBucket(BUCKET_ID);
             console.log(`✅ Bucket "${BUCKET_ID}" already exists.`);
-        } catch (e) {
+        } catch {
             console.log(`Creating bucket "${BUCKET_ID}"...`);
             await storage.createBucket(
                 BUCKET_ID,

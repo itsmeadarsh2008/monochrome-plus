@@ -8,13 +8,222 @@ function getTrackArtists(track) {
     return track.artist?.name || 'Unknown Artist';
 }
 
+const IMPORT_SEARCH_DELAY_MS = 220;
+
+function sanitizeImportValue(value) {
+    const withoutControlChars = Array.from(String(value || ''))
+        .filter((char) => {
+            const code = char.charCodeAt(0);
+            return code >= 32 && code !== 127;
+        })
+        .join('');
+
+    return withoutControlChars.replace(/\s+/g, ' ').trim();
+}
+
+function normalizeForCompare(value) {
+    return sanitizeImportValue(value)
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[“”„‟«»]/g, '"')
+        .replace(/[’‘‚‛]/g, "'")
+        .replace(/[‐‑‒–—―]/g, '-')
+        .replace(/[()\[\]{}]/g, ' ')
+        .replace(/\s+(feat|featuring|ft)\.?\s+/giu, ' ')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function foldForCompare(value) {
+    return normalizeForCompare(value).normalize('NFKD').replace(/\p{M}/gu, '').trim();
+}
+
+function tokenSet(value) {
+    return new Set(foldForCompare(value).split(' ').filter(Boolean));
+}
+
+function tokenSimilarity(expected, actual) {
+    const a = tokenSet(expected);
+    const b = tokenSet(actual);
+    if (!a.size || !b.size) return 0;
+
+    let common = 0;
+    for (const token of a) {
+        if (b.has(token)) common += 1;
+    }
+
+    const precision = common / a.size;
+    const recall = common / b.size;
+    const jaccard = common / (a.size + b.size - common);
+    return Math.max(jaccard, (precision + recall) / 2);
+}
+
+function fieldSimilarity(expected, actual) {
+    const expectedRaw = normalizeForCompare(expected);
+    const actualRaw = normalizeForCompare(actual);
+    const expectedFold = foldForCompare(expected);
+    const actualFold = foldForCompare(actual);
+
+    if (!expectedRaw || !actualRaw) return 0;
+    if (expectedRaw === actualRaw) return 1;
+    if (expectedFold && expectedFold === actualFold) return 0.99;
+
+    if (
+        (expectedRaw.length > 2 && actualRaw.includes(expectedRaw)) ||
+        (actualRaw.length > 2 && expectedRaw.includes(actualRaw))
+    ) {
+        return 0.92;
+    }
+
+    if (
+        (expectedFold.length > 2 && actualFold.includes(expectedFold)) ||
+        (actualFold.length > 2 && expectedFold.includes(actualFold))
+    ) {
+        return 0.9;
+    }
+
+    return tokenSimilarity(expected, actual);
+}
+
+function buildSearchQueries({ title, artist, album }) {
+    const safeTitle = sanitizeImportValue(title);
+    const safeArtist = sanitizeImportValue(artist);
+    const safeAlbum = sanitizeImportValue(album);
+
+    const queries = [
+        `"${safeTitle}" ${safeArtist} ${safeAlbum}`.trim(),
+        `${safeTitle} ${safeArtist} ${safeAlbum}`.trim(),
+        `"${safeTitle}" ${safeArtist}`.trim(),
+        `${safeTitle} ${safeArtist}`.trim(),
+        `${safeTitle} ${safeAlbum}`.trim(),
+        safeTitle,
+    ].filter(Boolean);
+
+    return Array.from(new Set(queries));
+}
+
+function scoreCandidate(candidate, expected) {
+    const candidateTitle = sanitizeImportValue(candidate?.title);
+    const candidateArtist = sanitizeImportValue(getTrackArtists(candidate));
+    const candidateAlbum = sanitizeImportValue(candidate?.album?.title);
+
+    const titleScore = fieldSimilarity(expected.title, candidateTitle);
+    const artistScore = expected.artist ? fieldSimilarity(expected.artist, candidateArtist) : 0.5;
+    const albumScore = expected.album ? fieldSimilarity(expected.album, candidateAlbum) : 0.5;
+
+    let totalWeight = 0;
+    let weighted = 0;
+
+    totalWeight += 0.62;
+    weighted += titleScore * 0.62;
+
+    if (expected.artist) {
+        totalWeight += 0.28;
+        weighted += artistScore * 0.28;
+    }
+
+    if (expected.album) {
+        totalWeight += 0.1;
+        weighted += albumScore * 0.1;
+    }
+
+    return totalWeight > 0 ? weighted / totalWeight : 0;
+}
+
+async function findBestTrackMatch(api, metadata) {
+    const expected = {
+        title: sanitizeImportValue(metadata.title),
+        artist: sanitizeImportValue(metadata.artist),
+        album: sanitizeImportValue(metadata.album),
+    };
+
+    if (!expected.title) return null;
+
+    const queries = buildSearchQueries(expected);
+    const candidates = [];
+    const seen = new Set();
+
+    for (const query of queries) {
+        try {
+            const result = await api.searchTracks(query, { limit: 12 });
+            const items = Array.isArray(result?.items) ? result.items : [];
+
+            for (const item of items) {
+                const key = String(item?.id || `${item?.title || ''}|${getTrackArtists(item)}`);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                candidates.push(item);
+            }
+
+            if (candidates.length >= 24) break;
+        } catch {
+            // Continue trying fallback queries
+        }
+    }
+
+    if (!candidates.length) return null;
+
+    let best = candidates[0];
+    let bestScore = scoreCandidate(best, expected);
+    for (let i = 1; i < candidates.length; i++) {
+        const candidate = candidates[i];
+        const score = scoreCandidate(candidate, expected);
+        if (score > bestScore) {
+            best = candidate;
+            bestScore = score;
+        }
+    }
+
+    return best;
+}
+
+async function importTracksFromMetadata(entries, api, onProgress) {
+    const tracks = [];
+    const missingTracks = [];
+    const totalTracks = entries.length;
+
+    for (let i = 0; i < entries.length; i++) {
+        const entry = {
+            title: sanitizeImportValue(entries[i]?.title),
+            artist: sanitizeImportValue(entries[i]?.artist),
+            album: sanitizeImportValue(entries[i]?.album),
+        };
+
+        if (onProgress) {
+            onProgress({
+                current: i,
+                total: totalTracks,
+                currentTrack: entry.title || 'Unknown track',
+                currentArtist: entry.artist || '',
+            });
+        }
+
+        if (!entry.title) {
+            missingTracks.push(entry);
+            continue;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, IMPORT_SEARCH_DELAY_MS));
+
+        const match = await findBestTrackMatch(api, entry);
+        if (match) {
+            tracks.push(match);
+        } else {
+            missingTracks.push(entry);
+        }
+    }
+
+    return { tracks, missingTracks };
+}
+
 /**
  * Generates CSV playlist export
  * @param {Object} playlist - Playlist metadata
  * @param {Array} tracks - Array of track objects
  * @returns {string} CSV content
  */
-export function generateCSV(playlist, tracks) {
+export function generateCSV(_playlist, tracks) {
     const headers = ['Track Name', 'Artist Name(s)', 'Album', 'Duration'];
     let content = headers.map((h) => `"${h}"`).join(',') + '\n';
 
@@ -136,9 +345,7 @@ export async function parseCSV(csvText, api, onProgress) {
     const headers = parseLine(lines[0]);
     const rows = lines.slice(1);
 
-    const tracks = [];
-    const missingTracks = [];
-    const totalTracks = rows.length;
+    const trackEntries = [];
 
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -176,36 +383,17 @@ export async function parseCSV(csvText, api, onProgress) {
                 }
             });
 
-            if (onProgress) {
-                onProgress({
-                    current: i,
-                    total: totalTracks,
-                    currentTrack: trackTitle || 'Unknown track',
-                    currentArtist: artistNames || '',
+            if (trackTitle) {
+                trackEntries.push({
+                    title: trackTitle,
+                    artist: artistNames,
+                    album: albumName,
                 });
-            }
-
-            // Search for the track
-            if (trackTitle && artistNames) {
-                await new Promise((resolve) => setTimeout(resolve, 300));
-
-                try {
-                    const searchQuery = `"${trackTitle}" ${artistNames}`.trim();
-                    const searchResult = await api.searchTracks(searchQuery);
-
-                    if (searchResult.items && searchResult.items.length > 0) {
-                        tracks.push(searchResult.items[0]);
-                    } else {
-                        missingTracks.push({ title: trackTitle, artist: artistNames, album: albumName });
-                    }
-                } catch (e) {
-                    missingTracks.push({ title: trackTitle, artist: artistNames, album: albumName });
-                }
             }
         }
     }
 
-    return { tracks, missingTracks };
+    return importTracksFromMetadata(trackEntries, api, onProgress);
 }
 
 /**
@@ -224,44 +412,24 @@ export async function parseJSPF(jspfText, api, onProgress) {
         }
 
         const playlist = jspfData.playlist;
-        const tracks = [];
-        const missingTracks = [];
-        const totalTracks = playlist.track.length;
+        const trackEntries = [];
 
-        for (let i = 0; i < playlist.track.length; i++) {
-            const jspfTrack = playlist.track[i];
+        for (const jspfTrack of playlist.track) {
             const trackTitle = jspfTrack.title;
             const trackCreator = jspfTrack.creator;
             const trackAlbum = jspfTrack.album;
 
-            if (onProgress) {
-                onProgress({
-                    current: i,
-                    total: totalTracks,
-                    currentTrack: trackTitle || 'Unknown track',
-                    currentArtist: trackCreator || '',
+            if (trackTitle) {
+                trackEntries.push({
+                    title: trackTitle,
+                    artist: trackCreator,
+                    album: trackAlbum,
                 });
-            }
-
-            if (trackTitle && trackCreator) {
-                await new Promise((resolve) => setTimeout(resolve, 300));
-
-                try {
-                    const searchQuery = `${trackTitle} ${trackCreator}`;
-                    const searchResults = await api.searchTracks(searchQuery);
-
-                    if (searchResults.items && searchResults.items.length > 0) {
-                        tracks.push(searchResults.items[0]);
-                    } else {
-                        missingTracks.push({ title: trackTitle, artist: trackCreator, album: trackAlbum });
-                    }
-                } catch (e) {
-                    missingTracks.push({ title: trackTitle, artist: trackCreator, album: trackAlbum });
-                }
             }
         }
 
-        return { tracks, missingTracks };
+        const result = await importTracksFromMetadata(trackEntries, api, onProgress);
+        return { ...result, jspfData };
     } catch (error) {
         throw new Error('Failed to parse JSPF: ' + error.message);
     }
@@ -288,9 +456,7 @@ export async function parseXSPF(xspfText, api, onProgress) {
     const xmlDoc = parser.parseFromString(xspfText, 'application/xml');
 
     const trackList = xmlDoc.getElementsByTagName('track');
-    const tracks = [];
-    const missingTracks = [];
-    const totalTracks = trackList.length;
+    const trackEntries = [];
 
     for (let i = 0; i < trackList.length; i++) {
         const trackEl = trackList[i];
@@ -298,34 +464,16 @@ export async function parseXSPF(xspfText, api, onProgress) {
         const creator = trackEl.getElementsByTagName('creator')[0]?.textContent || '';
         const album = trackEl.getElementsByTagName('album')[0]?.textContent || '';
 
-        if (onProgress) {
-            onProgress({
-                current: i,
-                total: totalTracks,
-                currentTrack: title || 'Unknown track',
-                currentArtist: creator || '',
+        if (title) {
+            trackEntries.push({
+                title,
+                artist: creator,
+                album,
             });
-        }
-
-        if (title && creator) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            try {
-                const searchQuery = `${title} ${creator}`;
-                const searchResults = await api.searchTracks(searchQuery);
-
-                if (searchResults.items && searchResults.items.length > 0) {
-                    tracks.push(searchResults.items[0]);
-                } else {
-                    missingTracks.push({ title, artist: creator, album });
-                }
-            } catch (e) {
-                missingTracks.push({ title, artist: creator, album });
-            }
         }
     }
 
-    return { tracks, missingTracks };
+    return importTracksFromMetadata(trackEntries, api, onProgress);
 }
 
 /**
@@ -357,9 +505,7 @@ export async function parseXML(xmlText, api, onProgress) {
         trackElements = xmlDoc.getElementsByTagName('item');
     }
 
-    const tracks = [];
-    const missingTracks = [];
-    const totalTracks = trackElements.length;
+    const trackEntries = [];
 
     for (let i = 0; i < trackElements.length; i++) {
         const trackEl = trackElements[i];
@@ -376,34 +522,16 @@ export async function parseXML(xmlText, api, onProgress) {
             '';
         const album = trackEl.getElementsByTagName('album')[0]?.textContent || '';
 
-        if (onProgress) {
-            onProgress({
-                current: i,
-                total: totalTracks,
-                currentTrack: title || 'Unknown track',
-                currentArtist: artist || '',
+        if (title) {
+            trackEntries.push({
+                title,
+                artist,
+                album,
             });
-        }
-
-        if (title && artist) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            try {
-                const searchQuery = `${title} ${artist}`;
-                const searchResults = await api.searchTracks(searchQuery);
-
-                if (searchResults.items && searchResults.items.length > 0) {
-                    tracks.push(searchResults.items[0]);
-                } else {
-                    missingTracks.push({ title, artist, album });
-                }
-            } catch (e) {
-                missingTracks.push({ title, artist, album });
-            }
         }
     }
 
-    return { tracks, missingTracks };
+    return importTracksFromMetadata(trackEntries, api, onProgress);
 }
 
 /**
@@ -415,8 +543,6 @@ export async function parseXML(xmlText, api, onProgress) {
  */
 export async function parseM3U(m3uText, api, onProgress) {
     const lines = m3uText.trim().split('\n');
-    const tracks = [];
-    const missingTracks = [];
 
     const trackInfo = [];
     let currentInfo = null;
@@ -442,43 +568,26 @@ export async function parseM3U(m3uText, api, onProgress) {
             if (currentInfo) {
                 trackInfo.push(currentInfo);
                 currentInfo = null;
-            }
-        }
-    }
+            } else {
+                const fileName = trimmed
+                    .split(/[/\\]/)
+                    .pop()
+                    ?.replace(/\.[a-z0-9]{1,5}$/i, '')
+                    ?.trim();
 
-    const totalTracks = trackInfo.length;
-
-    for (let i = 0; i < trackInfo.length; i++) {
-        const info = trackInfo[i];
-
-        if (onProgress) {
-            onProgress({
-                current: i,
-                total: totalTracks,
-                currentTrack: info.title || 'Unknown track',
-                currentArtist: info.artist || '',
-            });
-        }
-
-        if (info.title) {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-
-            try {
-                const searchQuery = info.artist ? `${info.title} ${info.artist}` : info.title;
-                const searchResults = await api.searchTracks(searchQuery);
-
-                if (searchResults.items && searchResults.items.length > 0) {
-                    tracks.push(searchResults.items[0]);
-                } else {
-                    missingTracks.push({ title: info.title, artist: info.artist, album: '' });
+                if (fileName) {
+                    const parts = fileName.split(' - ');
+                    trackInfo.push({
+                        title: parts.length > 1 ? parts.slice(1).join(' - ') : fileName,
+                        artist: parts.length > 1 ? parts[0] : '',
+                        album: '',
+                    });
                 }
-            } catch (e) {
-                missingTracks.push({ title: info.title, artist: info.artist, album: '' });
             }
         }
     }
 
-    return { tracks, missingTracks };
+    return importTracksFromMetadata(trackInfo, api, onProgress);
 }
 
 /**
