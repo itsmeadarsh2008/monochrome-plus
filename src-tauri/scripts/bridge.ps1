@@ -1,3 +1,7 @@
+param(
+    [string]$ClientId = "1466351059843809282"
+)
+
 $ErrorActionPreference = "SilentlyContinue"
 
 function Get-DiscordPipe {
@@ -50,7 +54,7 @@ function Set-Activity(
         state = if ($state) { $state } else { "Monochrome+" }
         type = 2
         assets = @{
-            large_image = if ($largeImageKey -and $largeImageKey.StartsWith("http")) { $largeImageKey } else { "Monochrome+" }
+            large_image = if ($largeImageKey -and $largeImageKey.StartsWith("http")) { $largeImageKey } else { "monochrome" }
             large_text = if ($largeImageText) { $largeImageText } else { "Monochrome+" }
         }
     }
@@ -85,7 +89,7 @@ function Clear-Activity($pipe, [int]$pid) {
     Send-Packet $pipe 1 $payload
 }
 
-$clientId = "1462186088184549661"
+$clientId = $ClientId
 $pidToUse = [System.Diagnostics.Process]::GetCurrentProcess().Id
 
 $pipe = Get-DiscordPipe

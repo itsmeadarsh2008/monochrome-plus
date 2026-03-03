@@ -3,11 +3,13 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::fs;
 use std::io::Write;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 
-const DEFAULT_DISCORD_CLIENT_ID: &str = "1462186088184549661";
+const DEFAULT_DISCORD_CLIENT_ID: &str = "1466351059843809282";
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,18 +53,21 @@ fn write_bridge_script_to_temp(name: &str, content: &str) -> Result<PathBuf, Str
 }
 
 #[cfg(target_os = "windows")]
-fn spawn_discord_bridge(_client_id: &str) -> Result<DiscordBridgeProcess, String> {
+fn spawn_discord_bridge(client_id: &str) -> Result<DiscordBridgeProcess, String> {
     let script_path = write_bridge_script_to_temp("monochrome-discord-bridge.ps1", BRIDGE_PS1)?;
 
-    let mut child = Command::new("powershell")
+    let mut child = Command::new("powershell.exe")
         .arg("-NoProfile")
         .arg("-ExecutionPolicy")
         .arg("Bypass")
         .arg("-File")
         .arg(script_path)
+        .arg("-ClientId")
+        .arg(client_id)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .creation_flags(0x08000000)
         .spawn()
         .map_err(|err| err.to_string())?;
 
@@ -75,13 +80,14 @@ fn spawn_discord_bridge(_client_id: &str) -> Result<DiscordBridgeProcess, String
 }
 
 #[cfg(not(target_os = "windows"))]
-fn spawn_discord_bridge(_client_id: &str) -> Result<DiscordBridgeProcess, String> {
+fn spawn_discord_bridge(client_id: &str) -> Result<DiscordBridgeProcess, String> {
     let script_path = write_bridge_script_to_temp("monochrome-discord-bridge.py", BRIDGE_PY)?;
 
     let mut last_error = None;
     for python in ["python3", "python"] {
         match Command::new(python)
             .arg(&script_path)
+            .arg(client_id)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

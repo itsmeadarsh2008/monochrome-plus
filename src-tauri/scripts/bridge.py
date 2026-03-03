@@ -6,7 +6,7 @@ import os
 import uuid
 import time
 
-CLIENT_ID = "1462186088184549661"
+CLIENT_ID = "1466351059843809282"
 LAST_STATUS = ""
 
 
@@ -107,6 +107,10 @@ def clear_activity(sock, pid):
 
 
 def main():
+    global CLIENT_ID
+    if len(sys.argv) > 1 and sys.argv[1]:
+        CLIENT_ID = sys.argv[1]
+
     ipc_path = get_discord_path()
     if not ipc_path:
         return
