@@ -1,6 +1,6 @@
 // js/desktop/desktop.js
-import { initializeDiscordRPC } from './discord-rpc.js';
 import { checkForDesktopUpdates } from './tauri-updater.js';
+import { initializeDiscordBridge } from './discord-bridge.js';
 import { getCurrentTauriWindow, isTauriRuntime } from './tauri-runtime.js';
 
 const DESKTOP_ZOOM_STORAGE_KEY = 'desktopZoomLevel';
@@ -9,37 +9,6 @@ const MIN_DESKTOP_ZOOM = 0.75;
 const MAX_DESKTOP_ZOOM = 1;
 const DESKTOP_ZOOM_STEP = 0.05;
 const USE_CUSTOM_WINDOW_CHROME = false;
-
-function bootstrapDiscordRPC(player) {
-    if (window.__monochromeDiscordRpcInitialized) return;
-
-    const resolvePlayer = () => player || window.player || window.__monochromePlayer || null;
-    const resolvedPlayer = resolvePlayer();
-    if (resolvedPlayer) {
-        initializeDiscordRPC(resolvedPlayer);
-        window.__monochromeDiscordRpcInitialized = true;
-        return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 30;
-    const retryId = window.setInterval(() => {
-        const readyPlayer = resolvePlayer();
-        attempts += 1;
-
-        if (readyPlayer) {
-            initializeDiscordRPC(readyPlayer);
-            window.__monochromeDiscordRpcInitialized = true;
-            window.clearInterval(retryId);
-            return;
-        }
-
-        if (attempts >= maxAttempts) {
-            window.clearInterval(retryId);
-            console.warn('[Desktop] Discord RPC bootstrap timed out waiting for player.');
-        }
-    }, 500);
-}
 
 function normalizeDesktopZoom(value) {
     const numeric = Number(value);
@@ -310,7 +279,7 @@ export async function initDesktop(player) {
 
     if (isTauri) {
         console.log('[Desktop] Tauri runtime detected.');
-        bootstrapDiscordRPC(player);
+        initializeDiscordBridge(player);
 
         if (USE_CUSTOM_WINDOW_CHROME || window.__MONOCHROME_USE_CUSTOM_CHROME__ === true) {
             await initFramelessWindowChrome();

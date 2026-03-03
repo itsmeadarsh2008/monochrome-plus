@@ -11,6 +11,53 @@ let isDataLoadFailed = false; // Track if data loading has permanently failed
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
 
+const TRACKER_ENDPOINTS = {
+    artistsNdjson: ['/artistgrid-api/artists.ndjson', 'https://sheets.artistgrid.cx/artists.ndjson'],
+    trends: ['/artistgrid-trends', 'https://trends.artistgrid.cx'],
+    trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
+    assetsBase: ['https://assets.artistgrid.cx', '/artistgrid-assets'],
+};
+
+async function fetchWithFallback(urls, { responseType = 'json', timeoutMs = 9000 } = {}) {
+    let lastError = null;
+
+    for (const rawUrl of urls) {
+        const url = String(rawUrl || '').trim();
+        if (!url) continue;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                lastError = new Error(`HTTP ${response.status} for ${url}`);
+                continue;
+            }
+
+            if (responseType === 'text') {
+                return await response.text();
+            }
+            return await response.json();
+        } catch (error) {
+            clearTimeout(timeoutId);
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('All fallback requests failed');
+}
+
+function getTrackerAssetUrl(fileName) {
+    const safeName = String(fileName || '').trim();
+    if (!safeName) return 'assets/logo.svg';
+
+    const [primaryBase, fallbackBase] = TRACKER_ENDPOINTS.assetsBase;
+    return `${primaryBase}/${safeName}.webp` || `${fallbackBase}/${safeName}.webp`;
+}
+
 // Store all songs for search functionality
 let allSongsCache = new Map(); // sheetId -> {era, songs}
 
@@ -33,9 +80,7 @@ function cleanSongTitle(title) {
 async function loadArtistsPopularity() {
     if (hasLoadAttempted && isDataLoadFailed) return;
     try {
-        const response = await fetch('/artistgrid-trends');
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await fetchWithFallback(TRACKER_ENDPOINTS.trends, { responseType: 'json' });
         if (data.results) {
             data.results.forEach((artist, index) => {
                 // Store popularity score based on visitors and position
@@ -53,9 +98,7 @@ async function loadArtistsData() {
     hasLoadAttempted = true;
 
     try {
-        const response = await fetch('/artistgrid-api/artists.ndjson');
-        if (!response.ok) throw new Error('Network response was not ok');
-        const text = await response.text();
+        const text = await fetchWithFallback(TRACKER_ENDPOINTS.artistsNdjson, { responseType: 'text' });
         artistsData = text
             .trim()
             .split('\n')
@@ -102,9 +145,8 @@ function getSheetId(url) {
 
 async function fetchTrackerData(sheetId) {
     try {
-        const response = await fetch(`/tracker-api/get/${sheetId}`);
-        if (!response.ok) return null;
-        return await response.json();
+        const urls = TRACKER_ENDPOINTS.trackerGet.map((base) => `${base}/${sheetId}`);
+        return await fetchWithFallback(urls, { responseType: 'json' });
     } catch (e) {
         console.error('[Tracker] Failed to fetch tracker data:', e.message || e);
         return null;
@@ -315,7 +357,7 @@ export async function renderTrackerArtistPage(sheetId, container) {
     const downloadBtn = document.getElementById('download-tracker-artist-btn');
 
     const normalizedName = normalizeArtistName(artist.name);
-    imageEl.src = `/artistgrid-assets/${normalizedName}.webp`;
+    imageEl.src = getTrackerAssetUrl(normalizedName);
     imageEl.onerror = function () {
         this.src = 'assets/logo.svg';
     };
@@ -747,7 +789,7 @@ export async function renderUnreleasedPage(container) {
         artistCard.dataset.artistName = artist.name.toLowerCase();
 
         const normalizedName = normalizeArtistName(artist.name);
-        const coverImage = `/artistgrid-assets/${normalizedName}.webp`;
+        const coverImage = getTrackerAssetUrl(normalizedName);
 
         artistCard.innerHTML = `
             <div class="card-image-wrapper">

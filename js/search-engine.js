@@ -1,10 +1,7 @@
 // js/search-engine.js
 // Intelligent Hyper-Fast Search Engine
-// Features: local fuse.js index, query cache, inflight dedup, voice search, history
+// Features: dependency-free local semantic index, query cache, inflight dedup, voice search, history
 
-import Fuse from 'fuse.js';
-
-const CACHE_KEY_PREFIX = 'search-cache-v1:';
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_ENTRIES = 50;
 
@@ -15,42 +12,136 @@ export class SearchEngine {
         this._inflight = new Map();
         /** @type {Map<string, {ts: number, results: any}>} in-memory cache */
         this._cache = new Map();
-        /** @type {Fuse|null} local fuzzy search index */
-        this._fuse = null;
+        /** @type {Array<any>} local track index */
+        this._indexItems = [];
+        /** @type {Array<{item: any, nTitle: string, nArtist: string, nAlbum: string}>} normalized index */
+        this._normalizedIndex = [];
         /** @type {SpeechRecognition|null} voice recognition */
         this._recognition = null;
         this._voiceActive = false;
         this._rebuildDebounce = null;
+        /** @type {Map<string, number>} query history */
+        this._history = new Map();
+    }
+
+    _normalize(value) {
+        return String(value || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[“”„‟«»]/g, '"')
+            .replace(/[’‘‚‛]/g, "'")
+            .replace(/[‐‑‒–—―]/g, '-')
+            .replace(/\s+(feat|featuring|ft)\.?\s+/giu, ' ')
+            .replace(/[()\[\]{}]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    _toHiragana(text) {
+        return text.replace(/[\u30A1-\u30F6]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
+    }
+
+    _toKatakana(text) {
+        return text.replace(/[\u3041-\u3096]/g, (char) => String.fromCharCode(char.charCodeAt(0) + 0x60));
+    }
+
+    _expandQueryVariants(query) {
+        const base = this._normalize(query);
+        if (!base) return [];
+
+        const variants = new Set([base]);
+
+        // Kana auto-variant support (Japanese)
+        variants.add(this._toHiragana(base));
+        variants.add(this._toKatakana(base));
+
+        // Width/diacritics folded variant
+        variants.add(base.normalize('NFKD').replace(/\p{M}/gu, ''));
+
+        // Keep CJK as-is but also remove spaces to improve matching over segmented queries
+        variants.add(base.replace(/\s+/g, ''));
+
+        return Array.from(variants).filter(Boolean);
+    }
+
+    _tokenSet(value) {
+        return new Set(this._normalize(value).split(/\s+/).filter(Boolean));
+    }
+
+    _jaccard(a, b) {
+        if (!a.size || !b.size) return 0;
+        let common = 0;
+        for (const token of a) {
+            if (b.has(token)) common += 1;
+        }
+        return common / (a.size + b.size - common);
+    }
+
+    _fieldScore(queryVariants, haystack) {
+        const normalizedHaystack = this._normalize(haystack);
+        if (!normalizedHaystack) return 0;
+
+        let best = 0;
+        const haystackTokens = this._tokenSet(normalizedHaystack);
+
+        for (const q of queryVariants) {
+            if (!q) continue;
+            if (normalizedHaystack === q) return 1;
+            if (normalizedHaystack.includes(q) || q.includes(normalizedHaystack)) {
+                best = Math.max(best, 0.92);
+            }
+
+            const score = this._jaccard(this._tokenSet(q), haystackTokens);
+            best = Math.max(best, score);
+        }
+
+        return best;
     }
 
     // ─── Local Index ──────────────────────────────────────────────────────────
 
     /**
-     * Rebuild the fuse.js index from the local favorites + recently played items.
+     * Rebuild dependency-free local index from favorites/recent items.
      * @param {Array} items
      */
     buildLocalIndex(items) {
-        this._fuse = new Fuse(items, {
-            keys: [
-                { name: 'title', weight: 0.5 },
-                { name: 'artist.name', weight: 0.3 },
-                { name: 'album.title', weight: 0.2 },
-            ],
-            threshold: 0.35,
-            includeScore: true,
-            minMatchCharLength: 2,
-            ignoreLocation: true,
-        });
+        this._indexItems = Array.isArray(items) ? items : [];
+        this._normalizedIndex = this._indexItems.map((item) => ({
+            item,
+            nTitle: this._normalize(item?.title),
+            nArtist: this._normalize(item?.artist?.name || item?.artists?.[0]?.name),
+            nAlbum: this._normalize(item?.album?.title),
+        }));
     }
 
     /**
-     * Perform an instant local search against the fuse.js index.
+     * Perform instant local semantic search over normalized index.
+     * Includes lightweight multilingual query variant expansion.
      * @param {string} query
      * @returns {Array} up to 8 results
      */
     searchLocal(query) {
-        if (!this._fuse || !query) return [];
-        return this._fuse.search(query, { limit: 8 }).map((r) => ({ ...r.item, _score: r.score, _source: 'local' }));
+        if (!query || this._normalizedIndex.length === 0) return [];
+
+        const variants = this._expandQueryVariants(query);
+        if (!variants.length) return [];
+
+        const scored = [];
+        for (const entry of this._normalizedIndex) {
+            const titleScore = this._fieldScore(variants, entry.nTitle);
+            const artistScore = this._fieldScore(variants, entry.nArtist);
+            const albumScore = this._fieldScore(variants, entry.nAlbum);
+
+            const score = titleScore * 0.62 + artistScore * 0.28 + albumScore * 0.1;
+            if (score < 0.22) continue;
+
+            scored.push({ item: entry.item, score });
+        }
+
+        return scored
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8)
+            .map((r) => ({ ...r.item, _score: 1 - r.score, _source: 'local' }));
     }
 
     // ─── Remote Search with Cache + Dedup ────────────────────────────────────
@@ -76,9 +167,23 @@ export class SearchEngine {
         }
 
         // 3. Remote fetch
-        const promise = this.api
-            .search(query)
-            .then((results) => {
+        const variants = this._expandQueryVariants(query);
+        const remoteQuery = variants[0] || query;
+
+        const promise = Promise.allSettled([
+            this.api.searchTracks(remoteQuery, { limit: 8 }),
+            this.api.searchAlbums(remoteQuery, { limit: 6 }),
+            this.api.searchArtists(remoteQuery, { limit: 6 }),
+            this.api.searchPlaylists(remoteQuery, { limit: 6 }),
+        ])
+            .then((responses) => {
+                const [tracksRes, albumsRes, artistsRes, playlistsRes] = responses;
+                const results = {
+                    tracks: tracksRes.status === 'fulfilled' ? tracksRes.value?.items || [] : [],
+                    albums: albumsRes.status === 'fulfilled' ? albumsRes.value?.items || [] : [],
+                    artists: artistsRes.status === 'fulfilled' ? artistsRes.value?.items || [] : [],
+                    playlists: playlistsRes.status === 'fulfilled' ? playlistsRes.value?.items || [] : [],
+                };
                 this._cache.set(normalized, { ts: Date.now(), results });
                 this._inflight.delete(normalized);
                 // Evict oldest entries if cache is too large
@@ -95,6 +200,20 @@ export class SearchEngine {
 
         this._inflight.set(normalized, promise);
         return promise;
+    }
+
+    addToHistory(query) {
+        const key = this._normalize(query);
+        if (!key) return;
+        const next = (this._history.get(key) || 0) + 1;
+        this._history.set(key, next);
+    }
+
+    getHistory(limit = 8) {
+        return Array.from(this._history.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, limit)
+            .map(([q]) => q);
     }
 
     /**

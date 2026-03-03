@@ -1,7 +1,7 @@
 {
     "name": "monochrome-plus",
     "type": "module",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
     "main": "sw.js",
     "scripts": {
@@ -66,11 +66,9 @@
         "cookie-session": "^2.1.0",
         "dashjs": "^5.1.1",
         "dotenv": "^16.4.5",
-        "fuse.js": "^7.1.0",
         "howler": "^2.2.4",
         "jose": "^6.0.11",
         "node-appwrite": "^14.1.0",
-        "pocketbase": "^0.26.5",
-        "tauri-plugin-drpc": "^1.0.3"
+        "pocketbase": "^0.26.5"
     }
 }

@@ -793,6 +793,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     const appleGuide = document.getElementById('csv-apple-guide');
     const ytmGuide = document.getElementById('csv-ytm-guide');
     const inputContainer = document.getElementById('csv-input-container');
+    const strictImportModeBtn = document.getElementById('import-mode-strict-btn');
+    const lenientImportModeBtn = document.getElementById('import-mode-lenient-btn');
+
+    const setImportMode = (mode = 'strict') => {
+        const isLenient = mode === 'lenient';
+        if (strictImportModeBtn) {
+            strictImportModeBtn.classList.toggle('btn-primary', !isLenient);
+            strictImportModeBtn.classList.toggle('btn-secondary', isLenient);
+            strictImportModeBtn.style.opacity = isLenient ? '0.8' : '1';
+        }
+        if (lenientImportModeBtn) {
+            lenientImportModeBtn.classList.toggle('btn-primary', isLenient);
+            lenientImportModeBtn.classList.toggle('btn-secondary', !isLenient);
+            lenientImportModeBtn.style.opacity = isLenient ? '1' : '0.8';
+        }
+    };
+
+    const getImportOptions = () => ({
+        matchMode: lenientImportModeBtn?.classList.contains('btn-primary') ? 'lenient' : 'strict',
+    });
+
+    strictImportModeBtn?.addEventListener('click', () => setImportMode('strict'));
+    lenientImportModeBtn?.addEventListener('click', () => setImportMode('lenient'));
+    setImportMode('strict');
 
     if (spotifyBtn && appleBtn && ytmBtn) {
         spotifyBtn.addEventListener('click', () => {
@@ -1192,6 +1216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('xspf-file-input').value = '';
             document.getElementById('xml-file-input').value = '';
             document.getElementById('m3u-file-input').value = '';
+            setImportMode('strict');
 
             // Reset import tabs to CSV
             document.querySelectorAll('.import-tab').forEach((tab) => {
@@ -1425,6 +1450,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const totalTracks = songs.length;
                             progressTotal.textContent = totalTracks.toString();
 
+                            const importOptions = getImportOptions();
                             const result = await parseCSV(csvText, api, (progress) => {
                                 const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1432,7 +1458,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1482,6 +1508,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                             const jspfText = await file.text();
 
+                            const importOptions = getImportOptions();
                             const result = await parseJSPF(jspfText, api, (progress) => {
                                 const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1490,7 +1517,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1564,6 +1591,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const totalTracks = Math.max(0, lines.length - 1);
                             progressTotal.textContent = totalTracks.toString();
 
+                            const importOptions = getImportOptions();
                             const result = await parseCSV(csvText, api, (progress) => {
                                 const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1571,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1620,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                             const xspfText = await file.text();
 
+                            const importOptions = getImportOptions();
                             const result = await parseXSPF(xspfText, api, (progress) => {
                                 const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1628,7 +1657,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1677,6 +1706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                             const xmlText = await file.text();
 
+                            const importOptions = getImportOptions();
                             const result = await parseXML(xmlText, api, (progress) => {
                                 const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1685,7 +1715,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1734,6 +1764,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                             const m3uText = await file.text();
 
+                            const importOptions = getImportOptions();
                             const result = await parseM3U(m3uText, api, (progress) => {
                                 const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
                                 progressFill.style.width = `${Math.min(percentage, 100)}%`;
@@ -1742,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 currentTrackElement.textContent = progress.currentTrack;
                                 if (currentArtistElement)
                                     currentArtistElement.textContent = progress.currentArtist || '';
-                            });
+                            }, importOptions);
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -2364,71 +2395,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Setup clear button for search bar
     ui.setupSearchClearButton(searchInput);
 
-    // Suggestions/history dropdown
-    let suggestionsEl = document.getElementById('search-suggestions');
-    if (!suggestionsEl) {
-        suggestionsEl = document.createElement('ul');
-        suggestionsEl.id = 'search-suggestions';
-        suggestionsEl.className = 'search-suggestions-list';
-        searchInput.closest('.search-bar')?.appendChild(suggestionsEl);
-    }
-
-    const hideSuggestions = () => {
-        suggestionsEl.style.display = 'none';
-    };
-    const showSuggestions = (items, isHistory = false) => {
-        if (!items || items.length === 0) {
-            hideSuggestions();
-            return;
-        }
-        suggestionsEl.innerHTML = items
-            .map((item) => {
-                const label = typeof item === 'string' ? item : item.title || '';
-                const sub = isHistory
-                    ? '<span class="suggestion-icon">🕐</span>'
-                    : `<span class="suggestion-sub">${item.artist?.name || ''}</span>`;
-                return `<li class="suggestion-item" data-query="${label}">${sub} <span>${label}</span></li>`;
-            })
-            .join('');
-        suggestionsEl.style.display = 'block';
-    };
-
-    suggestionsEl.addEventListener('click', (e) => {
-        const item = e.target.closest('.suggestion-item');
-        if (!item) return;
-        const q = item.dataset.query;
-        searchInput.value = q;
-        searchEngine.addToHistory(q);
-        navigate(`/search/${encodeURIComponent(q)}`);
-        hideSuggestions();
-    });
-
     // Two-phase search: instant local → async remote
     const performSearch = debounce(async (query) => {
         if (!query) return;
+        searchEngine.addToHistory(query);
         navigate(`/search/${encodeURIComponent(query)}`);
     }, 300);
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
         if (query.length < 2) {
-            hideSuggestions();
             return;
         }
-        // Show instant local results as suggestions
-        const local = searchEngine.searchLocal(query);
-        showSuggestions(local.slice(0, 6));
         performSearch(query);
-    });
-
-    searchInput.addEventListener('focus', () => {
-        // Search history removed - suggestions only show for typed queries
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-bar')) {
-            hideSuggestions();
-        }
     });
 
     searchForm.addEventListener('submit', (e) => {
@@ -2436,7 +2415,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const query = searchInput.value.trim();
         if (query) {
             navigate(`/search/${encodeURIComponent(query)}`);
-            hideSuggestions();
             const historyEl = document.getElementById('search-history');
             if (historyEl) historyEl.style.display = 'none';
         }

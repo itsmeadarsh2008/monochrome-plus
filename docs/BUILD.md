@@ -190,18 +190,17 @@ Set these secrets in your repository:
 
 ## Environment Variables
 
-| Variable                             | Description                  | Required     |
-| ------------------------------------ | ---------------------------- | ------------ |
-| `MONOCHROME_DISCORD_APP_ID`          | Discord Rich Presence App ID | No           |
-| `TAURI_SIGNING_PRIVATE_KEY`          | Update signing key           | For releases |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Key password                 | For releases |
+| Variable                             | Description        | Required     |
+| ------------------------------------ | ------------------ | ------------ |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Update signing key | For releases |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Key password       | For releases |
 
 ## File Structure
 
 ```
 src-tauri/
 ├── src/
-│   ├── lib.rs          # Rust backend with Discord RPC
+│   ├── lib.rs          # Rust backend
 │   └── main.rs         # Entry point
 ├── Cargo.toml          # Rust dependencies
 ├── tauri.conf.json     # Tauri configuration

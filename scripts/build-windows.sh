@@ -34,10 +34,6 @@ if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
     echo "Warning: TAURI_SIGNING_PRIVATE_KEY is not set. Updater will not work."
 fi
 
-if [ -z "$MONOCHROME_DISCORD_APP_ID" ]; then
-    echo "Note: MONOCHROME_DISCORD_APP_ID is not set. Using default Discord App ID."
-fi
-
 # Install dependencies if needed
 echo "Installing Node dependencies..."
 if command -v bun &> /dev/null; then

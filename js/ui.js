@@ -86,6 +86,21 @@ function sortTracks(tracks, sortType) {
     }
 }
 
+function getPlaylistTrackCount(playlist = null, tracks = null) {
+    const metadataCount = Number(playlist?.numberOfTracks);
+    const tracksCount = Array.isArray(tracks)
+        ? tracks.length
+        : Array.isArray(playlist?.tracks)
+          ? playlist.tracks.length
+          : 0;
+
+    if (Number.isFinite(metadataCount) && metadataCount > 0) {
+        return Math.max(metadataCount, tracksCount);
+    }
+
+    return tracksCount;
+}
+
 const FALLBACK_RECOMMENDED_ARTISTS = Object.freeze([
     { id: 1003, name: 'Nas' },
     { id: 3654061, name: 'Waka Flocka Flame' },
@@ -666,13 +681,14 @@ export class UIRenderer {
     createPlaylistCardHTML(playlist) {
         const imageId = playlist.squareImage || playlist.image || playlist.uuid;
         const isCompact = cardSettings.isCompactAlbum();
+        const trackCount = getPlaylistTrackCount(playlist);
 
         return this.createBaseCardHTML({
             type: 'playlist',
             id: playlist.uuid,
             href: `/playlist/${playlist.uuid}`,
             title: playlist.title,
-            subtitle: `${playlist.numberOfTracks || 0} tracks`,
+            subtitle: `${trackCount} tracks`,
             imageHTML: `<img src="${this.api.getCoverUrl(imageId)}" alt="${playlist.title}" class="card-image" loading="lazy">`,
             actionButtonsHTML: '',
             isCompact,
@@ -749,6 +765,7 @@ export class UIRenderer {
         }
 
         const isCompact = cardSettings.isCompactAlbum();
+        const trackCount = getPlaylistTrackCount(playlist);
 
         return this.createBaseCardHTML({
             type: 'user-playlist', // Note: data-type logic in base might need adjustment if it uses this for buttons.
@@ -756,7 +773,7 @@ export class UIRenderer {
             id: playlist.id,
             href: `/userplaylist/${playlist.id}`,
             title: escapeHtml(playlist.name),
-            subtitle: `${playlist.tracks ? playlist.tracks.length : playlist.numberOfTracks || 0} tracks`,
+            subtitle: `${trackCount} tracks`,
             imageHTML: imageHTML,
             actionButtonsHTML: `
                 <button class="edit-playlist-btn" data-action="edit-playlist" title="Edit Playlist">
@@ -1262,17 +1279,13 @@ export class UIRenderer {
         const verticalBudget = Math.max(220, mainRect.height - infoHeight - controlsHeight - verticalPaddingReserve);
         const horizontalBudget = Math.max(220, mainRect.width - (isLandscape ? 72 : 32));
 
-        const sizeByWidth = horizontalBudget * (isLandscape ? 0.62 : 0.88);
-        const sizeByHeight = verticalBudget * (isLandscape ? 0.95 : 1.0);
+        const sizeByWidth = horizontalBudget * (isLandscape ? 0.5 : 0.72);
+        const sizeByHeight = verticalBudget * (isLandscape ? 0.72 : 0.78);
         const targetSize = Math.min(sizeByWidth, sizeByHeight);
 
-        // Keep desktop fullscreen from rendering an oversized vinyl disc.
-        const desktopCap = isLandscape && viewportWidth >= 1024 ? 520 : 620;
-        const minSize = Math.max(200, Math.min(viewportWidth, viewportHeight) * (isLandscape ? 0.4 : 0.46));
-        const maxSize = Math.min(
-            desktopCap,
-            Math.min(viewportWidth * (isLandscape ? 0.6 : 0.92), viewportHeight * (isLandscape ? 0.82 : 0.64))
-        );
+        // Keep fullscreen vinyl at a smaller fixed range with a strict max limit.
+        const minSize = isLandscape ? 220 : 210;
+        const maxSize = isLandscape ? 340 : 320;
 
         const finalSize = Math.max(minSize, Math.min(maxSize, targetSize));
         vinylContainer.style.setProperty('--vinyl-disc-size', `${Math.round(finalSize)}px`);
@@ -3986,8 +3999,9 @@ export class UIRenderer {
 
                 const tracks = playlistData.tracks || [];
                 const totalDuration = calculateTotalDuration(tracks);
+                const trackCount = getPlaylistTrackCount(playlistData, tracks);
 
-                metaEl.textContent = `${tracks.length} tracks • ${formatDuration(totalDuration)}`;
+                metaEl.textContent = `${trackCount} tracks • ${formatDuration(totalDuration)}`;
 
                 // Use the new renderPlaylistDescription for Read More functionality
                 this.renderPlaylistDescription(descEl, playlistData.description, 150);
@@ -4139,8 +4153,9 @@ export class UIRenderer {
                 this.adjustTitleFontSize(titleEl, playlist.title);
 
                 const totalDuration = calculateTotalDuration(tracks);
+                const trackCount = getPlaylistTrackCount(playlist, tracks);
 
-                metaEl.textContent = `${playlist.numberOfTracks} tracks • ${formatDuration(totalDuration)}`;
+                metaEl.textContent = `${trackCount} tracks • ${formatDuration(totalDuration)}`;
 
                 // Use the new renderPlaylistDescription for Read More functionality
                 this.renderPlaylistDescription(descEl, playlist.description, 150);

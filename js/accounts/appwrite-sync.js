@@ -161,6 +161,9 @@ const syncManager = {
 
     _mapPublicPlaylistDoc(doc) {
         const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
+        const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
+        const numberOfTracks =
+            Number.isFinite(rawTrackCount) && rawTrackCount > 0 ? Math.max(rawTrackCount, tracks.length) : tracks.length;
         const createdAt = doc?.$createdAt ? Date.parse(doc.$createdAt) : Date.now();
         const updatedAt = doc?.$updatedAt ? Date.parse(doc.$updatedAt) : Date.now();
         return {
@@ -170,7 +173,7 @@ const syncManager = {
             description: doc?.description || '',
             cover: doc?.cover || '',
             tracks,
-            numberOfTracks: tracks.length,
+            numberOfTracks,
             images: this._getPlaylistCoverCollage(tracks),
             createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
             updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
@@ -996,6 +999,9 @@ const syncManager = {
             if (!res.documents.length) return null;
             const doc = res.documents[0];
             const tracks = this._safeArray(doc.tracks, []);
+            const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
+            const numberOfTracks =
+                Number.isFinite(rawTrackCount) && rawTrackCount > 0 ? Math.max(rawTrackCount, tracks.length) : tracks.length;
 
             return {
                 id: doc.id,
@@ -1004,7 +1010,7 @@ const syncManager = {
                 description: doc.description || '',
                 cover: doc.cover || '',
                 tracks,
-                numberOfTracks: tracks.length,
+                numberOfTracks,
                 owner_id: doc.owner_id,
                 isPublic: true,
             };
@@ -1415,9 +1421,20 @@ const syncManager = {
 
                         cloudPlaylists.forEach((playlist) => {
                             const existingPlaylist = existingPublicById.get(playlist.id);
+                            const existingTracks = this._safeArray(existingPlaylist?.tracks, []);
+                            const incomingTracks = this._safeArray(playlist?.tracks, []);
+                            const mergedTracks =
+                                existingTracks.length >= incomingTracks.length ? existingTracks : incomingTracks;
+                            const mergedTrackCount = Math.max(
+                                Number(existingPlaylist?.numberOfTracks) || 0,
+                                Number(playlist?.numberOfTracks) || 0,
+                                mergedTracks.length
+                            );
                             const mergedPlaylist = {
                                 ...(existingPlaylist || {}),
                                 ...playlist,
+                                tracks: mergedTracks,
+                                numberOfTracks: mergedTrackCount,
                                 isPublic: true,
                             };
 

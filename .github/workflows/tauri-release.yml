@@ -121,7 +121,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          MONOCHROME_DISCORD_APP_ID: ${{ secrets.MONOCHROME_DISCORD_APP_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Monochrome+ ${{ github.ref_name }}"
@@ -136,7 +135,6 @@ jobs:
             ### Features
             - High-fidelity music streaming
             - Privacy-respecting audio playback
-            - Discord Rich Presence integration
             - Auto-updater built-in
 
             ### Installation
@@ -146,7 +144,6 @@ jobs:
 
             ### Notes
             - Auto-updates are built-in. The app will check for updates on startup.
-            - Discord Rich Presence requires Discord to be running.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

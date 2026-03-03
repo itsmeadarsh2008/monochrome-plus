@@ -404,6 +404,32 @@
                     </button>
                 </div>
 
+                <div style="
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            gap: 0.75rem;
+                            margin-bottom: 1rem;
+                            padding: 0.65rem 0.75rem;
+                            border: 1px solid var(--border);
+                            border-radius: var(--radius);
+                        ">
+                    <div style="font-size: 0.85rem; opacity: 0.9">
+                        Match Mode
+                    </div>
+                    <div style="display: flex; gap: 0.5rem">
+                        <button type="button" id="import-mode-strict-btn" class="btn-primary"
+                            style="padding: 0.35rem 0.7rem" title="Higher accuracy, fewer wrong matches">
+                            Strict
+                        </button>
+                        <button type="button" id="import-mode-lenient-btn" class="btn-secondary"
+                            style="padding: 0.35rem 0.7rem; opacity: 0.8"
+                            title="More matches, may include ambiguous matches">
+                            Lenient
+                        </button>
+                    </div>
+                </div>
+
                 <div id="csv-import-panel" class="import-panel active">
                     <p style="margin-bottom: 0.5rem; font-size: 0.9rem">Import from CSV</p>
 
@@ -1269,7 +1295,6 @@
                         <input type="search" id="search-input" placeholder="Search for music, people, or profiles..."
                             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
                     </div>
-                    <ul id="search-suggestions" class="search-suggestions-list" style="display: none"></ul>
                 </form>
             </header>
 

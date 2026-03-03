@@ -10,6 +10,35 @@ function getTrackArtists(track) {
 
 const IMPORT_SEARCH_DELAY_MS = 220;
 
+const IMPORT_MATCH_PROFILES = {
+    strict: {
+        minTitleScore: 0.72,
+        minArtistScore: 0.64,
+        minAlbumScore: 0.38,
+        minScoreWithAlbum: 0.77,
+        minScoreNoArtist: 0.73,
+        minScoreWithArtist: 0.69,
+    },
+    lenient: {
+        minTitleScore: 0.62,
+        minArtistScore: 0.5,
+        minAlbumScore: 0.28,
+        minScoreWithAlbum: 0.62,
+        minScoreNoArtist: 0.58,
+        minScoreWithArtist: 0.57,
+    },
+};
+
+function resolveImportOptions(options = {}) {
+    const mode =
+        typeof options === 'string'
+            ? options
+            : options?.mode || options?.matchMode || options?.profile || 'strict';
+    return {
+        mode: mode === 'lenient' ? 'lenient' : 'strict',
+    };
+}
+
 function sanitizeImportValue(value) {
     const withoutControlChars = Array.from(String(value || ''))
         .filter((char) => {
@@ -103,13 +132,60 @@ function buildSearchQueries({ title, artist, album }) {
     return Array.from(new Set(queries));
 }
 
+function splitArtistCandidates(value) {
+    const raw = sanitizeImportValue(value);
+    if (!raw) return [];
+
+    const normalized = raw
+        .replace(/\s+(feat|featuring|ft)\.?\s+/giu, ',')
+        .replace(/\s+(with|x|vs)\s+/giu, ',')
+        .replace(/[;&|/]+/g, ',');
+
+    return Array.from(
+        new Set(
+            normalized
+                .split(',')
+                .map((entry) => sanitizeImportValue(entry))
+                .filter(Boolean)
+        )
+    );
+}
+
+function getPrimaryArtistName(track) {
+    if (Array.isArray(track?.artists) && track.artists.length > 0) {
+        return sanitizeImportValue(track.artists[0]?.name || '');
+    }
+    return sanitizeImportValue(track?.artist?.name || '');
+}
+
 function scoreCandidate(candidate, expected) {
     const candidateTitle = sanitizeImportValue(candidate?.title);
     const candidateArtist = sanitizeImportValue(getTrackArtists(candidate));
+    const candidatePrimaryArtist = getPrimaryArtistName(candidate);
     const candidateAlbum = sanitizeImportValue(candidate?.album?.title);
 
     const titleScore = fieldSimilarity(expected.title, candidateTitle);
-    const artistScore = expected.artist ? fieldSimilarity(expected.artist, candidateArtist) : 0.5;
+    let artistScore = 0.5;
+    if (expected.artist) {
+        const expectedArtists = splitArtistCandidates(expected.artist);
+        const comparisons = [];
+
+        if (candidateArtist) {
+            comparisons.push(
+                ...expectedArtists.map((artist) => fieldSimilarity(artist, candidateArtist)),
+                fieldSimilarity(expected.artist, candidateArtist)
+            );
+        }
+
+        if (candidatePrimaryArtist) {
+            comparisons.push(
+                ...expectedArtists.map((artist) => fieldSimilarity(artist, candidatePrimaryArtist)),
+                fieldSimilarity(expected.artist, candidatePrimaryArtist)
+            );
+        }
+
+        artistScore = comparisons.length ? Math.max(...comparisons) : 0;
+    }
     const albumScore = expected.album ? fieldSimilarity(expected.album, candidateAlbum) : 0.5;
 
     let totalWeight = 0;
@@ -128,15 +204,22 @@ function scoreCandidate(candidate, expected) {
         weighted += albumScore * 0.1;
     }
 
-    return totalWeight > 0 ? weighted / totalWeight : 0;
+    return {
+        score: totalWeight > 0 ? weighted / totalWeight : 0,
+        titleScore,
+        artistScore,
+        albumScore,
+    };
 }
 
-async function findBestTrackMatch(api, metadata) {
+async function findBestTrackMatch(api, metadata, options = {}) {
     const expected = {
         title: sanitizeImportValue(metadata.title),
         artist: sanitizeImportValue(metadata.artist),
         album: sanitizeImportValue(metadata.album),
     };
+    const { mode } = resolveImportOptions(options);
+    const profile = IMPORT_MATCH_PROFILES[mode];
 
     if (!expected.title) return null;
 
@@ -165,20 +248,36 @@ async function findBestTrackMatch(api, metadata) {
     if (!candidates.length) return null;
 
     let best = candidates[0];
-    let bestScore = scoreCandidate(best, expected);
+    let bestMetrics = scoreCandidate(best, expected);
     for (let i = 1; i < candidates.length; i++) {
         const candidate = candidates[i];
-        const score = scoreCandidate(candidate, expected);
-        if (score > bestScore) {
+        const metrics = scoreCandidate(candidate, expected);
+        if (metrics.score > bestMetrics.score) {
             best = candidate;
-            bestScore = score;
+            bestMetrics = metrics;
         }
     }
+
+    const hasExpectedArtist = Boolean(expected.artist);
+    const requiresAlbumCheck = Boolean(expected.album);
+
+    if (bestMetrics.titleScore < profile.minTitleScore) return null;
+    if (hasExpectedArtist && bestMetrics.artistScore < profile.minArtistScore) return null;
+    if (
+        requiresAlbumCheck &&
+        bestMetrics.albumScore < profile.minAlbumScore &&
+        bestMetrics.score < profile.minScoreWithAlbum
+    ) {
+        return null;
+    }
+    if (!hasExpectedArtist && bestMetrics.score < profile.minScoreNoArtist) return null;
+    if (hasExpectedArtist && bestMetrics.score < profile.minScoreWithArtist) return null;
 
     return best;
 }
 
-async function importTracksFromMetadata(entries, api, onProgress) {
+async function importTracksFromMetadata(entries, api, onProgress, options = {}) {
+    const importOptions = resolveImportOptions(options);
     const tracks = [];
     const missingTracks = [];
     const totalTracks = entries.length;
@@ -206,7 +305,7 @@ async function importTracksFromMetadata(entries, api, onProgress) {
 
         await new Promise((resolve) => setTimeout(resolve, IMPORT_SEARCH_DELAY_MS));
 
-        const match = await findBestTrackMatch(api, entry);
+        const match = await findBestTrackMatch(api, entry, importOptions);
         if (match) {
             tracks.push(match);
         } else {
@@ -314,7 +413,7 @@ export function generateXML(playlist, tracks) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<{tracks: Array, missingTracks: Array}>}
  */
-export async function parseCSV(csvText, api, onProgress) {
+export async function parseCSV(csvText, api, onProgress, options = {}) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return { tracks: [], missingTracks: [] };
 
@@ -328,7 +427,12 @@ export async function parseCSV(csvText, api, onProgress) {
             const char = text[i];
 
             if (char === '"') {
-                inQuote = !inQuote;
+                if (inQuote && text[i + 1] === '"') {
+                    current += '"';
+                    i += 1;
+                } else {
+                    inQuote = !inQuote;
+                }
             } else if (char === ',' && !inQuote) {
                 values.push(current);
                 current = '';
@@ -338,11 +442,10 @@ export async function parseCSV(csvText, api, onProgress) {
         }
         values.push(current);
 
-        // Clean up quotes: remove surrounding quotes and unescape double quotes if any
-        return values.map((v) => v.trim().replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+        return values.map((v) => v.trim());
     };
 
-    const headers = parseLine(lines[0]);
+    const headers = parseLine(lines[0]).map((h) => h.replace(/^\uFEFF/, ''));
     const rows = lines.slice(1);
 
     const trackEntries = [];
@@ -393,7 +496,7 @@ export async function parseCSV(csvText, api, onProgress) {
         }
     }
 
-    return importTracksFromMetadata(trackEntries, api, onProgress);
+    return importTracksFromMetadata(trackEntries, api, onProgress, options);
 }
 
 /**
@@ -403,7 +506,7 @@ export async function parseCSV(csvText, api, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<{tracks: Array, missingTracks: Array}>}
  */
-export async function parseJSPF(jspfText, api, onProgress) {
+export async function parseJSPF(jspfText, api, onProgress, options = {}) {
     try {
         const jspfData = JSON.parse(jspfText);
 
@@ -428,7 +531,7 @@ export async function parseJSPF(jspfText, api, onProgress) {
             }
         }
 
-        const result = await importTracksFromMetadata(trackEntries, api, onProgress);
+        const result = await importTracksFromMetadata(trackEntries, api, onProgress, options);
         return { ...result, jspfData };
     } catch (error) {
         throw new Error('Failed to parse JSPF: ' + error.message);
@@ -442,7 +545,7 @@ export async function parseJSPF(jspfText, api, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<{tracks: Array, missingTracks: Array}>}
  */
-export async function parseXSPF(xspfText, api, onProgress) {
+export async function parseXSPF(xspfText, api, onProgress, options = {}) {
     // Validate input to prevent potential XXE attacks
     if (!xspfText || typeof xspfText !== 'string' || xspfText.length > 10 * 1024 * 1024) {
         throw new Error('Invalid XSPF content');
@@ -473,7 +576,7 @@ export async function parseXSPF(xspfText, api, onProgress) {
         }
     }
 
-    return importTracksFromMetadata(trackEntries, api, onProgress);
+    return importTracksFromMetadata(trackEntries, api, onProgress, options);
 }
 
 /**
@@ -483,7 +586,7 @@ export async function parseXSPF(xspfText, api, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<{tracks: Array, missingTracks: Array}>}
  */
-export async function parseXML(xmlText, api, onProgress) {
+export async function parseXML(xmlText, api, onProgress, options = {}) {
     // Validate input to prevent potential XXE attacks
     if (!xmlText || typeof xmlText !== 'string' || xmlText.length > 10 * 1024 * 1024) {
         throw new Error('Invalid XML content');
@@ -531,7 +634,7 @@ export async function parseXML(xmlText, api, onProgress) {
         }
     }
 
-    return importTracksFromMetadata(trackEntries, api, onProgress);
+    return importTracksFromMetadata(trackEntries, api, onProgress, options);
 }
 
 /**
@@ -541,7 +644,7 @@ export async function parseXML(xmlText, api, onProgress) {
  * @param {Function} onProgress - Progress callback
  * @returns {Promise<{tracks: Array, missingTracks: Array}>}
  */
-export async function parseM3U(m3uText, api, onProgress) {
+export async function parseM3U(m3uText, api, onProgress, options = {}) {
     const lines = m3uText.trim().split('\n');
 
     const trackInfo = [];
@@ -587,7 +690,7 @@ export async function parseM3U(m3uText, api, onProgress) {
         }
     }
 
-    return importTracksFromMetadata(trackInfo, api, onProgress);
+    return importTracksFromMetadata(trackInfo, api, onProgress, options);
 }
 
 /**

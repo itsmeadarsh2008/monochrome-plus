@@ -528,7 +528,7 @@ checksum = "d38f2da7a0a2c4ccf0065be06397cc26a81f4e528be095826eee9d4adbb8c60f"
 dependencies = [
  "byteorder",
  "fnv",
- "uuid 1.21.0",
+ "uuid",
 ]
 
 [[package]]
@@ -2228,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "monochrome-plus"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "log",
@@ -2237,7 +2237,6 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
- "tauri-plugin-drpc",
  "tauri-plugin-log",
  "tauri-plugin-notification",
  "tauri-plugin-process",
@@ -3398,7 +3397,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.21.0",
+ "uuid",
 ]
 
 [[package]]
@@ -3410,19 +3409,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "rpcdiscord"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71aa9a2097dc0176805e24debcb5d3ea5a17b796cd1d28e76b29f78fb49d7d5d"
-dependencies = [
- "serde",
- "serde_derive",
- "serde_json",
- "serde_repr",
- "uuid 0.8.2",
 ]
 
 [[package]]
@@ -3572,7 +3558,7 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
- "uuid 1.21.0",
+ "uuid",
 ]
 
 [[package]]
@@ -4265,7 +4251,7 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "url",
- "uuid 1.21.0",
+ "uuid",
  "walkdir",
 ]
 
@@ -4298,22 +4284,6 @@ dependencies = [
  "tauri-utils",
  "toml 0.9.12+spec-1.1.0",
  "walkdir",
-]
-
-[[package]]
-name = "tauri-plugin-drpc"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b291669b7dbc05471fba380eeecf31e3f733ae6013aaa5216a43ca376027e5a"
-dependencies = [
- "log",
- "rpcdiscord",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]
@@ -4507,7 +4477,7 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "url",
  "urlpattern",
- "uuid 1.21.0",
+ "uuid",
  "walkdir",
 ]
 
@@ -4658,9 +4628,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.49.0"
+version = "1.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
+checksum = "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d"
 dependencies = [
  "bytes",
  "libc",
@@ -5023,15 +4993,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "uuid"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
-dependencies = [
- "getrandom 0.2.17",
-]
 
 [[package]]
 name = "uuid"
@@ -6028,7 +5989,7 @@ dependencies = [
  "serde_repr",
  "tracing",
  "uds_windows",
- "uuid 1.21.0",
+ "uuid",
  "windows-sys 0.61.2",
  "winnow 0.7.14",
  "zbus_macros",
