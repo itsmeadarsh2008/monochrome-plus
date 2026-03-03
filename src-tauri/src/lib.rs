@@ -1,6 +1,6 @@
 use discord_presence::models::ActivityType;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-use discord_presence::{Client, DiscordError, Event};
+use discord_presence::{Client, DiscordError};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::sync::Mutex;
@@ -8,6 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 const DEFAULT_DISCORD_CLIENT_ID: &str = "1466351059843809282";
+const RPC_START_ATTEMPTS: usize = 6;
+const RPC_START_SLEEP_MS: u64 = 80;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +41,7 @@ fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
 }
 
 fn set_idle_activity(client: &mut Client) -> Result<(), String> {
-    for _ in 0..20 {
+    for _ in 0..RPC_START_ATTEMPTS {
         match client.set_activity(|activity| {
             activity
                 .activity_type(ActivityType::Listening)
@@ -53,20 +55,13 @@ fn set_idle_activity(client: &mut Client) -> Result<(), String> {
         }) {
             Ok(_) => return Ok(()),
             Err(DiscordError::NotStarted) => {
-                thread::sleep(Duration::from_millis(120));
+                thread::sleep(Duration::from_millis(RPC_START_SLEEP_MS));
             }
             Err(err) => return Err(err.to_string()),
         }
     }
 
-    Err("Discord RPC did not become ready in time".to_string())
-}
-
-fn wait_for_rpc_ready(client: &mut Client) -> Result<(), String> {
-    match client.block_until_event(Event::Ready) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(format!("Discord RPC did not become ready: {err}")),
-    }
+    Err("Discord RPC not ready (Discord may be closed)".to_string())
 }
 
 fn percent_encode_component(input: &str) -> String {
@@ -188,8 +183,13 @@ fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
 
     let mut client = Client::new(desired_client_id);
     client.start();
-    wait_for_rpc_ready(&mut client)?;
-    set_idle_activity(&mut client)?;
+
+    if let Err(error) = set_idle_activity(&mut client) {
+        let _ = client.clear_activity();
+        let _ = client.shutdown();
+        eprintln!("[Discord RPC] Startup skipped: {error}");
+        return Ok(false);
+    }
 
     *guard = Some(DiscordRpc {
         client,

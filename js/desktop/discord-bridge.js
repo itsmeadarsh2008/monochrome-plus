@@ -10,19 +10,55 @@ const QUALITY_LABELS = {
     LOW: 'Low',
 };
 
+const RPC_START_TIMEOUT_MS = 1500;
+
 function toUnixSecondsFromNow(msFromNow = 0) {
     return Math.floor((Date.now() + msFromNow) / 1000);
+}
+
+function buildTidalCoverUrl(coverId, size = 320) {
+    if (typeof coverId !== 'string') return null;
+    const normalized = coverId.trim().replace(/-/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!normalized) return null;
+    return `https://resources.tidal.com/images/${normalized}/${size}x${size}.jpg`;
+}
+
+async function invokeWithTimeout(command, payload, timeoutMs = RPC_START_TIMEOUT_MS) {
+    let timeoutId = null;
+    const timeoutPromise = new Promise((resolve) => {
+        timeoutId = window.setTimeout(() => resolve(false), timeoutMs);
+    });
+
+    try {
+        const result = await Promise.race([invokeTauri(command, payload), timeoutPromise]);
+        return result;
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }
 }
 
 function resolveTrackCoverUrl(player, track) {
     if (!track) return null;
 
-    const directUrl = track.cover || track.image || track.artwork || track.thumbnail || track.album?.image;
+    const directUrl =
+        track.cover ||
+        track.image ||
+        track.artwork ||
+        track.thumbnail ||
+        track.album?.image ||
+        track.album?.coverUrl;
     if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
         return directUrl;
     }
 
     const coverId = track.album?.cover || track.cover;
+    const tidalCover = buildTidalCoverUrl(coverId, 320);
+    if (tidalCover) {
+        return tidalCover;
+    }
+
     if (!coverId || typeof player?.api?.getCoverUrl !== 'function') {
         return null;
     }
@@ -187,8 +223,11 @@ export function initializeDiscordBridge(player) {
         if (!isTauri) return;
 
         try {
-            const started = await invokeTauri('discord_bridge_start', { clientId: DISCORD_CLIENT_ID });
+            const started = await invokeWithTimeout('discord_bridge_start', { clientId: DISCORD_CLIENT_ID });
             bridgeActive = !!started;
+            if (!bridgeActive) {
+                console.info('[DiscordBridge] Discord RPC inactive (Discord not running or timed out).');
+            }
         } catch (error) {
             bridgeActive = false;
             console.warn('[DiscordBridge] start failed:', error);

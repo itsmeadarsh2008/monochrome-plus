@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.7] - 2026-03-03
+
+### Fixed
+
+- Prevented app startup hangs when Discord is closed by making RPC startup fail fast and non-blocking.
+- Added startup timeout handling in desktop Discord bridge so RPC initialization does not block app UI.
+- Updated Discord RPC cover handling to build TIDAL image URLs from album cover IDs (e.g. `/images/.../320x320.jpg`) for reliable artwork rendering.
+
 ## [2.0.6] - 2026-03-03
 
 ### Fixed
