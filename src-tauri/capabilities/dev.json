@@ -1,0 +1,12 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "dev",
+    "description": "Development-only capability that allows IPC access from the local dev server.",
+    "remote": {
+        "urls": ["http://localhost:1420", "http://127.0.0.1:1420"]
+    },
+    "windows": ["main"],
+    "permissions": [
+        "core:default"
+    ]
+}
