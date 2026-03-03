@@ -2730,6 +2730,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const headerAccountDropdown = document.getElementById('header-account-dropdown');
     const headerAccountImg = document.getElementById('header-account-img');
     const headerAccountIcon = document.getElementById('header-account-icon');
+    const headerFriendsNavBtn = document.getElementById('header-nav-friends');
     const sidebarAccountName = document.getElementById('sidebar-account-name');
     const sidebarAccountSubtitle = document.getElementById('sidebar-account-subtitle');
     const sidebarProfileNav = document.getElementById('sidebar-nav-profile');
@@ -2832,6 +2833,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const friendsNav = document.getElementById('sidebar-nav-friends');
             if (user) {
                 if (friendsNav) friendsNav.style.display = '';
+                if (headerFriendsNavBtn) headerFriendsNavBtn.style.display = 'inline-flex';
                 if (sidebarProfileNav) sidebarProfileNav.style.display = '';
                 headerAccountBtn.classList.add('is-authenticated');
                 let data = null;
@@ -2864,6 +2866,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } else {
                 if (friendsNav) friendsNav.style.display = 'none';
+                if (headerFriendsNavBtn) headerFriendsNavBtn.style.display = 'none';
                 if (sidebarProfileNav) sidebarProfileNav.style.display = 'none';
                 headerAccountBtn.classList.remove('is-authenticated');
                 if (sidebarAccountName) sidebarAccountName.textContent = 'Sign in';

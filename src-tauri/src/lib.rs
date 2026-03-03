@@ -68,6 +68,38 @@ fn wait_for_rpc_ready(client: &mut Client) -> Result<(), String> {
     }
 }
 
+fn percent_encode_component(input: &str) -> String {
+    let mut encoded = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        let is_unreserved = matches!(byte,
+            b'A'..=b'Z' |
+            b'a'..=b'z' |
+            b'0'..=b'9' |
+            b'-' | b'_' | b'.' | b'~'
+        );
+
+        if is_unreserved {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push_str(&format!("{:02X}", byte));
+        }
+    }
+    encoded
+}
+
+fn normalize_discord_large_image_key(value: &str) -> String {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        return format!("mp:external/{}", percent_encode_component(value));
+    }
+
+    if value.trim().is_empty() {
+        return "monochrome".to_string();
+    }
+
+    value.to_string()
+}
+
 #[tauri::command]
 fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
     let desired_client_id = parse_client_id(client_id)?;
@@ -132,12 +164,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
-    let safe_large_image =
-        if large_image_key.starts_with("http://") || large_image_key.starts_with("https://") {
-            "monochrome".to_string()
-        } else {
-            large_image_key.clone()
-        };
+    let safe_large_image = normalize_discord_large_image_key(&large_image_key);
 
     for _ in 0..20 {
         let details_value = details.clone();

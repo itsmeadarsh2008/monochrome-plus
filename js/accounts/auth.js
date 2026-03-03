@@ -7,14 +7,65 @@ const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
 const APPWRITE_PROJECT_ID = 'monochrome-plus';
 const APPWRITE_OAUTH_FALLBACK_ENDPOINTS = ['https://cloud.appwrite.io/v1', 'https://sgp.cloud.appwrite.io/v1'];
 const DEFAULT_OAUTH_REDIRECT_URL = 'http://localhost';
+const DESKTOP_OAUTH_REDIRECT_URLS = ['http://127.0.0.1', 'http://localhost'];
 
-function getOAuthRedirectUrl() {
-    const origin = typeof window !== 'undefined' ? window.location?.origin || '' : '';
-    if (/^https?:\/\//i.test(origin)) {
-        return origin;
+function isDesktopTauriContext() {
+    if (typeof window === 'undefined') return false;
+
+    if (window.__MONOCHROME_FORCE_TAURI__ === true) return true;
+
+    if (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__) {
+        return true;
     }
 
-    return DEFAULT_OAUTH_REDIRECT_URL;
+    return /\btauri\b/i.test(navigator.userAgent || '');
+}
+
+function getOAuthRedirectUrls() {
+    if (isDesktopTauriContext()) {
+        return DESKTOP_OAUTH_REDIRECT_URLS;
+    }
+
+    const origin = typeof window !== 'undefined' ? window.location?.origin || '' : '';
+    if (/^https?:\/\//i.test(origin)) {
+        return [origin];
+    }
+
+    return [DEFAULT_OAUTH_REDIRECT_URL];
+}
+
+async function createOAuthSessionWithFallback(provider, redirectUrls) {
+    const endpointCandidates = [null, ...APPWRITE_OAUTH_FALLBACK_ENDPOINTS];
+    const redirectCandidates = Array.isArray(redirectUrls) ? redirectUrls : [redirectUrls];
+
+    for (const redirectUrl of redirectCandidates) {
+        for (const endpoint of endpointCandidates) {
+            try {
+                if (!endpoint) {
+                    await account.createOAuth2Session(provider, redirectUrl, redirectUrl);
+                    console.log(
+                        `[Appwrite] ${provider} login initiated (primary endpoint, redirect: ${redirectUrl})...`
+                    );
+                    return;
+                }
+
+                const fallbackClient = new Client().setEndpoint(endpoint).setProject(APPWRITE_PROJECT_ID);
+                const fallbackAccount = new Account(fallbackClient);
+                await fallbackAccount.createOAuth2Session(provider, redirectUrl, redirectUrl);
+                console.log(
+                    `[Appwrite] ${provider} login initiated (fallback endpoint: ${endpoint}, redirect: ${redirectUrl})...`
+                );
+                return;
+            } catch (error) {
+                console.warn(
+                    `[Appwrite] ${provider} OAuth endpoint failed${endpoint ? ` (${endpoint})` : ''} with redirect ${redirectUrl}:`,
+                    error?.message || error
+                );
+            }
+        }
+    }
+
+    throw new Error(`${provider} OAuth is temporarily unavailable. Please retry in a moment or use Email sign-in.`);
 }
 
 export class AuthManager {
@@ -82,10 +133,9 @@ export class AuthManager {
 
     async signInWithGoogle() {
         try {
-            const redirectUrl = getOAuthRedirectUrl();
+            const redirectUrls = getOAuthRedirectUrls();
             localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'google', ts: Date.now() }));
-            await account.createOAuth2Session('google', redirectUrl, redirectUrl);
-            console.log('[Appwrite] Google login initiated...');
+            await createOAuthSessionWithFallback('google', redirectUrls);
         } catch (error) {
             console.error('[Appwrite] ✗ Google login failed:', error);
             localStorage.removeItem(OAUTH_ATTEMPT_KEY);
@@ -94,34 +144,10 @@ export class AuthManager {
     }
 
     async signInWithDiscord() {
-        const redirectUrl = getOAuthRedirectUrl();
-        const endpointCandidates = [null, ...APPWRITE_OAUTH_FALLBACK_ENDPOINTS];
-
         try {
+            const redirectUrls = getOAuthRedirectUrls();
             localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'discord', ts: Date.now() }));
-
-            for (const endpoint of endpointCandidates) {
-                try {
-                    if (!endpoint) {
-                        await account.createOAuth2Session('discord', redirectUrl, redirectUrl);
-                        console.log('[Appwrite] Discord login initiated (primary endpoint)...');
-                        return;
-                    }
-
-                    const fallbackClient = new Client().setEndpoint(endpoint).setProject(APPWRITE_PROJECT_ID);
-                    const fallbackAccount = new Account(fallbackClient);
-                    await fallbackAccount.createOAuth2Session('discord', redirectUrl, redirectUrl);
-                    console.log(`[Appwrite] Discord login initiated (fallback endpoint: ${endpoint})...`);
-                    return;
-                } catch (error) {
-                    console.warn(
-                        `[Appwrite] Discord OAuth endpoint failed${endpoint ? ` (${endpoint})` : ''}:`,
-                        error?.message || error
-                    );
-                }
-            }
-
-            throw new Error('Discord OAuth is temporarily unavailable. Please retry in a moment or use Email/Google.');
+            await createOAuthSessionWithFallback('discord', redirectUrls);
         } catch (error) {
             console.error('[Appwrite] ✗ Discord login failed after fallback attempts:', error);
             localStorage.removeItem(OAUTH_ATTEMPT_KEY);
