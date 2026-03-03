@@ -465,9 +465,10 @@ export class MusicDatabase {
                 const transaction = db.transaction(storeName, 'readwrite');
                 const store = transaction.objectStore(storeName);
 
-                // force clear on first sync
-                console.log(`Clearing ${storeName} to Make Sure Everythings Good`);
-                store.clear();
+                if (clear) {
+                    console.log(`Clearing ${storeName} before import`);
+                    store.clear();
+                }
 
                 itemsArray.forEach((item) => {
                     if (item.id && typeof item.id === 'string' && !isNaN(item.id)) {
@@ -748,12 +749,21 @@ export class MusicDatabase {
         return new Promise((resolve, reject) => {
             const transaction = db.transaction('user_playlists', 'readwrite'); // Changed to readwrite for lazy migration
             const store = transaction.objectStore('user_playlists');
-            const index = store.index('createdAt');
-            const request = index.getAll();
+            const request = store.getAll();
             request.onsuccess = () => {
-                const playlists = request.result.reverse(); // Newest first
+                const playlists = request.result;
                 const processedPlaylists = playlists.map((playlist) => {
                     let needsUpdate = false;
+
+                    if (typeof playlist.createdAt === 'undefined') {
+                        playlist.createdAt = playlist.updatedAt || Date.now();
+                        needsUpdate = true;
+                    }
+
+                    if (typeof playlist.updatedAt === 'undefined') {
+                        playlist.updatedAt = playlist.createdAt || Date.now();
+                        needsUpdate = true;
+                    }
 
                     // Lazy migration for numberOfTracks
                     if (typeof playlist.numberOfTracks === 'undefined') {
@@ -785,6 +795,7 @@ export class MusicDatabase {
                     const { tracks, ...minified } = playlist;
                     return minified;
                 });
+                processedPlaylists.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                 resolve(processedPlaylists);
             };
             request.onerror = () => reject(request.error);

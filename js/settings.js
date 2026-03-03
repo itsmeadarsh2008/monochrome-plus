@@ -44,6 +44,7 @@ import { audioContextManager, EQ_PRESETS } from './audio-context.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
 import { db } from './db.js';
 import { authManager } from './accounts/auth.js';
+import { syncManager } from './accounts/appwrite-sync.js';
 import { performanceMode } from './performance-mode.js';
 import { animationManager } from './animation-utils.js';
 import { responsiveManager } from './responsive-utils.js';
@@ -72,7 +73,231 @@ export function initializeSettings(scrobbler, player, api, ui) {
     const authSwitchLabel = document.getElementById('auth-switch-label');
     const authSwitchModeBtn = document.getElementById('auth-switch-mode-btn');
     const forgotPasswordBtn = document.getElementById('email-password-reset-btn');
+    const accountStatsPanel = document.getElementById('account-stats-panel');
+    const statMonthTime = document.getElementById('account-stat-month-time');
+    const statMonthPlays = document.getElementById('account-stat-month-plays');
+    const statMonthArtists = document.getElementById('account-stat-month-artists');
+    const topArtistsList = document.getElementById('account-top-artists-list');
+    const topTracksList = document.getElementById('account-top-tracks-list');
     let authMode = 'signup';
+    let accountStatsRenderToken = 0;
+
+    const formatDuration = (totalSeconds = 0) => {
+        const seconds = Math.max(0, Math.floor(totalSeconds || 0));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+        return `${minutes}m`;
+    };
+
+    const escapeHtml = (value) =>
+        String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+
+    const durationSecondsFromTrack = (track) => {
+        if (!track || typeof track !== 'object') return 0;
+        const raw = Number(track.duration ?? track.durationSec ?? track.length ?? 0);
+        if (!Number.isFinite(raw) || raw <= 0) return 0;
+        return raw > 10000 ? raw / 1000 : raw;
+    };
+
+    const normalizeArtists = (track) => {
+        if (!track || typeof track !== 'object') return [];
+
+        if (Array.isArray(track.artists)) {
+            return track.artists
+                .map((artist) => ({
+                    id: artist?.id ?? null,
+                    name: String(artist?.name || artist || '').trim(),
+                }))
+                .filter((artist) => artist.name);
+        }
+
+        const single = String(track.artist?.name || track.artist || '').trim();
+        return single ? [{ id: track.artist?.id ?? null, name: single }] : [];
+    };
+
+    const trackKeyOf = (track) => {
+        if (!track || typeof track !== 'object') return null;
+        if (track.id != null) return `id:${track.id}`;
+        if (track.trackId != null) return `trackId:${track.trackId}`;
+        if (track.isrc) return `isrc:${String(track.isrc).toLowerCase()}`;
+
+        const title = String(track.title || '').trim().toLowerCase();
+        const artists = normalizeArtists(track)
+            .map((artist) => artist.name.toLowerCase())
+            .join(',');
+        if (!title && !artists) return null;
+        return `meta:${title}::${artists}`;
+    };
+
+    const renderStatsList = (listEl, items, type) => {
+        if (!listEl) return;
+        if (!items.length) {
+            listEl.innerHTML = '<li class="account-stats-empty">No listening data this month yet.</li>';
+            return;
+        }
+
+        listEl.innerHTML = items
+            .map((item) => {
+                if (type === 'artist') {
+                    return `
+                        <li class="account-stats-item">
+                            <div class="account-stats-item-main">
+                                <span class="account-stats-item-title">${escapeHtml(item.name)}</span>
+                                <span class="account-stats-item-sub">${item.plays} play${item.plays === 1 ? '' : 's'}</span>
+                            </div>
+                            <span class="account-stats-item-meta">${formatDuration(item.seconds)}</span>
+                        </li>
+                    `;
+                }
+
+                return `
+                    <li class="account-stats-item">
+                        <div class="account-stats-item-main">
+                            <span class="account-stats-item-title">${escapeHtml(item.title)}</span>
+                            <span class="account-stats-item-sub">${escapeHtml(item.artistText || 'Unknown Artist')} • ${item.plays} play${item.plays === 1 ? '' : 's'}</span>
+                        </div>
+                        <span class="account-stats-item-meta">${formatDuration(item.seconds)}</span>
+                    </li>
+                `;
+            })
+            .join('');
+    };
+
+    const computeMonthlyStats = (history) => {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+
+        const monthTracks = (Array.isArray(history) ? history : []).filter((entry) => {
+            const timestamp = Number(entry?.timestamp || 0);
+            return Number.isFinite(timestamp) && timestamp >= monthStart && timestamp < monthEnd;
+        });
+
+        const topArtists = new Map();
+        const topTracks = new Map();
+        let totalSeconds = 0;
+
+        monthTracks.forEach((track) => {
+            const seconds = durationSecondsFromTrack(track);
+            totalSeconds += seconds;
+
+            const artists = normalizeArtists(track);
+            artists.forEach((artist) => {
+                const key = artist.id ? `id:${artist.id}` : `name:${artist.name.toLowerCase()}`;
+                const existing = topArtists.get(key) || { name: artist.name, plays: 0, seconds: 0 };
+                existing.plays += 1;
+                existing.seconds += seconds;
+                topArtists.set(key, existing);
+            });
+
+            const trackKey = trackKeyOf(track);
+            if (!trackKey) return;
+
+            const existingTrack = topTracks.get(trackKey) || {
+                title: track.title || 'Unknown Track',
+                artistText:
+                    artists.map((artist) => artist.name).join(', ') ||
+                    String(track.artist?.name || track.artist || '').trim() ||
+                    'Unknown Artist',
+                plays: 0,
+                seconds: 0,
+            };
+            existingTrack.plays += 1;
+            existingTrack.seconds += seconds;
+            topTracks.set(trackKey, existingTrack);
+        });
+
+        const toSorted = (items) =>
+            Array.from(items.values())
+                .sort((a, b) => {
+                    if (b.plays !== a.plays) return b.plays - a.plays;
+                    return b.seconds - a.seconds;
+                })
+                .slice(0, 5);
+
+        return {
+            monthKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+            monthTracks,
+            totalPlays: monthTracks.length,
+            totalSeconds,
+            uniqueArtists: topArtists.size,
+            topArtists: toSorted(topArtists),
+            topTracks: toSorted(topTracks),
+        };
+    };
+
+    const currentMonthKey = () => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    const normalizeCloudStats = (summary) => {
+        if (!summary || typeof summary !== 'object') return null;
+        return {
+            monthKey: String(summary.monthKey || ''),
+            totalPlays: Math.max(0, Number(summary.totalPlays || 0)),
+            totalSeconds: Math.max(0, Number(summary.totalSeconds || 0)),
+            uniqueArtists: Math.max(0, Number(summary.uniqueArtists || 0)),
+            topArtists: Array.isArray(summary.topArtists) ? summary.topArtists : [],
+            topTracks: Array.isArray(summary.topTracks) ? summary.topTracks : [],
+        };
+    };
+
+    const renderAccountStats = async (user) => {
+        if (!accountStatsPanel) return;
+
+        const token = ++accountStatsRenderToken;
+
+        if (!user) {
+            accountStatsPanel.style.display = 'none';
+            return;
+        }
+
+        accountStatsPanel.style.display = 'grid';
+
+        let history = [];
+        let cloudData = null;
+        try {
+            cloudData = await syncManager.getUserData();
+            const cloudHistory = Array.isArray(cloudData?.history) ? cloudData.history : [];
+            history = cloudHistory.length > 0 ? cloudHistory : await db.getHistory();
+        } catch {
+            history = await db.getHistory().catch(() => []);
+        }
+
+        if (token !== accountStatsRenderToken) return;
+
+        const cloudStats = normalizeCloudStats(cloudData?.profile?.statistics_summary);
+        const monthKey = currentMonthKey();
+        let stats = null;
+
+        if (cloudStats && cloudStats.monthKey === monthKey) {
+            stats = cloudStats;
+        } else {
+            stats = computeMonthlyStats(history);
+            if (authManager.user) {
+                syncManager.syncListeningStats(history).catch((error) => {
+                    console.warn('[Account Stats] Failed to backfill cloud stats:', error);
+                });
+            }
+        }
+
+        if (statMonthTime) statMonthTime.textContent = formatDuration(stats.totalSeconds);
+        if (statMonthPlays) statMonthPlays.textContent = String(stats.totalPlays || stats.monthTracks?.length || 0);
+        if (statMonthArtists) statMonthArtists.textContent = String(stats.uniqueArtists || 0);
+
+        renderStatsList(topArtistsList, stats.topArtists, 'artist');
+        renderStatsList(topTracksList, stats.topTracks, 'track');
+    };
 
     const setFeedback = (message, type = 'info') => {
         if (!feedback) return;
@@ -165,6 +390,21 @@ export function initializeSettings(scrobbler, player, api, ui) {
     });
 
     renderAuthMode();
+    renderAccountStats(authManager.user).catch((error) => {
+        console.warn('[Account Stats] Initial render failed:', error);
+    });
+
+    authManager.onAuthStateChanged((user) => {
+        renderAccountStats(user).catch((error) => {
+            console.warn('[Account Stats] Auth-state render failed:', error);
+        });
+    });
+
+    window.addEventListener('history-changed', () => {
+        renderAccountStats(authManager.user).catch((error) => {
+            console.warn('[Account Stats] History refresh failed:', error);
+        });
+    });
 
     document.getElementById('email-password-reset-btn')?.addEventListener('click', async () => {
         const email = document.getElementById('auth-email-password-email')?.value?.trim();
@@ -2670,6 +2910,46 @@ export function initializeSettings(scrobbler, player, api, ui) {
         discScratchToggle.addEventListener('change', (e) => {
             rotatingCoverSettings.setDiscScratchEnabled(e.target.checked);
             window.dispatchEvent(new CustomEvent('disc-scratch-changed', { detail: { enabled: e.target.checked } }));
+        });
+    }
+
+    const musicDiscSizeSlider = document.getElementById('music-disc-size-slider');
+    const musicDiscSizeInput = document.getElementById('music-disc-size-input');
+    const musicDiscSizeReset = document.getElementById('music-disc-size-reset');
+
+    const updateMusicDiscSizeControls = (size) => {
+        const normalized = rotatingCoverSettings.setDiscSize(size);
+        if (musicDiscSizeSlider) musicDiscSizeSlider.value = String(normalized);
+        if (musicDiscSizeInput) musicDiscSizeInput.value = String(normalized);
+        window.dispatchEvent(new CustomEvent('disc-size-changed', { detail: { size: normalized } }));
+        return normalized;
+    };
+
+    if (musicDiscSizeSlider && musicDiscSizeInput) {
+        const savedDiscSize = rotatingCoverSettings.getDiscSize();
+        musicDiscSizeSlider.value = String(savedDiscSize);
+        musicDiscSizeInput.value = String(savedDiscSize);
+
+        musicDiscSizeSlider.addEventListener('input', () => {
+            updateMusicDiscSizeControls(musicDiscSizeSlider.value);
+        });
+
+        musicDiscSizeInput.addEventListener('change', () => {
+            updateMusicDiscSizeControls(musicDiscSizeInput.value);
+        });
+
+        musicDiscSizeInput.addEventListener('input', () => {
+            const value = Number.parseInt(musicDiscSizeInput.value, 10);
+            if (!Number.isFinite(value)) return;
+            if (value < rotatingCoverSettings.MIN_DISC_SIZE || value > rotatingCoverSettings.MAX_DISC_SIZE) return;
+            musicDiscSizeSlider.value = String(value);
+            window.dispatchEvent(new CustomEvent('disc-size-changed', { detail: { size: value } }));
+        });
+    }
+
+    if (musicDiscSizeReset) {
+        musicDiscSizeReset.addEventListener('click', () => {
+            updateMusicDiscSizeControls(rotatingCoverSettings.DEFAULT_DISC_SIZE);
         });
     }
 

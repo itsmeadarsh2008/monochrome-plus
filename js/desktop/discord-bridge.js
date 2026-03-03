@@ -34,6 +34,20 @@ function resolveTrackCoverUrl(player, track) {
     }
 }
 
+function encodeBase64Utf8(value) {
+    if (!value || typeof value !== 'string') return null;
+    try {
+        const bytes = new TextEncoder().encode(value);
+        let binary = '';
+        for (const byte of bytes) {
+            binary += String.fromCharCode(byte);
+        }
+        return btoa(binary);
+    } catch {
+        return null;
+    }
+}
+
 function buildPayload(player, track, isPaused = false) {
     const title = getTrackTitle(track) || 'Unknown Track';
     const artists = getTrackArtists(track) || 'Unknown Artist';
@@ -45,6 +59,7 @@ function buildPayload(player, track, isPaused = false) {
         details: title,
         state: `${artists} • ${qualityLabel}`,
         largeImageKey: coverUrl || 'monochrome',
+        largeImageBase64: encodeBase64Utf8(coverUrl),
         largeImageText: `Listening on Monochrome+`,
         smallImageKey: isPaused ? 'paused_icon' : 'playing_icon',
         smallImageText: isPaused ? 'Paused' : 'Playing',

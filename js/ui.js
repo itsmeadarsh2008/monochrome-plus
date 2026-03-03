@@ -154,6 +154,10 @@ export class UIRenderer {
             this.refreshFullscreenDiscScrubbing();
         });
 
+        window.addEventListener('disc-size-changed', () => {
+            this.refreshFullscreenDiscScrubbing();
+        });
+
         window.addEventListener('hifi-visual-settings-changed', () => {
             this.updateGlobalTheme();
             this.reapplyCurrentPageBackground();
@@ -4857,13 +4861,43 @@ export class UIRenderer {
 
         try {
             const history = await db.getHistory();
+            const collapsedHistory = [];
+            let previousSignature = null;
+
+            const buildTrackSignature = (item) => {
+                if (!item || typeof item !== 'object') return null;
+
+                if (item.id != null) return `id:${item.id}`;
+                if (item.trackId != null) return `trackId:${item.trackId}`;
+                if (item.isrc) return `isrc:${String(item.isrc).toLowerCase()}`;
+
+                const title = String(item.title || '').trim().toLowerCase();
+                const artists = Array.isArray(item.artists)
+                    ? item.artists
+                          .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                          .filter(Boolean)
+                          .join(',')
+                    : String(item.artist?.name || item.artist || '').trim().toLowerCase();
+
+                if (!title && !artists) return null;
+                return `meta:${title}::${artists}`;
+            };
+
+            history.forEach((item) => {
+                const signature = buildTrackSignature(item);
+                if (signature && signature === previousSignature) {
+                    return;
+                }
+                collapsedHistory.push(item);
+                previousSignature = signature;
+            });
 
             // Show/hide clear button based on whether there's history
             if (clearBtn) {
-                clearBtn.style.display = history.length > 0 ? 'flex' : 'none';
+                clearBtn.style.display = collapsedHistory.length > 0 ? 'flex' : 'none';
             }
 
-            if (history.length === 0) {
+            if (collapsedHistory.length === 0) {
                 container.innerHTML = createPlaceholder("You haven't played any tracks yet.");
                 return;
             }
@@ -4873,7 +4907,7 @@ export class UIRenderer {
             const today = new Date().setHours(0, 0, 0, 0);
             const yesterday = new Date(today - 86400000).setHours(0, 0, 0, 0);
 
-            history.forEach((item) => {
+            collapsedHistory.forEach((item) => {
                 const date = new Date(item.timestamp);
                 const dayStart = new Date(date).setHours(0, 0, 0, 0);
 

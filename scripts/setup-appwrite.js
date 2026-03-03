@@ -1,4 +1,4 @@
-import { Client, Databases, Storage, Permission, Role } from 'node-appwrite';
+import { Client, Databases, Storage, Permission, Query, Role } from 'node-appwrite';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -11,20 +11,32 @@ const client = new Client()
 const databases = new Databases(client);
 const storage = new Storage(client);
 
-const APPLY_COLLECTION_UPDATES =
-    process.argv.includes('--apply-collection-updates') ||
-    process.env.APPWRITE_SETUP_APPLY_COLLECTION_UPDATES === 'true';
+const SYNC_COLLECTION_METADATA =
+    process.argv.includes('--sync-collection-metadata') ||
+    process.env.APPWRITE_SETUP_SYNC_COLLECTION_METADATA === 'true';
 
 const DATABASE_ID = 'monochrome-plus';
 const DATABASE_NAME = 'Monochrome+';
+const USERS_COLLECTION_ID = 'DB_users';
+
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function isNotFoundError(error) {
     return error?.code === 404 || /not.?found/i.test(String(error?.type || ''));
 }
 
+function hasLegacyMetadataFlag() {
+    return (
+        process.argv.includes('--apply-collection-updates') ||
+        process.env.APPWRITE_SETUP_APPLY_COLLECTION_UPDATES === 'true'
+    );
+}
+
 const collections = [
     {
-        id: 'DB_users',
+        id: USERS_COLLECTION_ID,
         name: 'Users',
         permissions: [
             Permission.read(Role.any()),
@@ -49,6 +61,7 @@ const collections = [
             { key: 'user_playlists', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'user_folders', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'favorite_albums', type: 'string', size: 65535, required: false, x_large: true },
+            { key: 'statistics_summary', type: 'string', size: 65535, required: false, x_large: true },
             { key: 'privacy', type: 'string', size: 2000, required: false },
         ],
         indexes: [
@@ -174,12 +187,64 @@ const collections = [
     },
 ];
 
+async function backfillUserStatisticsSummary() {
+    console.log('📊 Ensuring existing user documents have "statistics_summary"...');
+
+    let cursor = null;
+    let scanned = 0;
+    let patched = 0;
+
+    while (true) {
+        const queries = [Query.limit(100)];
+        if (cursor) {
+            queries.push(Query.cursorAfter(cursor));
+        }
+
+        const response = await databases.listDocuments(DATABASE_ID, USERS_COLLECTION_ID, queries);
+        const documents = response.documents || [];
+        if (documents.length === 0) {
+            break;
+        }
+
+        for (const doc of documents) {
+            scanned += 1;
+
+            const raw = doc.statistics_summary;
+            const hasSummary =
+                (typeof raw === 'string' && raw.trim().length > 0) ||
+                (raw && typeof raw === 'object' && Object.keys(raw).length > 0);
+
+            if (hasSummary) {
+                continue;
+            }
+
+            await databases.updateDocument(DATABASE_ID, USERS_COLLECTION_ID, doc.$id, {
+                statistics_summary: '{}',
+            });
+            patched += 1;
+            await wait(120);
+        }
+
+        cursor = documents[documents.length - 1].$id;
+        if (documents.length < 100) {
+            break;
+        }
+    }
+
+    console.log(`✅ Stats backfill complete. Scanned: ${scanned}, Patched: ${patched}`);
+}
+
 async function setup() {
     try {
         console.log('🚀 Starting Appwrite Setup...');
         console.log('🛡️ Non-destructive mode enabled (existing data is never deleted).');
-        if (APPLY_COLLECTION_UPDATES) {
-            console.log('⚠️ Collection metadata updates are enabled (--apply-collection-updates).');
+        if (hasLegacyMetadataFlag()) {
+            console.log(
+                '⚠️ Ignoring deprecated metadata update flag (--apply-collection-updates). Use --sync-collection-metadata to explicitly update existing collection metadata.'
+            );
+        }
+        if (SYNC_COLLECTION_METADATA) {
+            console.log('⚠️ Collection metadata sync is enabled (--sync-collection-metadata).');
         }
 
         // 1. Create Database if not exists
@@ -202,7 +267,7 @@ async function setup() {
                 collectionExists = true;
                 console.log(`✅ Collection "${col.id}" already exists.`);
 
-                if (APPLY_COLLECTION_UPDATES) {
+                if (SYNC_COLLECTION_METADATA) {
                     console.log(`   Updating collection metadata for "${col.id}"...`);
                     await databases.updateCollection(
                         DATABASE_ID,
@@ -213,7 +278,7 @@ async function setup() {
                     );
                 } else {
                     console.log(
-                        `   Skipping collection metadata update for "${col.id}" (safe mode). Use --apply-collection-updates to enable.`
+                        `   Skipping collection metadata update for "${col.id}" (safe mode). Use --sync-collection-metadata to enable.`
                     );
                 }
             } catch (e) {
@@ -315,12 +380,24 @@ async function setup() {
             }
         }
 
+        try {
+            await backfillUserStatisticsSummary();
+        } catch (migrationError) {
+            console.warn(
+                '⚠️ Could not complete statistics_summary backfill. Setup is still usable; rerun to retry migration.',
+                migrationError?.message || migrationError
+            );
+        }
+
         // 5. Create Storage Bucket
         const BUCKET_ID = 'profile-images';
         try {
             await storage.getBucket(BUCKET_ID);
             console.log(`✅ Bucket "${BUCKET_ID}" already exists.`);
-        } catch {
+        } catch (error) {
+            if (!isNotFoundError(error)) {
+                throw error;
+            }
             console.log(`Creating bucket "${BUCKET_ID}"...`);
             await storage.createBucket(
                 BUCKET_ID,

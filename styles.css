@@ -8197,6 +8197,154 @@ img[src=''] {
     display: none !important;
 }
 
+.account-stats-panel {
+    width: 100%;
+    max-width: 560px;
+    margin: 0.85rem auto 0;
+    padding: 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
+    border-radius: 16px;
+    background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--card) 94%, var(--background) 6%),
+        color-mix(in srgb, var(--card) 88%, var(--background) 12%)
+    );
+    box-shadow:
+        0 12px 30px rgb(5 5 10 / 18%),
+        0 0 0 1px color-mix(in srgb, var(--primary) 10%, transparent);
+    display: grid;
+    gap: 0.8rem;
+}
+
+.account-stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.account-stats-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: color-mix(in srgb, var(--foreground) 92%, white 8%);
+}
+
+.account-stats-header p {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--muted-foreground);
+}
+
+.account-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.account-stat-card {
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 12px;
+    padding: 0.65rem;
+    background: color-mix(in srgb, var(--muted) 28%, transparent);
+    display: grid;
+    gap: 0.22rem;
+}
+
+.account-stat-label {
+    font-size: 0.74rem;
+    color: var(--muted-foreground);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.account-stat-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--foreground);
+}
+
+.account-stats-lists {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.account-stats-list-card {
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--muted) 24%, transparent);
+    padding: 0.65rem;
+}
+
+.account-stats-list-card h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.88rem;
+    color: color-mix(in srgb, var(--foreground) 90%, white 10%);
+}
+
+.account-stats-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.38rem;
+}
+
+.account-stats-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.42rem 0.5rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--background) 40%, transparent);
+}
+
+.account-stats-item-main {
+    min-width: 0;
+    display: grid;
+    gap: 0.06rem;
+}
+
+.account-stats-item-title {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: var(--foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-stats-item-sub {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-stats-item-meta {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    flex-shrink: 0;
+}
+
+.account-stats-empty {
+    font-size: 0.8rem;
+    color: var(--muted-foreground);
+    padding: 0.35rem 0.45rem;
+}
+
+@media (max-width: 720px) {
+    .account-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .account-stats-lists {
+        grid-template-columns: 1fr;
+    }
+}
+
 body.auth-locked .sidebar,
 body.auth-locked .main-header,
 body.auth-locked .now-playing-bar {

@@ -649,6 +649,10 @@ export const coverArtSizeSettings = {
 export const rotatingCoverSettings = {
     STORAGE_KEY: 'rotating-cover-enabled',
     DISC_SCRATCH_KEY: 'rotating-cover-disc-scratch-enabled',
+    DISC_SIZE_KEY: 'rotating-cover-disc-size',
+    DEFAULT_DISC_SIZE: 280,
+    MIN_DISC_SIZE: 220,
+    MAX_DISC_SIZE: 420,
 
     isEnabled() {
         try {
@@ -673,6 +677,25 @@ export const rotatingCoverSettings = {
 
     setDiscScratchEnabled(enabled) {
         localStorage.setItem(this.DISC_SCRATCH_KEY, enabled ? 'true' : 'false');
+    },
+
+    getDiscSize() {
+        try {
+            const parsed = Number.parseInt(localStorage.getItem(this.DISC_SIZE_KEY) || '', 10);
+            if (!Number.isFinite(parsed)) return this.DEFAULT_DISC_SIZE;
+            return Math.max(this.MIN_DISC_SIZE, Math.min(this.MAX_DISC_SIZE, parsed));
+        } catch {
+            return this.DEFAULT_DISC_SIZE;
+        }
+    },
+
+    setDiscSize(size) {
+        const parsed = Number.parseInt(String(size), 10);
+        const normalized = Number.isFinite(parsed)
+            ? Math.max(this.MIN_DISC_SIZE, Math.min(this.MAX_DISC_SIZE, parsed))
+            : this.DEFAULT_DISC_SIZE;
+        localStorage.setItem(this.DISC_SIZE_KEY, String(normalized));
+        return normalized;
     },
 };
 

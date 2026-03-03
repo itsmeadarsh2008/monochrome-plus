@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.6] - 2026-03-03
+
+### Fixed
+
+- Prevented periodic sync from overwriting cloud playlist/folder metadata with empty local state.
+- Prevented automatic deletion of cloud public playlists when local playlist metadata is empty.
+- Added protective merge behavior so existing cloud playlist metadata is preserved until local metadata exists.
+
 ## [2.0.5] - 2026-03-03
 
 ### Fixed

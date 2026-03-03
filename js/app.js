@@ -2585,6 +2585,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     };
 
+    const applyMusicDiscSize = () => {
+        const discSize = rotatingCoverSettings.getDiscSize();
+        document.documentElement.style.setProperty('--vinyl-disc-size', `${discSize}px`);
+    };
+
     const syncFullscreenDiscRotation = () => {
         const vinylContainer = document.getElementById('vinyl-disc-container');
         if (!vinylContainer) return;
@@ -2614,10 +2619,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         syncFullscreenDiscRotation();
     });
 
+    applyMusicDiscSize();
+
     // Listen for rotating cover setting changes
     window.addEventListener('rotating-cover-changed', () => {
         syncNowPlayingCoverRotation();
         syncFullscreenDiscRotation();
+    });
+
+    window.addEventListener('disc-size-changed', (event) => {
+        const size = Number.parseInt(String(event?.detail?.size ?? ''), 10);
+        const discSize = Number.isFinite(size) ? rotatingCoverSettings.setDiscSize(size) : rotatingCoverSettings.getDiscSize();
+        document.documentElement.style.setProperty('--vinyl-disc-size', `${discSize}px`);
     });
 
     // PWA Update Logic

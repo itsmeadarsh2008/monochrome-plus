@@ -113,6 +113,7 @@ const syncManager = {
             ...record,
             privacy: this._safeObject(record.privacy, DEFAULT_PRIVACY),
             user_playlists: this._safeObject(record.user_playlists, {}),
+            statistics_summary: this._safeObject(record.statistics_summary, {}),
             favorite_albums: this._normalizeFavoriteAlbums(record.favorite_albums),
         };
     },
@@ -142,8 +143,151 @@ const syncManager = {
         if (!nextRecord) return false;
         if (!previousRecord) return true;
 
-        const keys = ['library', 'history', 'user_playlists', 'user_folders', 'favorite_albums'];
+        const keys = ['library', 'history', 'user_playlists', 'user_folders', 'favorite_albums', 'statistics_summary'];
         return keys.some((key) => String(previousRecord[key] ?? '') !== String(nextRecord[key] ?? ''));
+    },
+
+    _getCurrentMonthKey() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    },
+
+    _historyDurationSeconds(track) {
+        if (!track || typeof track !== 'object') return 0;
+        const raw = Number(track.duration ?? track.durationSec ?? track.length ?? 0);
+        if (!Number.isFinite(raw) || raw <= 0) return 0;
+        return raw > 10000 ? raw / 1000 : raw;
+    },
+
+    _historyArtists(track) {
+        if (!track || typeof track !== 'object') return [];
+
+        if (Array.isArray(track.artists)) {
+            return track.artists
+                .map((artist) => ({
+                    id: artist?.id ?? null,
+                    name: String(artist?.name || artist || '').trim(),
+                }))
+                .filter((artist) => artist.name);
+        }
+
+        const single = String(track.artist?.name || track.artist || '').trim();
+        return single ? [{ id: track.artist?.id ?? null, name: single }] : [];
+    },
+
+    _historyTrackKey(track, artists = []) {
+        if (!track || typeof track !== 'object') return null;
+        if (track.id != null) return `id:${track.id}`;
+        if (track.trackId != null) return `trackId:${track.trackId}`;
+        if (track.isrc) return `isrc:${String(track.isrc).toLowerCase()}`;
+
+        const title = String(track.title || '').trim().toLowerCase();
+        const artistKey = artists.map((artist) => artist.name.toLowerCase()).join(',');
+        if (!title && !artistKey) return null;
+        return `meta:${title}::${artistKey}`;
+    },
+
+    _buildStatisticsSummary(history = []) {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+
+        const monthTracks = (Array.isArray(history) ? history : []).filter((entry) => {
+            const timestamp = Number(entry?.timestamp || 0);
+            return Number.isFinite(timestamp) && timestamp >= monthStart && timestamp < monthEnd;
+        });
+
+        const topArtists = new Map();
+        const topTracks = new Map();
+        let totalSeconds = 0;
+
+        monthTracks.forEach((track) => {
+            const seconds = this._historyDurationSeconds(track);
+            totalSeconds += seconds;
+
+            const artists = this._historyArtists(track);
+            artists.forEach((artist) => {
+                const key = artist.id ? `id:${artist.id}` : `name:${artist.name.toLowerCase()}`;
+                const existing = topArtists.get(key) || { name: artist.name, plays: 0, seconds: 0 };
+                existing.plays += 1;
+                existing.seconds += seconds;
+                topArtists.set(key, existing);
+            });
+
+            const trackKey = this._historyTrackKey(track, artists);
+            if (!trackKey) return;
+
+            const existingTrack = topTracks.get(trackKey) || {
+                title: track.title || 'Unknown Track',
+                artistText:
+                    artists.map((artist) => artist.name).join(', ') ||
+                    String(track.artist?.name || track.artist || '').trim() ||
+                    'Unknown Artist',
+                plays: 0,
+                seconds: 0,
+            };
+            existingTrack.plays += 1;
+            existingTrack.seconds += seconds;
+            topTracks.set(trackKey, existingTrack);
+        });
+
+        const toSorted = (items) =>
+            Array.from(items.values())
+                .sort((a, b) => {
+                    if (b.plays !== a.plays) return b.plays - a.plays;
+                    return b.seconds - a.seconds;
+                })
+                .slice(0, 5);
+
+        return {
+            monthKey: this._getCurrentMonthKey(),
+            totalSeconds: Math.max(0, Math.round(totalSeconds)),
+            totalPlays: monthTracks.length,
+            uniqueArtists: topArtists.size,
+            topArtists: toSorted(topArtists),
+            topTracks: toSorted(topTracks),
+            updatedAt: Date.now(),
+        };
+    },
+
+    async syncListeningStats(historyOverride = null) {
+        if (!authManager.user) return null;
+
+        try {
+            const record = await this._getUserRecord();
+            if (!record) return null;
+
+            const history = Array.isArray(historyOverride) ? historyOverride : this._safeArray(record.history, []);
+            const summary = this._buildStatisticsSummary(history);
+            const existing = this._safeObject(record.statistics_summary, {});
+
+            const currentSignature = JSON.stringify({
+                monthKey: summary.monthKey,
+                totalSeconds: summary.totalSeconds,
+                totalPlays: summary.totalPlays,
+                uniqueArtists: summary.uniqueArtists,
+                topArtists: summary.topArtists,
+                topTracks: summary.topTracks,
+            });
+            const existingSignature = JSON.stringify({
+                monthKey: existing.monthKey,
+                totalSeconds: Number(existing.totalSeconds || 0),
+                totalPlays: Number(existing.totalPlays || 0),
+                uniqueArtists: Number(existing.uniqueArtists || 0),
+                topArtists: Array.isArray(existing.topArtists) ? existing.topArtists : [],
+                topTracks: Array.isArray(existing.topTracks) ? existing.topTracks : [],
+            });
+
+            if (currentSignature === existingSignature) {
+                return summary;
+            }
+
+            await this._updateUserJSON(null, 'statistics_summary', summary);
+            return summary;
+        } catch (error) {
+            console.warn('[Appwrite Sync] Failed to sync listening statistics:', error);
+            return null;
+        }
     },
 
     _getPlaylistCoverCollage(tracks = []) {
@@ -411,6 +555,7 @@ const syncManager = {
                         avatar_url: user.prefs?.avatar || '',
                         privacy: JSON.stringify(DEFAULT_PRIVACY),
                         favorite_albums: '[]',
+                        statistics_summary: '{}',
                     }),
                 { label: 'create user record' }
             );
@@ -485,6 +630,7 @@ const syncManager = {
             privacy: this._safeObject(record.privacy, DEFAULT_PRIVACY),
             lastfm_username: record.lastfm_username,
             favorite_albums: this._normalizeFavoriteAlbums(record.favorite_albums),
+            statistics_summary: this._safeObject(record.statistics_summary, {}),
         };
 
         return { library, history, userPlaylists, userFolders, profile };
@@ -575,6 +721,7 @@ const syncManager = {
                 user_playlists: '{}',
                 user_folders: '{}',
                 favorite_albums: '[]',
+                statistics_summary: '{}',
                 status: '',
             });
             this._userRecordCache = updated;
@@ -763,6 +910,7 @@ const syncManager = {
 
             const truncatedHistory = this._truncateHistoryToFit(nextHistory.slice(0, MAX_HISTORY_ITEMS));
             await this._updateUserJSON(null, 'history', truncatedHistory);
+            await this.syncListeningStats(truncatedHistory);
             window.dispatchEvent(new CustomEvent('history-changed'));
         } catch (error) {
             console.warn('[Appwrite Sync] Failed to sync history item:', error);
@@ -1594,7 +1742,6 @@ const syncManager = {
                 if (!cloudData) return false;
 
                 const cloudLibrary = cloudData.library || {};
-                const cloudUserPlaylists = Object.values(cloudData.userPlaylists || {});
                 const cloudUserFolders = Object.values(cloudData.userFolders || {});
                 const didImport = await database.importData(
                     {
@@ -1604,7 +1751,7 @@ const syncManager = {
                         favorites_playlists: Object.values(cloudLibrary.playlists || {}),
                         favorites_mixes: Object.values(cloudLibrary.mixes || {}),
                         history_tracks: cloudData.history || [],
-                        user_playlists: cloudUserPlaylists,
+                        user_playlists: undefined,
                         user_folders: cloudUserFolders,
                     },
                     false
@@ -1885,13 +2032,21 @@ const syncManager = {
                         return minified;
                     })
                 );
+                const statisticsSummary = this._buildStatisticsSummary(history);
                 const playlists = localData.user_playlists || [];
                 const folders = localData.user_folders || [];
+                const existingCloudPlaylistMetadata = this._safeObject(record.user_playlists, {});
+                const existingCloudFolderMetadata = this._safeObject(record.user_folders, {});
+                const hasLocalPlaylistMetadata = playlists.length > 0;
+                const hasCloudPlaylistMetadata = Object.keys(existingCloudPlaylistMetadata).length > 0;
+                const shouldProtectCloudPlaylists = !hasLocalPlaylistMetadata && hasCloudPlaylistMetadata;
 
                 const publicPlaylists = {};
                 const publicPlaylistIds = new Set();
                 const publicPlaylistDocuments = [];
-                const cloudPlaylistMetadata = {};
+                const cloudPlaylistMetadata = shouldProtectCloudPlaylists
+                    ? { ...existingCloudPlaylistMetadata }
+                    : {};
                 for (const playlist of playlists) {
                     if (!playlist?.id) continue;
 
@@ -1920,7 +2075,10 @@ const syncManager = {
                     };
                 }
 
-                const cloudFolderMetadata = {};
+                const hasLocalFolderMetadata = folders.length > 0;
+                const hasCloudFolderMetadata = Object.keys(existingCloudFolderMetadata).length > 0;
+                const shouldProtectCloudFolders = !hasLocalFolderMetadata && hasCloudFolderMetadata;
+                const cloudFolderMetadata = shouldProtectCloudFolders ? { ...existingCloudFolderMetadata } : {};
                 for (const folder of folders) {
                     if (!folder?.id) continue;
                     cloudFolderMetadata[folder.id] = {
@@ -1939,24 +2097,29 @@ const syncManager = {
                             history: JSON.stringify(history),
                             user_playlists: JSON.stringify(cloudPlaylistMetadata),
                             user_folders: JSON.stringify(cloudFolderMetadata),
+                            statistics_summary: JSON.stringify(statisticsSummary),
                         }),
                     { label: 'periodic sync' }
                 );
 
                 try {
-                    const existingCloudPlaylists = await databases.listDocuments(
-                        DATABASE_ID,
-                        PUBLIC_PLAYLISTS_COLLECTION,
-                        [Query.equal('owner_id', authManager.user.$id), Query.limit(300)]
-                    );
+                    if (hasLocalPlaylistMetadata) {
+                        const existingCloudPlaylists = await databases.listDocuments(
+                            DATABASE_ID,
+                            PUBLIC_PLAYLISTS_COLLECTION,
+                            [Query.equal('owner_id', authManager.user.$id), Query.limit(300)]
+                        );
 
-                    await Promise.allSettled(
-                        existingCloudPlaylists.documents
-                            .filter((doc) => !publicPlaylistIds.has(doc.id))
-                            .map((doc) => databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id))
-                    );
+                        await Promise.allSettled(
+                            existingCloudPlaylists.documents
+                                .filter((doc) => !publicPlaylistIds.has(doc.id))
+                                .map((doc) => databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id))
+                        );
 
-                    await Promise.allSettled(publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist)));
+                        await Promise.allSettled(publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist)));
+                    } else if (hasCloudPlaylistMetadata) {
+                        console.log('[Appwrite Sync] Skipping destructive public playlist sync because local metadata is empty.');
+                    }
                 } catch (playlistError) {
                     console.warn('[Appwrite Sync] Periodic public playlist sync failed:', playlistError);
                 }

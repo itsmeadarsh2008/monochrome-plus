@@ -15,6 +15,7 @@ struct DiscordBridgePayload {
     details: Option<String>,
     state: Option<String>,
     large_image_key: Option<String>,
+    large_image_base64: Option<String>,
     large_image_text: Option<String>,
     small_image_key: Option<String>,
     small_image_text: Option<String>,
@@ -100,6 +101,73 @@ fn normalize_discord_large_image_key(value: &str) -> String {
     value.to_string()
 }
 
+fn decode_base64_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+fn decode_base64_to_string(input: &str) -> Option<String> {
+    let bytes: Vec<u8> = input.bytes().filter(|b| !b"\r\n\t ".contains(b)).collect();
+    if bytes.is_empty() || bytes.len() % 4 != 0 {
+        return None;
+    }
+
+    let mut decoded = Vec::with_capacity((bytes.len() / 4) * 3);
+
+    for chunk in bytes.chunks(4) {
+        let c0 = decode_base64_value(chunk[0])?;
+        let c1 = decode_base64_value(chunk[1])?;
+
+        let pad2 = chunk[2] == b'=';
+        let pad3 = chunk[3] == b'=';
+
+        let c2 = if pad2 {
+            0
+        } else {
+            decode_base64_value(chunk[2])?
+        };
+        let c3 = if pad3 {
+            0
+        } else {
+            decode_base64_value(chunk[3])?
+        };
+
+        decoded.push((c0 << 2) | (c1 >> 4));
+
+        if !pad2 {
+            decoded.push(((c1 & 0x0F) << 4) | (c2 >> 2));
+        }
+
+        if !pad3 {
+            decoded.push(((c2 & 0x03) << 6) | c3);
+        }
+    }
+
+    String::from_utf8(decoded).ok()
+}
+
+fn resolve_discord_large_image_key(
+    large_image_key: &str,
+    large_image_base64: Option<&str>,
+) -> String {
+    if let Some(encoded) = large_image_base64 {
+        if let Some(decoded) = decode_base64_to_string(encoded) {
+            let normalized = normalize_discord_large_image_key(decoded.trim());
+            if normalized != "monochrome" {
+                return normalized;
+            }
+        }
+    }
+
+    normalize_discord_large_image_key(large_image_key)
+}
+
 #[tauri::command]
 fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
     let desired_client_id = parse_client_id(client_id)?;
@@ -144,6 +212,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
     let large_image_key = payload
         .large_image_key
         .unwrap_or_else(|| "monochrome".to_string());
+    let large_image_base64 = payload.large_image_base64;
     let large_image_text = payload
         .large_image_text
         .unwrap_or_else(|| "Monochrome+".to_string());
@@ -164,7 +233,8 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
-    let safe_large_image = normalize_discord_large_image_key(&large_image_key);
+    let safe_large_image =
+        resolve_discord_large_image_key(&large_image_key, large_image_base64.as_deref());
 
     for _ in 0..20 {
         let details_value = details.clone();
