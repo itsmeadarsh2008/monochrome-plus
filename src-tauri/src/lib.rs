@@ -18,6 +18,7 @@ struct DiscordBridgePayload {
     state: Option<String>,
     large_image_key: Option<String>,
     large_image_base64: Option<String>,
+    large_image_fallback_base64: Option<Vec<String>>,
     large_image_text: Option<String>,
     small_image_key: Option<String>,
     small_image_text: Option<String>,
@@ -163,6 +164,41 @@ fn resolve_discord_large_image_key(
     normalize_discord_large_image_key(large_image_key)
 }
 
+fn resolve_discord_large_image_candidates(
+    large_image_key: &str,
+    large_image_base64: Option<&str>,
+    large_image_fallback_base64: Option<&Vec<String>>,
+) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+
+    let primary = resolve_discord_large_image_key(large_image_key, large_image_base64);
+    if !primary.trim().is_empty() {
+        candidates.push(primary);
+    }
+
+    if let Some(fallbacks) = large_image_fallback_base64 {
+        for encoded in fallbacks {
+            if let Some(decoded) = decode_base64_to_string(encoded) {
+                let normalized = normalize_discord_large_image_key(decoded.trim());
+                if !normalized.trim().is_empty() {
+                    candidates.push(normalized);
+                }
+            }
+        }
+    }
+
+    candidates.push("monochrome".to_string());
+
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        if !deduped.contains(&candidate) {
+            deduped.push(candidate);
+        }
+    }
+
+    deduped
+}
+
 #[tauri::command]
 fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
     let desired_client_id = parse_client_id(client_id)?;
@@ -213,6 +249,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .large_image_key
         .unwrap_or_else(|| "monochrome".to_string());
     let large_image_base64 = payload.large_image_base64;
+    let large_image_fallback_base64 = payload.large_image_fallback_base64;
     let large_image_text = payload
         .large_image_text
         .unwrap_or_else(|| "Monochrome+".to_string());
@@ -233,58 +270,72 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
-    let safe_large_image =
-        resolve_discord_large_image_key(&large_image_key, large_image_base64.as_deref());
+    let safe_large_image_candidates = resolve_discord_large_image_candidates(
+        &large_image_key,
+        large_image_base64.as_deref(),
+        large_image_fallback_base64.as_ref(),
+    );
 
-    for _ in 0..20 {
-        let details_value = details.clone();
-        let state_value = state.clone();
-        let large_image_value = safe_large_image.clone();
-        let large_image_text_value = large_image_text.clone();
-        let button_label_value = button_label.clone();
-        let button_url_value = button_url.clone();
-        let start_value = start_timestamp;
-        let end_value = end_timestamp;
+    let mut last_error: Option<String> = None;
 
-        match bridge.client.set_activity(|activity| {
-            let activity = activity
-                .activity_type(ActivityType::Listening)
-                .details(details_value)
-                .state(state_value)
-                .assets(|assets| {
-                    assets
-                        .large_image(large_image_value)
-                        .large_text(large_image_text_value)
-                })
-                .append_buttons(|button| button.label(button_label_value).url(button_url_value));
+    for safe_large_image in safe_large_image_candidates {
+        for _ in 0..10 {
+            let details_value = details.clone();
+            let state_value = state.clone();
+            let large_image_value = safe_large_image.clone();
+            let large_image_text_value = large_image_text.clone();
+            let button_label_value = button_label.clone();
+            let button_url_value = button_url.clone();
+            let start_value = start_timestamp;
+            let end_value = end_timestamp;
 
-            if start_value.is_some() || end_value.is_some() {
-                activity.timestamps(|timestamps| {
-                    let timestamps = if let Some(start) = start_value {
-                        timestamps.start(start)
-                    } else {
-                        timestamps
-                    };
+            match bridge.client.set_activity(|activity| {
+                let activity = activity
+                    .activity_type(ActivityType::Listening)
+                    .details(details_value)
+                    .state(state_value)
+                    .assets(|assets| {
+                        assets
+                            .large_image(large_image_value)
+                            .large_text(large_image_text_value)
+                    })
+                    .append_buttons(|button| {
+                        button.label(button_label_value).url(button_url_value)
+                    });
 
-                    if let Some(end) = end_value {
-                        timestamps.end(end)
-                    } else {
-                        timestamps
-                    }
-                })
-            } else {
-                activity
+                if start_value.is_some() || end_value.is_some() {
+                    activity.timestamps(|timestamps| {
+                        let timestamps = if let Some(start) = start_value {
+                            timestamps.start(start)
+                        } else {
+                            timestamps
+                        };
+
+                        if let Some(end) = end_value {
+                            timestamps.end(end)
+                        } else {
+                            timestamps
+                        }
+                    })
+                } else {
+                    activity
+                }
+            }) {
+                Ok(_) => return Ok(()),
+                Err(DiscordError::NotStarted) => {
+                    last_error = Some("Discord RPC not started".to_string());
+                    thread::sleep(Duration::from_millis(120));
+                }
+                Err(err) => {
+                    last_error = Some(err.to_string());
+                    break;
+                }
             }
-        }) {
-            Ok(_) => return Ok(()),
-            Err(DiscordError::NotStarted) => {
-                thread::sleep(Duration::from_millis(120));
-            }
-            Err(err) => return Err(err.to_string()),
         }
     }
 
-    Err("Discord RPC update timed out waiting for ready state".to_string())
+    Err(last_error
+        .unwrap_or_else(|| "Discord RPC update timed out waiting for ready state".to_string()))
 }
 
 #[tauri::command]

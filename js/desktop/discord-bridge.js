@@ -11,6 +11,7 @@ const QUALITY_LABELS = {
 };
 
 const RPC_START_TIMEOUT_MS = 1500;
+const RPC_RETRY_INTERVAL_MS = 5000;
 
 function toUnixSecondsFromNow(msFromNow = 0) {
     return Math.floor((Date.now() + msFromNow) / 1000);
@@ -21,6 +22,20 @@ function buildTidalCoverUrl(coverId, size = 320) {
     const normalized = coverId.trim().replace(/-/g, '/').replace(/^\/+|\/+$/g, '');
     if (!normalized) return null;
     return `https://resources.tidal.com/images/${normalized}/${size}x${size}.jpg`;
+}
+
+function uniqueNonEmptyStrings(values = []) {
+    const seen = new Set();
+    const output = [];
+    values.forEach((value) => {
+        if (typeof value !== 'string') return;
+        const normalized = value.trim();
+        if (!normalized) return;
+        if (seen.has(normalized)) return;
+        seen.add(normalized);
+        output.push(normalized);
+    });
+    return output;
 }
 
 async function invokeWithTimeout(command, payload, timeoutMs = RPC_START_TIMEOUT_MS) {
@@ -39,8 +54,10 @@ async function invokeWithTimeout(command, payload, timeoutMs = RPC_START_TIMEOUT
     }
 }
 
-function resolveTrackCoverUrl(player, track) {
+function resolveTrackCoverCandidates(player, track) {
     if (!track) return null;
+
+    const candidates = [];
 
     const directUrl =
         track.cover ||
@@ -50,24 +67,27 @@ function resolveTrackCoverUrl(player, track) {
         track.album?.image ||
         track.album?.coverUrl;
     if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
-        return directUrl;
+        candidates.push(directUrl);
     }
 
     const coverId = track.album?.cover || track.cover;
-    const tidalCover = buildTidalCoverUrl(coverId, 320);
-    if (tidalCover) {
-        return tidalCover;
+    if (coverId) {
+        candidates.push(buildTidalCoverUrl(coverId, 640));
+        candidates.push(buildTidalCoverUrl(coverId, 320));
+        candidates.push(buildTidalCoverUrl(coverId, 160));
     }
 
-    if (!coverId || typeof player?.api?.getCoverUrl !== 'function') {
-        return null;
+    if (coverId && typeof player?.api?.getCoverUrl === 'function') {
+        try {
+            candidates.push(player.api.getCoverUrl(coverId, '640'));
+            candidates.push(player.api.getCoverUrl(coverId, '320'));
+            candidates.push(player.api.getCoverUrl(coverId));
+        } catch {
+            // ignore and rely on other candidates
+        }
     }
 
-    try {
-        return player.api.getCoverUrl(coverId, '640') || player.api.getCoverUrl(coverId) || null;
-    } catch {
-        return null;
-    }
+    return uniqueNonEmptyStrings(candidates).filter((url) => /^https?:\/\//i.test(url));
 }
 
 function encodeBase64Utf8(value) {
@@ -87,7 +107,8 @@ function encodeBase64Utf8(value) {
 function buildPayload(player, track, isPaused = false) {
     const title = getTrackTitle(track) || 'Unknown Track';
     const artists = getTrackArtists(track) || 'Unknown Artist';
-    const coverUrl = resolveTrackCoverUrl(player, track);
+    const coverCandidates = resolveTrackCoverCandidates(player, track) || [];
+    const [coverUrl, ...fallbackCoverUrls] = coverCandidates;
     const qualityToken = track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality;
     const qualityLabel = QUALITY_LABELS[qualityToken] || String(qualityToken || 'Unknown Quality').replace(/_/g, ' ');
 
@@ -96,6 +117,7 @@ function buildPayload(player, track, isPaused = false) {
         state: `${artists} • ${qualityLabel}`,
         largeImageKey: coverUrl || 'monochrome',
         largeImageBase64: encodeBase64Utf8(coverUrl),
+        largeImageFallbackBase64: fallbackCoverUrls.map((url) => encodeBase64Utf8(url)).filter(Boolean),
         largeImageText: `Listening on Monochrome+`,
         smallImageKey: isPaused ? 'paused_icon' : 'playing_icon',
         smallImageText: isPaused ? 'Paused' : 'Playing',
@@ -133,6 +155,22 @@ export function initializeDiscordBridge(player) {
     let lastSentKey = '';
     let bridgeActive = false;
     let heartbeatId = null;
+    let reconnectTimerId = null;
+    let startInFlight = false;
+
+    const stopReconnectLoop = () => {
+        if (reconnectTimerId) {
+            clearInterval(reconnectTimerId);
+            reconnectTimerId = null;
+        }
+    };
+
+    const ensureReconnectLoop = () => {
+        if (reconnectTimerId) return;
+        reconnectTimerId = window.setInterval(() => {
+            void startBridge();
+        }, RPC_RETRY_INTERVAL_MS);
+    };
 
     const send = async (payload) => {
         if (!bridgeActive) return;
@@ -143,6 +181,9 @@ export function initializeDiscordBridge(player) {
             await invokeTauri('discord_bridge_update', { payload });
         } catch (error) {
             console.warn('[DiscordBridge] update failed:', error);
+            bridgeActive = false;
+            ensureReconnectLoop();
+            void startBridge();
         }
     };
 
@@ -196,6 +237,8 @@ export function initializeDiscordBridge(player) {
             heartbeatId = null;
         }
 
+        stopReconnectLoop();
+
         for (const fn of cleanups) {
             try {
                 fn();
@@ -218,29 +261,42 @@ export function initializeDiscordBridge(player) {
     window.addEventListener('beforeunload', onBeforeUnload, { once: true });
     cleanups.push(() => window.removeEventListener('beforeunload', onBeforeUnload));
 
-    const start = async () => {
+    const startBridge = async () => {
+        if (startInFlight || bridgeActive) return;
+
         const isTauri = await isTauriRuntime();
         if (!isTauri) return;
+
+        startInFlight = true;
 
         try {
             const started = await invokeWithTimeout('discord_bridge_start', { clientId: DISCORD_CLIENT_ID });
             bridgeActive = !!started;
             if (!bridgeActive) {
                 console.info('[DiscordBridge] Discord RPC inactive (Discord not running or timed out).');
+                ensureReconnectLoop();
+                return;
             }
         } catch (error) {
             bridgeActive = false;
             console.warn('[DiscordBridge] start failed:', error);
+            ensureReconnectLoop();
+            return;
+        } finally {
+            startInFlight = false;
         }
 
-        if (!bridgeActive) return;
-
+        stopReconnectLoop();
+        lastSentKey = '';
         await sendCurrent(player.audio.paused);
 
-        heartbeatId = window.setInterval(() => {
-            void sendCurrent(player.audio.paused);
-        }, 12000);
+        if (!heartbeatId) {
+            heartbeatId = window.setInterval(() => {
+                void sendCurrent(player.audio.paused);
+            }, 12000);
+        }
     };
 
-    void start();
+    ensureReconnectLoop();
+    void startBridge();
 }
