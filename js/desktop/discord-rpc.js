@@ -1,18 +1,29 @@
 // js/desktop/discord-rpc.js
 import { deriveTrackQuality, getTrackTitle, getTrackArtists } from '../utils.js';
+import { isTauriRuntime } from './tauri-runtime.js';
+
+// tauri-plugin-drpc imports
+let drpcStart, drpcStop, drpcSetActivity, drpcClearActivity, Activity, Assets, Timestamps;
 
 export function initializeDiscordRPC(player) {
-    const isTauri =
-        typeof window !== 'undefined' &&
-        (window.__TAURI_INTERNALS__ ||
-            window.__TAURI__ ||
-            window.__TAURI_IPC__ ||
-            /\btauri\b/i.test(navigator.userAgent || ''));
+    if (!player?.audio) {
+        console.warn('[Desktop][DiscordRPC] Player/audio is not ready, skipping initialization.');
+        return;
+    }
+
+    if (window.__monochromeDiscordRpcCleanup) {
+        window.__monochromeDiscordRpcCleanup();
+        window.__monochromeDiscordRpcCleanup = null;
+    }
+
+    let drpcInitialized = false;
     let lastRefreshAt = 0;
     let lastPayload = null;
     let rpcHealthy = false;
     let heartbeatId = null;
     let monotoneTicker = 0;
+    const cleanups = [];
+    const DISCORD_APP_ID = '1466351059843809282'; // Hardcoded as requested
 
     const MONOCHROME_ROTATION = [
         'Monochrome+ • Hyper-fast playback',
@@ -28,49 +39,10 @@ export function initializeDiscordRPC(player) {
         LOW: 'Low',
     };
 
-    const sendViaTauri = async (payload) => {
-        const core = await import('@tauri-apps/api/core');
-        await core.invoke('update_discord_presence', { payload });
-    };
-
-    const clearViaTauri = async () => {
-        const core = await import('@tauri-apps/api/core');
-        await core.invoke('clear_discord_presence');
-    };
-
     const clamp = (value, max = 120) => {
         const text = String(value || '').trim();
         if (!text) return undefined;
         return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-    };
-
-    const getTrackCoverUrl = (track) => {
-        const domCover = document.querySelector('.now-playing-bar .cover')?.src;
-        if (domCover && /^https?:\/\//i.test(domCover)) return domCover;
-
-        const candidates = [
-            track?.album?.coverUrl,
-            track?.album?.cover,
-            track?.album?.image,
-            track?.album?.artwork,
-            track?.album?.images?.large,
-            track?.album?.images?.medium,
-            track?.album?.images?.small,
-            track?.coverUrl,
-            track?.cover,
-            track?.image,
-            track?.artwork,
-            track?.images?.large,
-            track?.images?.medium,
-            track?.images?.small,
-        ].filter(Boolean);
-
-        const candidate = candidates.find((url) => /^https?:\/\//i.test(String(url)));
-        if (!candidate) return null;
-
-        const normalized = String(candidate).trim();
-        if (normalized.length > 240) return null;
-        return normalized;
     };
 
     const getTrackQualityLabel = (track) => {
@@ -78,7 +50,6 @@ export function initializeDiscordRPC(player) {
             track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality || null;
 
         if (!qualityToken) return 'Quality unknown';
-
         return QUALITY_LABELS[qualityToken] || String(qualityToken).replace(/_/g, ' ');
     };
 
@@ -88,94 +59,142 @@ export function initializeDiscordRPC(player) {
         return isPaused ? `${base} • Paused • ${qualityLabel}` : `${base} • ${qualityLabel}`;
     };
 
-    const buildPayload = (track, isPaused = false) => {
-        if (!track) return null;
+    // Initialize DRPC module
+    const initDRPC = async () => {
+        try {
+            const drpc = await import('tauri-plugin-drpc');
+            drpcStart = drpc.start;
+            drpcStop = drpc.stop;
+            drpcSetActivity = drpc.setActivity;
+            drpcClearActivity = drpc.clearActivity;
+            
+            const activity = await import('tauri-plugin-drpc/activity');
+            Activity = activity.Activity;
+            Assets = activity.Assets;
+            Timestamps = activity.Timestamps;
+            
+            return true;
+        } catch (error) {
+            console.error('[DiscordRPC] Failed to load tauri-plugin-drpc:', error);
+            return false;
+        }
+    };
 
-        const rawDuration = Number(track.duration);
-        const trackDurationSeconds = Number.isFinite(rawDuration)
-            ? rawDuration > 10000
-                ? rawDuration / 1000
-                : rawDuration
-            : 0;
-        const currentTimeSeconds = Number(player.audio.currentTime) || 0;
+    const startDRPC = async () => {
+        if (drpcInitialized) return;
+        
+        const loaded = await initDRPC();
+        if (!loaded) return;
+        
+        try {
+            await drpcStart(DISCORD_APP_ID);
+            drpcInitialized = true;
+            console.log('[DiscordRPC] DRPC started successfully');
+        } catch (error) {
+            console.error('[DiscordRPC] Failed to start DRPC:', error);
+        }
+    };
+
+    const buildActivity = (track, isPaused = false) => {
+        if (!track) return null;
 
         const title = clamp(getTrackTitle(track), 128) || 'Unknown Track';
         const artists = clamp(getTrackArtists(track), 96) || 'Unknown Artist';
         const qualityLabel = clamp(getTrackQualityLabel(track), 36) || 'Quality unknown';
+        const monochromeLabel = getDynamicMonochromeLabel(qualityLabel, isPaused);
 
-        const data = {
-            details: title,
-            state: clamp(`${artists} • ${qualityLabel}`, 128),
-            largeImageText: clamp(`${title} • ${qualityLabel}`, 128),
-            smallImageText: clamp(getDynamicMonochromeLabel(qualityLabel, isPaused), 128),
-            instance: false,
-        };
+        const activity = new Activity()
+            .setDetails(title)
+            .setState(`${artists} • ${qualityLabel}`);
 
-        const coverUrl = getTrackCoverUrl(track);
-        data.largeImageKey = coverUrl ? `mp:${coverUrl}` : 'appicon';
+        // Set assets
+        const assets = new Assets()
+            .setLargeImage('appicon')
+            .setLargeText(`${title} • ${qualityLabel}`)
+            .setSmallImage(isPaused ? 'paused_icon' : 'playing_icon')
+            .setSmallText(monochromeLabel);
+        
+        activity.setAssets(assets);
 
-        if (!isPaused && trackDurationSeconds > 0 && currentTimeSeconds >= 0) {
-            const elapsed = Math.min(currentTimeSeconds, trackDurationSeconds);
-            if (Number.isFinite(elapsed)) {
-                const startTimestamp = Math.floor(Date.now() / 1000 - elapsed);
-                data.startTimestamp = startTimestamp;
-                data.endTimestamp = startTimestamp + Math.floor(trackDurationSeconds);
+        // Set timestamps if not paused
+        if (!isPaused) {
+            const rawDuration = Number(track.duration);
+            const trackDurationSeconds = Number.isFinite(rawDuration)
+                ? rawDuration > 10000 ? rawDuration / 1000 : rawDuration
+                : 0;
+            const currentTimeSeconds = Number(player.audio.currentTime) || 0;
+
+            if (trackDurationSeconds > 0 && currentTimeSeconds >= 0) {
+                const elapsed = Math.min(currentTimeSeconds, trackDurationSeconds);
+                const startTimestamp = Date.now() - (elapsed * 1000);
+                const endTimestamp = startTimestamp + (trackDurationSeconds * 1000);
+                
+                const timestamps = new Timestamps(startTimestamp)
+                    .setEnd(endTimestamp);
+                activity.setTimestamps(timestamps);
             }
         }
 
-        return data;
+        return activity;
     };
 
-    async function sendUpdate(track, isPaused = false) {
-        const data = buildPayload(track, isPaused);
-        if (!data) return;
+    const sendUpdate = async (track, isPaused = false) => {
+        if (!drpcInitialized) {
+            await startDRPC();
+        }
+        
+        if (!drpcInitialized) return;
 
-        const payloadHasChanged = JSON.stringify(data) !== JSON.stringify(lastPayload);
+        const activity = buildActivity(track, isPaused);
+        if (!activity) return;
+
+        const payloadHasChanged = JSON.stringify(activity) !== JSON.stringify(lastPayload);
         if (!payloadHasChanged && !isPaused) {
             return;
         }
 
         try {
-            if (isTauri) {
-                await sendViaTauri(data);
-                lastPayload = data;
-                rpcHealthy = true;
-            }
+            await drpcSetActivity(activity);
+            lastPayload = activity;
+            rpcHealthy = true;
         } catch (error) {
             rpcHealthy = false;
-            console.error('[Desktop][DiscordRPC] Failed to send update:', error);
+            console.error('[DiscordRPC] Failed to send update:', error);
         }
-    }
+    };
 
-    async function sendIdle() {
-        if (!isTauri) return;
+    const sendIdle = async () => {
+        if (!drpcInitialized) {
+            await startDRPC();
+        }
+        
+        if (!drpcInitialized) return;
+
         try {
-            const idlePayload = {
-                details: 'Idling',
-                state: 'No active track',
-                largeImageKey: 'appicon',
-                largeImageText: 'Monochrome+',
-                smallImageText: clamp(MONOCHROME_ROTATION[monotoneTicker % MONOCHROME_ROTATION.length], 128),
-                instance: false,
-            };
+            const label = MONOCHROME_ROTATION[monotoneTicker % MONOCHROME_ROTATION.length];
             monotoneTicker += 1;
 
-            await sendViaTauri(idlePayload);
-            lastPayload = idlePayload;
+            const activity = new Activity()
+                .setDetails('Idling')
+                .setState('No active track');
+
+            const assets = new Assets()
+                .setLargeImage('appicon')
+                .setLargeText('Monochrome+')
+                .setSmallText(label);
+            
+            activity.setAssets(assets);
+
+            await drpcSetActivity(activity);
+            lastPayload = activity;
             rpcHealthy = true;
-        } catch {
+        } catch (error) {
             rpcHealthy = false;
-            try {
-                await clearViaTauri();
-            } catch {
-                // no-op
-            }
+            console.error('[DiscordRPC] Failed to send idle:', error);
         }
-    }
+    };
 
-    async function heartbeat() {
-        if (!isTauri) return;
-
+    const heartbeat = async () => {
         const activeTrack = player.currentTrack;
         if (activeTrack) {
             await sendUpdate(activeTrack, player.audio.paused);
@@ -184,7 +203,7 @@ export function initializeDiscordRPC(player) {
 
         if (!rpcHealthy && lastPayload) {
             try {
-                await sendViaTauri(lastPayload);
+                await drpcSetActivity(lastPayload);
                 rpcHealthy = true;
             } catch {
                 rpcHealthy = false;
@@ -193,55 +212,107 @@ export function initializeDiscordRPC(player) {
         }
 
         await sendIdle();
-    }
+    };
 
-    player.audio.addEventListener('play', () => {
+    const bindAudio = (eventName, handler) => {
+        player.audio.addEventListener(eventName, handler);
+        cleanups.push(() => player.audio.removeEventListener(eventName, handler));
+    };
+
+    const onPlay = () => {
         lastRefreshAt = 0;
         void sendUpdate(player.currentTrack, false);
-    });
+    };
 
-    player.audio.addEventListener('pause', () => {
+    const onPause = () => {
         void sendUpdate(player.currentTrack, true);
-    });
+    };
 
-    player.audio.addEventListener('seeking', () => {
+    const onSeeking = () => {
         if (player.currentTrack) {
             void sendUpdate(player.currentTrack, player.audio.paused);
         }
-    });
+    };
 
-    player.audio.addEventListener('loadedmetadata', () => {
+    const onLoadedMetadata = () => {
         void sendUpdate(player.currentTrack, player.audio.paused);
-    });
+    };
 
-    player.audio.addEventListener('timeupdate', () => {
+    const onTimeUpdate = () => {
         if (player.audio.paused || !player.currentTrack) return;
         const now = Date.now();
         if (now - lastRefreshAt < 12000) return;
         lastRefreshAt = now;
         void sendUpdate(player.currentTrack);
-    });
+    };
 
-    player.audio.addEventListener('ended', () => {
+    const onEnded = () => {
         void sendIdle();
-    });
+    };
 
-    window.addEventListener('beforeunload', () => {
+    bindAudio('play', onPlay);
+    bindAudio('pause', onPause);
+    bindAudio('seeking', onSeeking);
+    bindAudio('loadedmetadata', onLoadedMetadata);
+    bindAudio('timeupdate', onTimeUpdate);
+    bindAudio('ended', onEnded);
+
+    const cleanup = async () => {
         if (heartbeatId) {
             clearInterval(heartbeatId);
             heartbeatId = null;
         }
-        void clearViaTauri().catch(() => {});
-    });
 
-    // Send initial status
-    if (player.currentTrack) {
-        void sendUpdate(player.currentTrack, player.audio.paused);
-    } else {
-        void sendIdle();
-    }
+        for (const dispose of cleanups) {
+            try {
+                dispose();
+            } catch {
+                // no-op
+            }
+        }
 
-    heartbeatId = window.setInterval(() => {
-        void heartbeat();
-    }, 10000);
+        if (drpcInitialized && drpcClearActivity) {
+            try {
+                await drpcClearActivity();
+            } catch {
+                // no-op
+            }
+        }
+        
+        if (drpcInitialized && drpcStop) {
+            try {
+                await drpcStop();
+            } catch {
+                // no-op
+            }
+        }
+    };
+
+    window.__monochromeDiscordRpcCleanup = cleanup;
+
+    const onBeforeUnload = () => cleanup();
+    window.addEventListener('beforeunload', onBeforeUnload, { once: true });
+    cleanups.push(() => window.removeEventListener('beforeunload', onBeforeUnload));
+
+    const start = async () => {
+        const isTauri = await isTauriRuntime();
+        if (!isTauri) {
+            console.log('[DiscordRPC] Tauri runtime not detected; RPC disabled.');
+            return;
+        }
+
+        await startDRPC();
+
+        if (player.currentTrack) {
+            await sendUpdate(player.currentTrack, player.audio.paused);
+        } else {
+            await sendIdle();
+        }
+
+        heartbeatId = window.setInterval(() => {
+            void heartbeat();
+        }, 10000);
+    };
+
+    void start();
 }

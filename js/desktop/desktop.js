@@ -1,6 +1,7 @@
 // js/desktop/desktop.js
 import { initializeDiscordRPC } from './discord-rpc.js';
 import { checkForDesktopUpdates } from './tauri-updater.js';
+import { getCurrentTauriWindow, isTauriRuntime } from './tauri-runtime.js';
 
 const DESKTOP_ZOOM_STORAGE_KEY = 'desktopZoomLevel';
 const DEFAULT_DESKTOP_ZOOM = 0.9;
@@ -114,8 +115,7 @@ async function initFramelessWindowChrome() {
     document.body.prepend(bar);
 
     try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        const appWindow = getCurrentWindow();
+        const appWindow = await getCurrentTauriWindow();
         const dragRegion = bar.querySelector('.tauri-window-drag-region');
         const brandRegion = bar.querySelector('.tauri-window-brand');
         const holderHandle = bar.querySelector('.tauri-window-grab-handle');
@@ -306,12 +306,7 @@ async function initFramelessWindowChrome() {
 export async function initDesktop(player) {
     console.log('[Desktop] Initializing desktop features...');
 
-    const isTauri =
-        typeof window !== 'undefined' &&
-        (window.__TAURI_INTERNALS__ ||
-            window.__TAURI__ ||
-            window.__TAURI_IPC__ ||
-            /\btauri\b/i.test(navigator.userAgent || ''));
+    const isTauri = await isTauriRuntime();
 
     if (isTauri) {
         console.log('[Desktop] Tauri runtime detected.');

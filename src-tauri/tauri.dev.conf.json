@@ -1,7 +1,0 @@
-{
-    "app": {
-        "security": {
-            "capabilities": ["default", "dev"]
-        }
-    }
-}

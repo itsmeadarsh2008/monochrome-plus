@@ -1,5 +1,7 @@
+import { isTauriRuntime } from './tauri-runtime.js';
+
 export async function checkForDesktopUpdates() {
-    const isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+    const isTauri = await isTauriRuntime();
     if (!isTauri) return;
 
     try {
@@ -11,7 +13,8 @@ export async function checkForDesktopUpdates() {
             return;
         }
 
-        console.log(`[Desktop][Updater] Update available: ${update.version}`);
+        const updateVersion = update.version || 'unknown';
+        console.log(`[Desktop][Updater] Update available: ${updateVersion}`);
 
         let downloaded = 0;
         let contentLength = 0;
@@ -31,6 +34,7 @@ export async function checkForDesktopUpdates() {
             }
         });
 
+        console.log('[Desktop][Updater] Relaunching app to apply update...');
         await relaunch();
     } catch (error) {
         console.warn('[Desktop][Updater] Auto-update check/install failed:', error);

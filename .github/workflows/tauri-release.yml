@@ -9,18 +9,34 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
 jobs:
   publish-tauri:
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Linux builds
           - platform: ubuntu-22.04
             args: ""
+            target: ""
+            arch: "x86_64"
+            name: "Linux"
+          # Windows builds (native Windows runner)
           - platform: windows-latest
             args: ""
+            target: ""
+            arch: "x86_64"
+            name: "Windows"
+          # macOS builds
           - platform: macos-latest
             args: "--target universal-apple-darwin"
+            target: "universal-apple-darwin"
+            arch: "universal"
+            name: "macOS"
 
     runs-on: ${{ matrix.platform }}
 
@@ -47,6 +63,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
+          key: ${{ matrix.platform }}-${{ matrix.arch }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -57,7 +74,9 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            libssl-dev \
+            pkg-config
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -68,7 +87,33 @@ jobs:
         run: |
           APP_VERSION="${GITHUB_REF_NAME#v}"
           echo "Syncing app version to ${APP_VERSION}"
-          APP_VERSION="${APP_VERSION}" node -e "const fs=require('fs');const version=process.env.APP_VERSION;if(!version||version==='undefined'){throw new Error('APP_VERSION is missing or invalid');}const pkgPath='package.json';const tauriPath='src-tauri/tauri.conf.json';const cargoPath='src-tauri/Cargo.toml';const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));pkg.version=version;fs.writeFileSync(pkgPath,JSON.stringify(pkg,null,4)+'\\n');const tauri=JSON.parse(fs.readFileSync(tauriPath,'utf8'));tauri.version=version;fs.writeFileSync(tauriPath,JSON.stringify(tauri,null,4)+'\\n');const cargo=fs.readFileSync(cargoPath,'utf8').replace(/^version\s*=\s*\"[^\"]+\"/m,'version = \"'+version+'\"');fs.writeFileSync(cargoPath,cargo);"
+          APP_VERSION="${APP_VERSION}" node -e "
+            const fs = require('fs');
+            const version = process.env.APP_VERSION;
+            if (!version || version === 'undefined') {
+              throw new Error('APP_VERSION is missing or invalid');
+            }
+            
+            // Update package.json
+            const pkgPath = 'package.json';
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            pkg.version = version;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 4) + '\\n');
+            
+            // Update tauri.conf.json
+            const tauriPath = 'src-tauri/tauri.conf.json';
+            const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+            tauri.version = version;
+            fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 4) + '\\n');
+            
+            // Update Cargo.toml
+            const cargoPath = 'src-tauri/Cargo.toml';
+            let cargo = fs.readFileSync(cargoPath, 'utf8');
+            cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + version + '\"');
+            fs.writeFileSync(cargoPath, cargo);
+            
+            console.log('Version synced to', version);
+          "
 
       - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -76,11 +121,54 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          MONOCHROME_DISCORD_APP_ID: ${{ secrets.MONOCHROME_DISCORD_APP_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Monochrome+ ${{ github.ref_name }}"
-          releaseBody: "Download the installer for your platform. Auto-updates are built-in."
+          releaseBody: |
+            ## Monochrome+ ${{ github.ref_name }}
+
+            ### Downloads
+            - **Windows**: Download the `.exe` installer (NSIS) - Portable single-file installer
+            - **macOS**: Download the `.dmg` file (Universal binary for Intel & Apple Silicon)
+            - **Linux**: Download `.AppImage` - Portable single-file executable
+
+            ### Features
+            - High-fidelity music streaming
+            - Privacy-respecting audio playback
+            - Discord Rich Presence integration
+            - Auto-updater built-in
+
+            ### Installation
+            **Windows**: Run the `.exe` installer and follow the prompts. Portable mode available.
+            **macOS**: Open the `.dmg`, drag Monochrome+ to Applications, and launch.
+            **Linux**: Make the `.AppImage` executable (`chmod +x`) and run it directly - no installation needed!
+
+            ### Notes
+            - Auto-updates are built-in. The app will check for updates on startup.
+            - Discord Rich Presence requires Discord to be running.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # Separate job to update release notes after all builds complete
+  update-release-notes:
+    needs: publish-tauri
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Update release with checksums
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Monochrome+ ${{ github.ref_name }}"
+          append_body: |
+
+            ---
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

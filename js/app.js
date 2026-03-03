@@ -31,6 +31,7 @@ import './smooth-scrolling.js';
 import { openEditProfile } from './profile.js';
 
 import { initTracker } from './tracker.js';
+import { isTauriRuntime } from './desktop/tauri-runtime.js';
 
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
 
@@ -390,15 +391,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize tracker
     initTracker(player);
 
-    const isTauriRuntime =
-        typeof window !== 'undefined' &&
-        (window.__TAURI_INTERNALS__ ||
-            window.__TAURI__ ||
-            window.__TAURI_IPC__ ||
-            /\btauri\b/i.test(navigator.userAgent || ''));
+    const hasTauriRuntime = await isTauriRuntime();
 
     // Initialize desktop features if in Tauri mode
-    if (isTauriRuntime) {
+    if (hasTauriRuntime) {
         try {
             const desktopModule = await import('./desktop/desktop.js');
             await desktopModule.initDesktop(player);
