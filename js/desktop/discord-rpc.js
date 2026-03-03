@@ -75,11 +75,7 @@ export function initializeDiscordRPC(player) {
 
     const getTrackQualityLabel = (track) => {
         const qualityToken =
-            track?.streamedQuality ||
-            track?.audioQuality ||
-            deriveTrackQuality(track) ||
-            player?.quality ||
-            null;
+            track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality || null;
 
         if (!qualityToken) return 'Quality unknown';
 

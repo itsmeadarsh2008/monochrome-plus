@@ -96,9 +96,10 @@ export function initializeUIInteractions(player, api, ui) {
         const currentPath = normalizePath(window.location.pathname);
         quickNavButtons.forEach((button) => {
             const targetPath = normalizePath(button.getAttribute('data-quick-nav') || '/');
-            const isActive = targetPath === '/'
-                ? currentPath === '/'
-                : currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+            const isActive =
+                targetPath === '/'
+                    ? currentPath === '/'
+                    : currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
             button.classList.toggle('active', isActive);
             button.setAttribute('aria-current', isActive ? 'page' : 'false');
         });

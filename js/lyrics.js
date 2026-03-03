@@ -388,10 +388,7 @@ export class LyricsManager {
                 }
             };
 
-            const timeoutId = setTimeout(
-                () => settle(new Error('Lyrics component load timed out')),
-                10000
-            );
+            const timeoutId = setTimeout(() => settle(new Error('Lyrics component load timed out')), 10000);
 
             script.onload = () => {
                 if (typeof customElements !== 'undefined') {
