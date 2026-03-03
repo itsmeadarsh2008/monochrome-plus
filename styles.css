@@ -1912,11 +1912,6 @@ kbd {
     backdrop-filter: blur(4px);
 }
 
-body.mobile-nav-open {
-    overflow: hidden;
-    touch-action: none;
-}
-
 .main-header {
     display: flex;
     justify-content: space-between;
