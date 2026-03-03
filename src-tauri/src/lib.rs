@@ -35,6 +35,7 @@ fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
 fn set_idle_activity(client: &mut Client) -> Result<(), String> {
     client
         .set_activity(|activity| activity.details("Idling").state("Monochrome+"))
+        .map(|_| ())
         .map_err(|err| err.to_string())
 }
 
@@ -86,8 +87,14 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .unwrap_or_else(|| "Monochrome+".to_string());
     let small_image_key = payload.small_image_key.unwrap_or_default();
     let small_image_text = payload.small_image_text.unwrap_or_default();
-    let start_timestamp = payload.start_timestamp;
-    let end_timestamp = payload.end_timestamp;
+    let start_timestamp =
+        payload
+            .start_timestamp
+            .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
+    let end_timestamp =
+        payload
+            .end_timestamp
+            .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
     bridge
         .client
@@ -124,6 +131,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
                 activity
             }
         })
+        .map(|_| ())
         .map_err(|err| err.to_string())
 }
 
