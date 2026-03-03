@@ -1,3 +1,4 @@
+use discord_presence::models::ActivityType;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 use discord_presence::Client;
 use once_cell::sync::Lazy;
@@ -15,6 +16,8 @@ struct DiscordBridgePayload {
     large_image_text: Option<String>,
     small_image_key: Option<String>,
     small_image_text: Option<String>,
+    button_label: Option<String>,
+    button_url: Option<String>,
     start_timestamp: Option<i64>,
     end_timestamp: Option<i64>,
 }
@@ -34,7 +37,17 @@ fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
 
 fn set_idle_activity(client: &mut Client) -> Result<(), String> {
     client
-        .set_activity(|activity| activity.details("Idling").state("Monochrome+"))
+        .set_activity(|activity| {
+            activity
+                .activity_type(ActivityType::Listening)
+                .details("Monochrome+")
+                .state("Listening on Monochrome+")
+                .append_buttons(|button| {
+                    button
+                        .label("Try Monochrome+")
+                        .url("https://github.com/itsmeadarsh2008/monochrome-plus")
+                })
+        })
         .map(|_| ())
         .map_err(|err| err.to_string())
 }
@@ -87,6 +100,12 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .unwrap_or_else(|| "Monochrome+".to_string());
     let small_image_key = payload.small_image_key.unwrap_or_default();
     let small_image_text = payload.small_image_text.unwrap_or_default();
+    let button_label = payload
+        .button_label
+        .unwrap_or_else(|| "Try Monochrome+".to_string());
+    let button_url = payload
+        .button_url
+        .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
     let start_timestamp =
         payload
             .start_timestamp
@@ -99,19 +118,24 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
     bridge
         .client
         .set_activity(|activity| {
-            let activity = activity.details(details).state(state).assets(|assets| {
-                let assets = assets
-                    .large_image(large_image_key)
-                    .large_text(large_image_text);
+            let activity = activity
+                .activity_type(ActivityType::Listening)
+                .details(details)
+                .state(state)
+                .assets(|assets| {
+                    let assets = assets
+                        .large_image(large_image_key)
+                        .large_text(large_image_text);
 
-                if small_image_key.is_empty() {
-                    assets
-                } else {
-                    assets
-                        .small_image(small_image_key)
-                        .small_text(small_image_text)
-                }
-            });
+                    if small_image_key.is_empty() {
+                        assets
+                    } else {
+                        assets
+                            .small_image(small_image_key)
+                            .small_text(small_image_text)
+                    }
+                })
+                .append_buttons(|button| button.label(button_label).url(button_url));
 
             if start_timestamp.is_some() || end_timestamp.is_some() {
                 activity.timestamps(|timestamps| {

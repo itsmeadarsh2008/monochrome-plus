@@ -1,6 +1,13 @@
 import { isTauriRuntime } from './tauri-runtime.js';
 
-export async function checkForDesktopUpdates() {
+const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AUTO_UPDATE_INITIAL_DELAY_MS = 15 * 1000;
+
+let autoUpdaterTimerId = null;
+let autoUpdaterStarted = false;
+
+export async function checkForDesktopUpdates(options = {}) {
+    const { autoRelaunch = true } = options;
     const isTauri = await isTauriRuntime();
     if (!isTauri) return;
 
@@ -34,9 +41,38 @@ export async function checkForDesktopUpdates() {
             }
         });
 
-        console.log('[Desktop][Updater] Relaunching app to apply update...');
-        await relaunch();
+        if (autoRelaunch) {
+            console.log('[Desktop][Updater] Relaunching app to apply update...');
+            await relaunch();
+        }
     } catch (error) {
         console.warn('[Desktop][Updater] Auto-update check/install failed:', error);
     }
+}
+
+export async function startAutomaticDesktopUpdates() {
+    if (autoUpdaterStarted) return;
+
+    const isTauri = await isTauriRuntime();
+    if (!isTauri) return;
+
+    autoUpdaterStarted = true;
+
+    window.setTimeout(() => {
+        void checkForDesktopUpdates({ autoRelaunch: true });
+    }, AUTO_UPDATE_INITIAL_DELAY_MS);
+
+    autoUpdaterTimerId = window.setInterval(() => {
+        void checkForDesktopUpdates({ autoRelaunch: true });
+    }, AUTO_UPDATE_INTERVAL_MS);
+
+    window.addEventListener(
+        'beforeunload',
+        () => {
+            if (!autoUpdaterTimerId) return;
+            clearInterval(autoUpdaterTimerId);
+            autoUpdaterTimerId = null;
+        },
+        { once: true }
+    );
 }

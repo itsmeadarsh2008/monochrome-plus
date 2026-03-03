@@ -1,5 +1,5 @@
 // js/desktop/desktop.js
-import { checkForDesktopUpdates } from './tauri-updater.js';
+import { startAutomaticDesktopUpdates } from './tauri-updater.js';
 import { initializeDiscordBridge } from './discord-bridge.js';
 import { getCurrentTauriWindow, isTauriRuntime } from './tauri-runtime.js';
 
@@ -285,7 +285,7 @@ export async function initDesktop(player) {
             await initFramelessWindowChrome();
         }
 
-        checkForDesktopUpdates();
+        startAutomaticDesktopUpdates();
         return;
     }
 

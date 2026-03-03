@@ -14,19 +14,42 @@ function toUnixSecondsFromNow(msFromNow = 0) {
     return Math.floor((Date.now() + msFromNow) / 1000);
 }
 
+function resolveTrackCoverUrl(player, track) {
+    if (!track) return null;
+
+    const directUrl = track.cover || track.image || track.artwork || track.thumbnail || track.album?.image;
+    if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
+        return directUrl;
+    }
+
+    const coverId = track.album?.cover || track.cover;
+    if (!coverId || typeof player?.api?.getCoverUrl !== 'function') {
+        return null;
+    }
+
+    try {
+        return player.api.getCoverUrl(coverId, '640') || player.api.getCoverUrl(coverId) || null;
+    } catch {
+        return null;
+    }
+}
+
 function buildPayload(player, track, isPaused = false) {
     const title = getTrackTitle(track) || 'Unknown Track';
     const artists = getTrackArtists(track) || 'Unknown Artist';
+    const coverUrl = resolveTrackCoverUrl(player, track);
     const qualityToken = track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality;
     const qualityLabel = QUALITY_LABELS[qualityToken] || String(qualityToken || 'Unknown Quality').replace(/_/g, ' ');
 
     const payload = {
         details: title,
         state: `${artists} • ${qualityLabel}`,
-        largeImageKey: 'monochrome',
-        largeImageText: `${title} • ${qualityLabel}`,
+        largeImageKey: coverUrl || 'monochrome',
+        largeImageText: `Listening on Monochrome+`,
         smallImageKey: isPaused ? 'paused_icon' : 'playing_icon',
         smallImageText: isPaused ? 'Paused' : 'Playing',
+        buttonLabel: 'Try Monochrome+',
+        buttonUrl: 'https://github.com/itsmeadarsh2008/monochrome-plus',
     };
 
     if (!isPaused && track?.duration && player?.audio) {

@@ -579,6 +579,9 @@ export class UIRenderer {
     createTrackItemHTML(track, index, showCover = false, hasMultipleDiscs = false, useTrackNumber = false) {
         const isUnavailable = track.isUnavailable;
         const isBlocked = contentBlockingSettings?.shouldHideTrack(track);
+        if (track.isLocal) {
+            showCover = false;
+        }
         const trackImageHTML = showCover
             ? `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="Track Cover" class="track-item-cover" loading="lazy">`
             : '';
@@ -587,22 +590,19 @@ export class UIRenderer {
         if (hasMultipleDiscs && !showCover) {
             const discNum = track.volumeNumber ?? track.discNumber ?? 1;
             displayIndex = `${discNum}-${track.trackNumber}`;
-        } else if (useTrackNumber && track.trackNumber) {
-            displayIndex = track.trackNumber;
+        } else if (useTrackNumber) {
+            displayIndex = index + 1;
         } else {
             displayIndex = index + 1;
         }
 
-        const trackNumberHTML = `<div class="track-number">${showCover ? trackImageHTML : displayIndex}</div>`;
+        const showSeparateCoverColumn = showCover && useTrackNumber;
+        const trackNumberHTML = `<div class="track-number">${showCover && !useTrackNumber ? trackImageHTML : displayIndex}</div>`;
+        const trackInfoCoverHTML = showSeparateCoverColumn ? trackImageHTML : '';
         const explicitBadge = hasExplicitContent(track) ? this.createExplicitBadge() : '';
         const qualityBadge = createQualityBadgeHTML(track);
-        const trackArtists = getTrackArtists(track);
         const trackTitle = getTrackTitle(track);
         const isCurrentTrack = this.player?.currentTrack?.id === track.id;
-
-        if (track.isLocal) {
-            showCover = false;
-        }
 
         const yearDisplay = getTrackYearDisplay(track);
 
@@ -635,6 +635,7 @@ export class UIRenderer {
                  ${blockedTitle}>
                 ${trackNumberHTML}
                 <div class="track-item-info">
+                    ${trackInfoCoverHTML}
                     <div class="track-item-details">
                         <div class="title">
                             ${escapeHtml(trackTitle)}
@@ -3790,96 +3791,165 @@ export class UIRenderer {
     async loadRecommendedSongsForPlaylist(tracks) {
         const recommendedSection = document.getElementById('playlist-section-recommended');
         const recommendedContainer = document.getElementById('playlist-detail-recommended');
+        const recommendedSearchInput = document.getElementById('playlist-recommended-search-input');
 
         if (!recommendedSection || !recommendedContainer) {
             console.warn('Recommended songs section not found in DOM');
             return;
         }
 
-        try {
-            let recommendedTracks = await this.api.getRecommendedTracksForPlaylist(tracks, 20);
+        const renderRecommendedTracks = (trackList) => {
+            this.renderListWithTracks(recommendedContainer, trackList, true);
 
-            // Filter out blocked tracks
-            const { contentBlockingSettings } = await import('./storage.js');
-            recommendedTracks = contentBlockingSettings.filterTracks(recommendedTracks);
+            const trackItems = recommendedContainer.querySelectorAll('.track-item');
+            trackItems.forEach((item) => {
+                const actionsDiv = item.querySelector('.track-item-actions');
+                if (!actionsDiv) return;
 
-            if (recommendedTracks.length > 0) {
-                this.renderListWithTracks(recommendedContainer, recommendedTracks, true);
+                const addToPlaylistBtn = document.createElement('button');
+                addToPlaylistBtn.className = 'track-action-btn add-to-playlist-btn';
+                addToPlaylistBtn.title = 'Add to this playlist';
+                addToPlaylistBtn.innerHTML =
+                    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
 
-                const trackItems = recommendedContainer.querySelectorAll('.track-item');
-                trackItems.forEach((item) => {
-                    const actionsDiv = item.querySelector('.track-item-actions');
-                    if (actionsDiv) {
-                        const addToPlaylistBtn = document.createElement('button');
-                        addToPlaylistBtn.className = 'track-action-btn add-to-playlist-btn';
-                        addToPlaylistBtn.title = 'Add to this playlist';
-                        addToPlaylistBtn.innerHTML =
-                            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
-                        addToPlaylistBtn.onclick = async (e) => {
-                            e.stopPropagation();
-                            const trackData = trackDataStore.get(item);
-                            if (trackData) {
-                                try {
-                                    const path = window.location.pathname;
-                                    const playlistMatch = path.match(/\/userplaylist\/([^/]+)/);
-                                    if (playlistMatch) {
-                                        const playlistId = playlistMatch[1];
-                                        await db.addTrackToPlaylist(playlistId, trackData);
-                                        const updatedPlaylist = await db.getPlaylist(playlistId);
-                                        syncManager.syncUserPlaylist(updatedPlaylist, 'update');
+                addToPlaylistBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    const trackData = trackDataStore.get(item);
+                    if (!trackData) return;
 
-                                        const tracklistContainer = document.getElementById('playlist-detail-tracklist');
-                                        if (tracklistContainer && updatedPlaylist.tracks) {
-                                            tracklistContainer.innerHTML = `
+                    try {
+                        const path = window.location.pathname;
+                        const playlistMatch = path.match(/\/userplaylist\/([^/]+)/);
+                        if (playlistMatch) {
+                            const playlistId = playlistMatch[1];
+                            await db.addTrackToPlaylist(playlistId, trackData);
+                            const updatedPlaylist = await db.getPlaylist(playlistId);
+                            syncManager.syncUserPlaylist(updatedPlaylist, 'update');
+
+                            const tracklistContainer = document.getElementById('playlist-detail-tracklist');
+                            if (tracklistContainer && updatedPlaylist.tracks) {
+                                tracklistContainer.innerHTML = `
                                                                                                                                                 <div class="track-list-header">
                                                                                                                                                     <span style="width: 40px; text-align: center;">#</span>
                                                                                                                                                     <span>Title</span>
                                                                                                                                                     <span class="duration-header">Duration</span>
                                                                                                                                                     <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                                                                                                                                                 </div>                                            `;
-                                            this.renderListWithTracks(tracklistContainer, updatedPlaylist.tracks, true);
+                                this.renderListWithTracks(tracklistContainer, updatedPlaylist.tracks, true, true, true);
 
-                                            if (document.querySelector('.remove-from-playlist-btn')) {
-                                                this.enableTrackReordering(
-                                                    tracklistContainer,
-                                                    updatedPlaylist.tracks,
-                                                    playlistId,
-                                                    syncManager
-                                                );
-                                            }
+                                if (document.querySelector('.remove-from-playlist-btn')) {
+                                    this.enableTrackReordering(
+                                        tracklistContainer,
+                                        updatedPlaylist.tracks,
+                                        playlistId,
+                                        syncManager
+                                    );
+                                }
 
-                                            // Update the playlist metadata
-                                            const metaEl = document.getElementById('playlist-detail-meta');
-                                            if (metaEl) {
-                                                const totalDuration = calculateTotalDuration(updatedPlaylist.tracks);
-                                                metaEl.textContent = `${updatedPlaylist.tracks.length} tracks • ${formatDuration(totalDuration)}`;
-                                            }
-                                        }
-
-                                        showNotification(`Added "${trackData.title}" to playlist`);
-                                    }
-                                } catch (error) {
-                                    console.error('Failed to add track to playlist:', error);
-                                    showNotification('Failed to add track to playlist');
+                                const metaEl = document.getElementById('playlist-detail-meta');
+                                if (metaEl) {
+                                    const totalDuration = calculateTotalDuration(updatedPlaylist.tracks);
+                                    metaEl.textContent = `${updatedPlaylist.tracks.length} tracks • ${formatDuration(totalDuration)}`;
                                 }
                             }
-                        };
 
-                        const menuBtn = actionsDiv.querySelector('.track-menu-btn');
-                        if (menuBtn) {
-                            actionsDiv.insertBefore(addToPlaylistBtn, menuBtn);
-                        } else {
-                            actionsDiv.appendChild(addToPlaylistBtn);
+                            showNotification(`Added "${trackData.title}" to playlist`);
                         }
+                    } catch (error) {
+                        console.error('Failed to add track to playlist:', error);
+                        showNotification('Failed to add track to playlist');
                     }
-                });
+                };
+
+                const menuBtn = actionsDiv.querySelector('.track-menu-btn');
+                if (menuBtn) {
+                    actionsDiv.insertBefore(addToPlaylistBtn, menuBtn);
+                } else {
+                    actionsDiv.appendChild(addToPlaylistBtn);
+                }
+            });
+        };
+
+        try {
+            let recommendedTracks = await this.api.getRecommendedTracksForPlaylist(tracks, 20);
+
+            const { contentBlockingSettings } = await import('./storage.js');
+            recommendedTracks = contentBlockingSettings.filterTracks(recommendedTracks);
+
+            if (recommendedTracks.length > 0) {
+                renderRecommendedTracks(recommendedTracks);
+
+                if (recommendedSearchInput) {
+                    recommendedSearchInput.value = '';
+
+                    if (recommendedSearchInput._recommendedSearchListener) {
+                        recommendedSearchInput.removeEventListener(
+                            'input',
+                            recommendedSearchInput._recommendedSearchListener
+                        );
+                    }
+
+                    if (recommendedSearchInput._recommendedSearchDebounce) {
+                        clearTimeout(recommendedSearchInput._recommendedSearchDebounce);
+                    }
+
+                    let requestToken = 0;
+                    const listener = () => {
+                        if (recommendedSearchInput._recommendedSearchDebounce) {
+                            clearTimeout(recommendedSearchInput._recommendedSearchDebounce);
+                        }
+
+                        recommendedSearchInput._recommendedSearchDebounce = setTimeout(async () => {
+                            const query = recommendedSearchInput.value.trim();
+
+                            if (!query) {
+                                renderRecommendedTracks(recommendedTracks);
+                                return;
+                            }
+
+                            const myToken = ++requestToken;
+                            recommendedContainer.innerHTML = this.createSkeletonTracks(4, true);
+
+                            try {
+                                const searchResult = await this.api.searchTracks(query, {
+                                    signal: AbortSignal.timeout(8000),
+                                });
+
+                                if (myToken !== requestToken) return;
+
+                                let searchedTracks = Array.isArray(searchResult?.items) ? searchResult.items : [];
+                                searchedTracks = contentBlockingSettings.filterTracks(searchedTracks);
+
+                                if (!searchedTracks.length) {
+                                    recommendedContainer.innerHTML = createPlaceholder('No songs found for this search.');
+                                    return;
+                                }
+
+                                renderRecommendedTracks(searchedTracks.slice(0, 50));
+                            } catch (error) {
+                                if (myToken !== requestToken) return;
+                                console.warn('Recommended songs search failed:', error);
+                                recommendedContainer.innerHTML = createPlaceholder('Search failed. Try again.');
+                            }
+                        }, 260);
+                    };
+
+                    recommendedSearchInput._recommendedSearchListener = listener;
+                    recommendedSearchInput.addEventListener('input', listener);
+                }
 
                 recommendedSection.style.display = 'block';
             } else {
+                if (recommendedSearchInput) {
+                    recommendedSearchInput.value = '';
+                }
                 recommendedSection.style.display = 'none';
             }
         } catch (error) {
             console.error('Failed to load recommended songs:', error);
+            if (recommendedSearchInput) {
+                recommendedSearchInput.value = '';
+            }
             recommendedSection.style.display = 'none';
         }
     }
@@ -4022,7 +4092,7 @@ export class UIRenderer {
                             <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                         </div>
                     `;
-                    this.renderListWithTracks(container, currentTracks, true, true);
+                    this.renderListWithTracks(container, currentTracks, true, true, true);
 
                     // Add remove buttons and enable reordering ONLY IF OWNED
                     if (ownedPlaylist) {
@@ -4174,7 +4244,7 @@ export class UIRenderer {
                             <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
                         </div>
                     `;
-                    this.renderListWithTracks(tracklistContainer, currentTracks, true, true);
+                    this.renderListWithTracks(tracklistContainer, currentTracks, true, true, true);
                 };
 
                 const applySort = (sortType) => {

@@ -2044,6 +2044,11 @@ kbd {
     box-shadow: 0 0 0 3px rgb(var(--highlight-rgb) / 0.2);
 }
 
+.recommended-search {
+    margin-bottom: var(--spacing-md);
+    max-width: 560px;
+}
+
 /* Main header search: navigation controls next to search bar, clear button outside input. */
 #search-form {
     display: flex;
