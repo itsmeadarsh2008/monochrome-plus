@@ -373,21 +373,41 @@ export class LyricsManager {
             script.type = 'module';
             script.src = 'https://cdn.jsdelivr.net/npm/@uimaxbai/am-lyrics/dist/src/am-lyrics.min.js';
 
+            let settled = false;
+            const settle = (err) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                script.onload = null;
+                script.onerror = null;
+                if (err) {
+                    if (script.parentNode) script.parentNode.removeChild(script);
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            };
+
+            const timeoutId = setTimeout(
+                () => settle(new Error('Lyrics component load timed out')),
+                10000
+            );
+
             script.onload = () => {
                 if (typeof customElements !== 'undefined') {
                     customElements
                         .whenDefined('am-lyrics')
                         .then(() => {
                             this.componentLoaded = true;
-                            resolve();
+                            settle(null);
                         })
-                        .catch(reject);
+                        .catch((err) => settle(err));
                 } else {
-                    resolve();
+                    settle(null);
                 }
             };
 
-            script.onerror = () => reject(new Error('Failed to load lyrics component'));
+            script.onerror = () => settle(new Error('Failed to load lyrics component'));
             document.head.appendChild(script);
         });
     }
