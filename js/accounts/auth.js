@@ -6,6 +6,16 @@ const OAUTH_ATTEMPT_KEY = 'mono-oauth-attempt';
 const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
 const APPWRITE_PROJECT_ID = 'monochrome-plus';
 const APPWRITE_OAUTH_FALLBACK_ENDPOINTS = ['https://cloud.appwrite.io/v1', 'https://sgp.cloud.appwrite.io/v1'];
+const DEFAULT_OAUTH_REDIRECT_URL = 'http://localhost';
+
+function getOAuthRedirectUrl() {
+    const origin = typeof window !== 'undefined' ? window.location?.origin || '' : '';
+    if (/^https?:\/\//i.test(origin)) {
+        return origin;
+    }
+
+    return DEFAULT_OAUTH_REDIRECT_URL;
+}
 
 export class AuthManager {
     constructor() {
@@ -72,7 +82,7 @@ export class AuthManager {
 
     async signInWithGoogle() {
         try {
-            const redirectUrl = window.location.origin;
+            const redirectUrl = getOAuthRedirectUrl();
             localStorage.setItem(OAUTH_ATTEMPT_KEY, JSON.stringify({ provider: 'google', ts: Date.now() }));
             await account.createOAuth2Session('google', redirectUrl, redirectUrl);
             console.log('[Appwrite] Google login initiated...');
@@ -84,7 +94,7 @@ export class AuthManager {
     }
 
     async signInWithDiscord() {
-        const redirectUrl = window.location.origin;
+        const redirectUrl = getOAuthRedirectUrl();
         const endpointCandidates = [null, ...APPWRITE_OAUTH_FALLBACK_ENDPOINTS];
 
         try {
