@@ -6,8 +6,19 @@ const OAUTH_ATTEMPT_KEY = 'mono-oauth-attempt';
 const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
 const APPWRITE_PROJECT_ID = 'monochrome-plus';
 const APPWRITE_OAUTH_FALLBACK_ENDPOINTS = ['https://cloud.appwrite.io/v1', 'https://sgp.cloud.appwrite.io/v1'];
-const DEFAULT_OAUTH_REDIRECT_URL = 'http://localhost';
-const DESKTOP_OAUTH_REDIRECT_URLS = ['http://127.0.0.1', 'http://localhost'];
+const DEFAULT_OAUTH_REDIRECT_URL = 'https://monochrome-plus.appwrite.network';
+const DESKTOP_OAUTH_REDIRECT_FALLBACK_URLS = [DEFAULT_OAUTH_REDIRECT_URL];
+
+function isHttpUrl(value) {
+    return /^https?:\/\//i.test(value || '');
+}
+
+function appendUniqueUrl(target, value) {
+    if (!isHttpUrl(value)) return;
+    if (!target.includes(value)) {
+        target.push(value);
+    }
+}
 
 function isDesktopTauriContext() {
     if (typeof window === 'undefined') return false;
@@ -22,16 +33,20 @@ function isDesktopTauriContext() {
 }
 
 function getOAuthRedirectUrls() {
-    if (isDesktopTauriContext()) {
-        return DESKTOP_OAUTH_REDIRECT_URLS;
-    }
-
     const origin = typeof window !== 'undefined' ? window.location?.origin || '' : '';
-    if (/^https?:\/\//i.test(origin)) {
-        return [origin];
+    const redirects = [];
+
+    appendUniqueUrl(redirects, origin);
+
+    if (isDesktopTauriContext()) {
+        for (const fallbackUrl of DESKTOP_OAUTH_REDIRECT_FALLBACK_URLS) {
+            appendUniqueUrl(redirects, fallbackUrl);
+        }
+
+        return redirects.length ? redirects : [DEFAULT_OAUTH_REDIRECT_URL];
     }
 
-    return [DEFAULT_OAUTH_REDIRECT_URL];
+    return redirects.length ? redirects : [DEFAULT_OAUTH_REDIRECT_URL];
 }
 
 async function createOAuthSessionWithFallback(provider, redirectUrls) {

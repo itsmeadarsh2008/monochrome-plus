@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.5] - 2026-03-03
+
+### Fixed
+
+- Fixed desktop OAuth redirect flow that could send users to `http://127.0.0.1`/`http://localhost` and fail with "refused to connect".
+- Updated redirect selection to use valid HTTP origins first and fall back to the public app URL for desktop runtime.
+
 ## [2.0.4] - 2026-03-03
 
 ### Added
