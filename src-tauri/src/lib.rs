@@ -1,9 +1,11 @@
 use discord_presence::models::ActivityType;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-use discord_presence::Client;
+use discord_presence::{Client, DiscordError, Event};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
 const DEFAULT_DISCORD_CLIENT_ID: &str = "1466351059843809282";
 
@@ -36,8 +38,8 @@ fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
 }
 
 fn set_idle_activity(client: &mut Client) -> Result<(), String> {
-    client
-        .set_activity(|activity| {
+    for _ in 0..20 {
+        match client.set_activity(|activity| {
             activity
                 .activity_type(ActivityType::Listening)
                 .details("Monochrome+")
@@ -47,9 +49,23 @@ fn set_idle_activity(client: &mut Client) -> Result<(), String> {
                         .label("Try Monochrome+")
                         .url("https://github.com/itsmeadarsh2008/monochrome-plus")
                 })
-        })
-        .map(|_| ())
-        .map_err(|err| err.to_string())
+        }) {
+            Ok(_) => return Ok(()),
+            Err(DiscordError::NotStarted) => {
+                thread::sleep(Duration::from_millis(120));
+            }
+            Err(err) => return Err(err.to_string()),
+        }
+    }
+
+    Err("Discord RPC did not become ready in time".to_string())
+}
+
+fn wait_for_rpc_ready(client: &mut Client) -> Result<(), String> {
+    match client.block_until_event(Event::Ready) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Discord RPC did not become ready: {err}")),
+    }
 }
 
 #[tauri::command]
@@ -72,6 +88,7 @@ fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
 
     let mut client = Client::new(desired_client_id);
     client.start();
+    wait_for_rpc_ready(&mut client)?;
     set_idle_activity(&mut client)?;
 
     *guard = Some(DiscordRpc {
@@ -98,8 +115,8 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
     let large_image_text = payload
         .large_image_text
         .unwrap_or_else(|| "Monochrome+".to_string());
-    let small_image_key = payload.small_image_key.unwrap_or_default();
-    let small_image_text = payload.small_image_text.unwrap_or_default();
+    let _small_image_key = payload.small_image_key.unwrap_or_default();
+    let _small_image_text = payload.small_image_text.unwrap_or_default();
     let button_label = payload
         .button_label
         .unwrap_or_else(|| "Try Monochrome+".to_string());
@@ -115,37 +132,44 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
-    bridge
-        .client
-        .set_activity(|activity| {
+    let safe_large_image =
+        if large_image_key.starts_with("http://") || large_image_key.starts_with("https://") {
+            "monochrome".to_string()
+        } else {
+            large_image_key.clone()
+        };
+
+    for _ in 0..20 {
+        let details_value = details.clone();
+        let state_value = state.clone();
+        let large_image_value = safe_large_image.clone();
+        let large_image_text_value = large_image_text.clone();
+        let button_label_value = button_label.clone();
+        let button_url_value = button_url.clone();
+        let start_value = start_timestamp;
+        let end_value = end_timestamp;
+
+        match bridge.client.set_activity(|activity| {
             let activity = activity
                 .activity_type(ActivityType::Listening)
-                .details(details)
-                .state(state)
+                .details(details_value)
+                .state(state_value)
                 .assets(|assets| {
-                    let assets = assets
-                        .large_image(large_image_key)
-                        .large_text(large_image_text);
-
-                    if small_image_key.is_empty() {
-                        assets
-                    } else {
-                        assets
-                            .small_image(small_image_key)
-                            .small_text(small_image_text)
-                    }
+                    assets
+                        .large_image(large_image_value)
+                        .large_text(large_image_text_value)
                 })
-                .append_buttons(|button| button.label(button_label).url(button_url));
+                .append_buttons(|button| button.label(button_label_value).url(button_url_value));
 
-            if start_timestamp.is_some() || end_timestamp.is_some() {
+            if start_value.is_some() || end_value.is_some() {
                 activity.timestamps(|timestamps| {
-                    let timestamps = if let Some(start) = start_timestamp {
+                    let timestamps = if let Some(start) = start_value {
                         timestamps.start(start)
                     } else {
                         timestamps
                     };
 
-                    if let Some(end) = end_timestamp {
+                    if let Some(end) = end_value {
                         timestamps.end(end)
                     } else {
                         timestamps
@@ -154,9 +178,16 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             } else {
                 activity
             }
-        })
-        .map(|_| ())
-        .map_err(|err| err.to_string())
+        }) {
+            Ok(_) => return Ok(()),
+            Err(DiscordError::NotStarted) => {
+                thread::sleep(Duration::from_millis(120));
+            }
+            Err(err) => return Err(err.to_string()),
+        }
+    }
+
+    Err("Discord RPC update timed out waiting for ready state".to_string())
 }
 
 #[tauri::command]

@@ -34,7 +34,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "nsis", "dmg", "app"],
+    "targets": [
+      "appimage",
+      "nsis",
+      "dmg",
+      "app"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -52,11 +57,15 @@
       "nsis": {
         "installerIcon": "icons/icon.ico",
         "displayLanguageSelector": false,
-        "languages": ["English"],
+        "languages": [
+          "English"
+        ],
         "installMode": "both"
       },
       "wix": {
-        "language": ["en-US"],
+        "language": [
+          "en-US"
+        ],
         "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A"
       }
     },
@@ -72,7 +81,10 @@
         "bundleMediaFramework": false
       },
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       }
     },
     "resources": [],

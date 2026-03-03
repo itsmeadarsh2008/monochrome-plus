@@ -59,12 +59,6 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-          key: ${{ matrix.platform }}-${{ matrix.arch }}
-
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -78,8 +72,14 @@ jobs:
             libssl-dev \
             pkg-config
 
-      - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
+      - name: Clean previous build artifacts
+        shell: bash
+        run: |
+          rm -rf node_modules
+          cargo clean --manifest-path src-tauri/Cargo.toml || true
+
+      - name: Install frontend dependencies (no cache)
+        run: bun install --frozen-lockfile --no-cache
 
       - name: Sync app version from tag
         if: startsWith(github.ref, 'refs/tags/v')
