@@ -1,12 +1,7 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+use discord_presence::Client;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use std::fs;
-use std::io::Write;
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 
 const DEFAULT_DISCORD_CLIENT_ID: &str = "1466351059843809282";
@@ -24,111 +19,51 @@ struct DiscordBridgePayload {
     end_timestamp: Option<i64>,
 }
 
-struct DiscordBridgeProcess {
-    child: Child,
-    stdin: ChildStdin,
+struct DiscordRpc {
+    client: Client,
+    client_id: u64,
 }
 
-impl DiscordBridgeProcess {
-    fn send_json_line(&mut self, value: serde_json::Value) -> Result<(), String> {
-        let mut payload = serde_json::to_string(&value).map_err(|err| err.to_string())?;
-        payload.push('\n');
-        self.stdin
-            .write_all(payload.as_bytes())
-            .and_then(|_| self.stdin.flush())
-            .map_err(|err| err.to_string())
-    }
+static DISCORD_BRIDGE: Lazy<Mutex<Option<DiscordRpc>>> = Lazy::new(|| Mutex::new(None));
+
+fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
+    let raw = client_id.unwrap_or_else(|| DEFAULT_DISCORD_CLIENT_ID.to_string());
+    raw.parse::<u64>()
+        .map_err(|_| format!("Invalid Discord client ID: {raw}"))
 }
 
-static DISCORD_BRIDGE: Lazy<Mutex<Option<DiscordBridgeProcess>>> = Lazy::new(|| Mutex::new(None));
-
-const BRIDGE_PY: &str = include_str!("../scripts/bridge.py");
-const BRIDGE_PS1: &str = include_str!("../scripts/bridge.ps1");
-
-fn write_bridge_script_to_temp(name: &str, content: &str) -> Result<PathBuf, String> {
-    let mut path = std::env::temp_dir();
-    path.push(name);
-    fs::write(&path, content).map_err(|err| err.to_string())?;
-    Ok(path)
-}
-
-#[cfg(target_os = "windows")]
-fn spawn_discord_bridge(client_id: &str) -> Result<DiscordBridgeProcess, String> {
-    let script_path = write_bridge_script_to_temp("monochrome-discord-bridge.ps1", BRIDGE_PS1)?;
-
-    let mut child = Command::new("powershell.exe")
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-File")
-        .arg(script_path)
-        .arg("-ClientId")
-        .arg(client_id)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(0x08000000)
-        .spawn()
-        .map_err(|err| err.to_string())?;
-
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "Failed to open bridge stdin".to_string())?;
-
-    Ok(DiscordBridgeProcess { child, stdin })
-}
-
-#[cfg(not(target_os = "windows"))]
-fn spawn_discord_bridge(client_id: &str) -> Result<DiscordBridgeProcess, String> {
-    let script_path = write_bridge_script_to_temp("monochrome-discord-bridge.py", BRIDGE_PY)?;
-
-    let mut last_error = None;
-    for python in ["python3", "python"] {
-        match Command::new(python)
-            .arg(&script_path)
-            .arg(client_id)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(mut child) => {
-                let stdin = child
-                    .stdin
-                    .take()
-                    .ok_or_else(|| "Failed to open bridge stdin".to_string())?;
-                return Ok(DiscordBridgeProcess { child, stdin });
-            }
-            Err(err) => {
-                last_error = Some(err.to_string());
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| "Could not launch Python interpreter".to_string()))
+fn set_idle_activity(client: &mut Client) -> Result<(), String> {
+    client
+        .set_activity(|activity| activity.details("Idling").state("Monochrome+"))
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
 fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
+    let desired_client_id = parse_client_id(client_id)?;
     let mut guard = DISCORD_BRIDGE
         .lock()
         .map_err(|_| "Bridge lock poisoned".to_string())?;
 
-    if let Some(existing) = guard.as_mut() {
-        if existing
-            .child
-            .try_wait()
-            .map_err(|err| err.to_string())?
-            .is_none()
-        {
+    if let Some(existing) = guard.as_ref() {
+        if existing.client_id == desired_client_id {
             return Ok(true);
         }
-        *guard = None;
     }
 
-    let bridge = spawn_discord_bridge(client_id.as_deref().unwrap_or(DEFAULT_DISCORD_CLIENT_ID))?;
-    *guard = Some(bridge);
+    if let Some(mut existing) = guard.take() {
+        let _ = existing.client.clear_activity();
+        let _ = existing.client.shutdown();
+    }
+
+    let mut client = Client::new(desired_client_id);
+    client.start();
+    set_idle_activity(&mut client)?;
+
+    *guard = Some(DiscordRpc {
+        client,
+        client_id: desired_client_id,
+    });
     Ok(true)
 }
 
@@ -141,20 +76,55 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .as_mut()
         .ok_or_else(|| "Discord bridge is not running".to_string())?;
 
-    let payload_json = serde_json::json!({
-        "cmd": "update",
-        "details": payload.details,
-        "state": payload.state,
-        "largeImageKey": payload.large_image_key,
-        "largeImageText": payload.large_image_text,
-        "smallImageKey": payload.small_image_key,
-        "smallImageText": payload.small_image_text,
-        "startTimestamp": payload.start_timestamp,
-        "endTimestamp": payload.end_timestamp,
-        "pid": std::process::id(),
-    });
+    let details = payload.details.unwrap_or_else(|| "Idling".to_string());
+    let state = payload.state.unwrap_or_else(|| "Monochrome+".to_string());
+    let large_image_key = payload
+        .large_image_key
+        .unwrap_or_else(|| "monochrome".to_string());
+    let large_image_text = payload
+        .large_image_text
+        .unwrap_or_else(|| "Monochrome+".to_string());
+    let small_image_key = payload.small_image_key.unwrap_or_default();
+    let small_image_text = payload.small_image_text.unwrap_or_default();
+    let start_timestamp = payload.start_timestamp;
+    let end_timestamp = payload.end_timestamp;
 
-    bridge.send_json_line(payload_json)
+    bridge
+        .client
+        .set_activity(|activity| {
+            let activity = activity.details(details).state(state).assets(|assets| {
+                let assets = assets
+                    .large_image(large_image_key)
+                    .large_text(large_image_text);
+
+                if small_image_key.is_empty() {
+                    assets
+                } else {
+                    assets
+                        .small_image(small_image_key)
+                        .small_text(small_image_text)
+                }
+            });
+
+            if start_timestamp.is_some() || end_timestamp.is_some() {
+                activity.timestamps(|timestamps| {
+                    let timestamps = if let Some(start) = start_timestamp {
+                        timestamps.start(start)
+                    } else {
+                        timestamps
+                    };
+
+                    if let Some(end) = end_timestamp {
+                        timestamps.end(end)
+                    } else {
+                        timestamps
+                    }
+                })
+            } else {
+                activity
+            }
+        })
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -165,10 +135,12 @@ fn discord_bridge_clear() -> Result<(), String> {
     let bridge = guard
         .as_mut()
         .ok_or_else(|| "Discord bridge is not running".to_string())?;
-    bridge.send_json_line(serde_json::json!({
-        "cmd": "clear",
-        "pid": std::process::id(),
-    }))
+
+    bridge
+        .client
+        .clear_activity()
+        .map_err(|err| err.to_string())?;
+    set_idle_activity(&mut bridge.client)
 }
 
 #[tauri::command]
@@ -181,9 +153,8 @@ fn discord_bridge_stop() -> Result<(), String> {
         None => return Ok(()),
     };
 
-    let _ = bridge.send_json_line(serde_json::json!({ "cmd": "stop" }));
-    let _ = bridge.child.kill();
-    let _ = bridge.child.wait();
+    let _ = bridge.client.clear_activity();
+    let _ = bridge.client.shutdown();
     Ok(())
 }
 
