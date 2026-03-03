@@ -1,108 +1,88 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Monochrome+",
-  "version": "2.0.4",
-  "identifier": "app.monochrome.plus",
-  "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  },
-  "app": {
-    "windows": [
-      {
-        "title": "Monochrome+",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false,
-        "center": true,
-        "visible": true,
-        "decorations": true,
-        "transparent": false,
-        "shadow": true,
-        "contentProtected": false
-      }
-    ],
-    "security": {
-      "csp": null,
-      "dangerousDisableAssetCspModification": false
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": [
-      "appimage",
-      "nsis",
-      "dmg",
-      "app"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com",
-      "webviewInstallMode": {
-        "type": "embedBootstrapper"
-      },
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "displayLanguageSelector": false,
-        "languages": [
-          "English"
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "Monochrome+",
+    "version": "2.0.4",
+    "identifier": "app.monochrome.plus",
+    "build": {
+        "frontendDist": "../dist",
+        "devUrl": "http://localhost:5173",
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "Monochrome+",
+                "width": 1280,
+                "height": 800,
+                "minWidth": 800,
+                "minHeight": 600,
+                "resizable": true,
+                "fullscreen": false,
+                "center": true,
+                "visible": true,
+                "decorations": true,
+                "transparent": false,
+                "shadow": true,
+                "contentProtected": false
+            }
         ],
-        "installMode": "both"
-      },
-      "wix": {
-        "language": [
-          "en-US"
-        ],
-        "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A"
-      }
+        "security": {
+            "csp": null,
+            "dangerousDisableAssetCspModification": false
+        }
     },
-    "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.13",
-      "signingIdentity": null,
-      "entitlements": null,
-      "exceptionDomain": null
+    "bundle": {
+        "active": true,
+        "targets": ["appimage", "nsis", "dmg", "app"],
+        "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+        "windows": {
+            "certificateThumbprint": null,
+            "digestAlgorithm": "sha256",
+            "timestampUrl": "http://timestamp.digicert.com",
+            "webviewInstallMode": {
+                "type": "embedBootstrapper"
+            },
+            "nsis": {
+                "installerIcon": "icons/icon.ico",
+                "displayLanguageSelector": false,
+                "languages": ["English"],
+                "installMode": "both"
+            },
+            "wix": {
+                "language": ["en-US"],
+                "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A"
+            }
+        },
+        "macOS": {
+            "frameworks": [],
+            "minimumSystemVersion": "10.13",
+            "signingIdentity": null,
+            "entitlements": null,
+            "exceptionDomain": null
+        },
+        "linux": {
+            "appimage": {
+                "bundleMediaFramework": false
+            },
+            "deb": {
+                "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+            }
+        },
+        "resources": [],
+        "externalBin": [],
+        "copyright": "Copyright (c) 2026",
+        "category": "Music",
+        "shortDescription": "High-fidelity music streaming",
+        "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening.",
+        "fileAssociations": []
     },
-    "linux": {
-      "appimage": {
-        "bundleMediaFramework": false
-      },
-      "deb": {
-        "depends": [
-          "libwebkit2gtk-4.1-0",
-          "libgtk-3-0"
-        ]
-      }
-    },
-    "resources": [],
-    "externalBin": [],
-    "copyright": "Copyright (c) 2026",
-    "category": "Music",
-    "shortDescription": "High-fidelity music streaming",
-    "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening.",
-    "fileAssociations": []
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyRjQxNjIwMEY1RTQwNTUKUldTbndGZ1FKcFl3VXh2SjRDMG5POUJiRG0wbmZrMlFQMUUxY0tNQUY5eGxVdW1VNjdBVUxGZ0MK",
-      "endpoints": [
-        "https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"
-      ]
+    "plugins": {
+        "updater": {
+            "active": true,
+            "dialog": true,
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyRjQxNjIwMEY1RTQwNTUKUldTbndGZ1FKcFl3VXh2SjRDMG5POUJiRG0wbmZrMlFQMUUxY0tNQUY5eGxVdW1VNjdBVUxGZ0MK",
+            "endpoints": ["https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"]
+        }
     }
-  }
 }

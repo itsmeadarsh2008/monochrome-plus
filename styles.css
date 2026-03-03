@@ -10060,7 +10060,6 @@ body.auth-locked .auth-email-form .template-input {
     #search-form {
         display: grid !important;
     }
-
 }
 
 @media (hover: hover) {

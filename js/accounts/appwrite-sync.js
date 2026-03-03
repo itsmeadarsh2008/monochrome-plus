@@ -163,7 +163,9 @@ const syncManager = {
         const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
         const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
         const numberOfTracks =
-            Number.isFinite(rawTrackCount) && rawTrackCount > 0 ? Math.max(rawTrackCount, tracks.length) : tracks.length;
+            Number.isFinite(rawTrackCount) && rawTrackCount > 0
+                ? Math.max(rawTrackCount, tracks.length)
+                : tracks.length;
         const createdAt = doc?.$createdAt ? Date.parse(doc.$createdAt) : Date.now();
         const updatedAt = doc?.$updatedAt ? Date.parse(doc.$updatedAt) : Date.now();
         return {
@@ -1001,7 +1003,9 @@ const syncManager = {
             const tracks = this._safeArray(doc.tracks, []);
             const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
             const numberOfTracks =
-                Number.isFinite(rawTrackCount) && rawTrackCount > 0 ? Math.max(rawTrackCount, tracks.length) : tracks.length;
+                Number.isFinite(rawTrackCount) && rawTrackCount > 0
+                    ? Math.max(rawTrackCount, tracks.length)
+                    : tracks.length;
 
             return {
                 id: doc.id,

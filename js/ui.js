@@ -3921,7 +3921,9 @@ export class UIRenderer {
                                 searchedTracks = contentBlockingSettings.filterTracks(searchedTracks);
 
                                 if (!searchedTracks.length) {
-                                    recommendedContainer.innerHTML = createPlaceholder('No songs found for this search.');
+                                    recommendedContainer.innerHTML = createPlaceholder(
+                                        'No songs found for this search.'
+                                    );
                                     return;
                                 }
 

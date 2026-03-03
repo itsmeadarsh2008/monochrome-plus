@@ -31,9 +31,7 @@ const IMPORT_MATCH_PROFILES = {
 
 function resolveImportOptions(options = {}) {
     const mode =
-        typeof options === 'string'
-            ? options
-            : options?.mode || options?.matchMode || options?.profile || 'strict';
+        typeof options === 'string' ? options : options?.mode || options?.matchMode || options?.profile || 'strict';
     return {
         mode: mode === 'lenient' ? 'lenient' : 'strict',
     };

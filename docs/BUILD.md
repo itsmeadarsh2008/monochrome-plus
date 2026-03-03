@@ -9,8 +9,8 @@ This document explains how to build the Monochrome+ Tauri desktop application fo
 
 | Command             | Type        | Uses Static Assets | For Distribution |
 | ------------------- | ----------- | ------------------ | ---------------- |
-| `cargo build`       | Development | ❌ No               | ❌ No             |
-| `cargo tauri build` | Production  | ✅ Yes              | ✅ Yes            |
+| `cargo build`       | Development | ❌ No              | ❌ No            |
+| `cargo tauri build` | Production  | ✅ Yes             | ✅ Yes           |
 
 ### The "localhost refused to connect" Error
 
@@ -23,6 +23,7 @@ ERR_CONNECTION_REFUSED
 ```
 
 **Solution:** Use production build commands:
+
 ```bash
 npm run build:tauri
 ```
@@ -30,6 +31,7 @@ npm run build:tauri
 ## Quick Start
 
 ### Development (with hot-reload)
+
 ```bash
 # Option 1: Single command (runs both frontend and desktop)
 npm run dev:tauri
@@ -40,6 +42,7 @@ npm run dev:tauri
 ```
 
 ### Production Build (Current Platform)
+
 ```bash
 # Recommended - builds with static assets
 npm run build:tauri
@@ -61,12 +64,14 @@ npm run build:tauri
 ### Linux
 
 **Requirements:**
+
 ```bash
 sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
     libayatana-appindicator3-dev librsvg2-dev patchelf
 ```
 
 **Build:**
+
 ```bash
 # Production (with static assets)
 npm run build:tauri
@@ -80,6 +85,7 @@ npm run build:tauri
 ### Windows
 
 #### Option 1: Native Build (Windows only)
+
 ```bash
 # Production build on Windows
 npm run build:tauri
@@ -90,6 +96,7 @@ npm run build:tauri
 ```
 
 #### Option 2: Cross-Compilation from Linux
+
 ```bash
 # Cross-compile (produces bare .exe only)
 npm run build:tauri:windows:cross
@@ -109,6 +116,7 @@ npm run build:tauri:windows:cross
 **Requirements:** macOS machine
 
 **Build:**
+
 ```bash
 npm run build:tauri
 
@@ -127,6 +135,7 @@ git push origin v2.0.1
 ```
 
 This triggers `.github/workflows/tauri-release.yml` which builds:
+
 - Linux: AppImage
 - Windows: NSIS installer (.exe)
 - macOS: Universal DMG (Intel + Apple Silicon)
@@ -136,17 +145,17 @@ This triggers `.github/workflows/tauri-release.yml` which builds:
 ### How Tauri Build Works
 
 1. **Development** (`cargo build`):
-   - Compiles Rust code
-   - Sets app to use `devUrl: http://localhost:5173`
-   - Requires dev server running
-   - Binary location: `src-tauri/target/debug/monochrome-plus`
+    - Compiles Rust code
+    - Sets app to use `devUrl: http://localhost:5173`
+    - Requires dev server running
+    - Binary location: `src-tauri/target/debug/monochrome-plus`
 
 2. **Production** (`cargo tauri build`):
-   - Runs `beforeBuildCommand` (`npm run build` → creates `dist/`)
-   - Compiles Rust code with production settings
-   - Embeds `dist/` folder into binary
-   - Creates platform bundles
-   - Binary location: `src-tauri/target/release/monochrome-plus`
+    - Runs `beforeBuildCommand` (`npm run build` → creates `dist/`)
+    - Compiles Rust code with production settings
+    - Embeds `dist/` folder into binary
+    - Creates platform bundles
+    - Binary location: `src-tauri/target/release/monochrome-plus`
 
 ### Configuration
 
@@ -154,37 +163,43 @@ The build behavior is controlled by [`src-tauri/tauri.conf.json`](src-tauri/taur
 
 ```json
 {
-  "build": {
-    "frontendDist": "../dist",       // Static assets for production
-    "devUrl": "http://localhost:5173", // Dev server for development
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
-  }
+    "build": {
+        "frontendDist": "../dist", // Static assets for production
+        "devUrl": "http://localhost:5173", // Dev server for development
+        "beforeDevCommand": "npm run dev",
+        "beforeBuildCommand": "npm run build"
+    }
 }
 ```
 
 ## Troubleshooting
 
 ### "localhost refused to connect"
+
 You ran `cargo build` (development) instead of `cargo tauri build` (production).
 
 **Fix:**
+
 ```bash
 npm run build:tauri
 ```
 
 ### Missing Dependencies (Linux)
+
 ```bash
 sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev \
     libayatana-appindicator3-dev librsvg2-dev patchelf
 ```
 
 ### Cross-Compilation Fails
+
 - Windows from Linux: Limited to bare binary (no installer)
 - macOS: Must be built on macOS (Apple's licensing)
 
 ### GitHub Actions Build Fails
+
 Set these secrets in your repository:
+
 - `TAURI_SIGNING_PRIVATE_KEY` - Generate with `cargo tauri signer generate`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
 

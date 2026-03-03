@@ -1451,14 +1451,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                             progressTotal.textContent = totalTracks.toString();
 
                             const importOptions = getImportOptions();
-                            const result = await parseCSV(csvText, api, (progress) => {
-                                const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseCSV(
+                                csvText,
+                                api,
+                                (progress) => {
+                                    const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1509,15 +1514,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const jspfText = await file.text();
 
                             const importOptions = getImportOptions();
-                            const result = await parseJSPF(jspfText, api, (progress) => {
-                                const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                progressTotal.textContent = progress.total.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseJSPF(
+                                jspfText,
+                                api,
+                                (progress) => {
+                                    const percentage =
+                                        progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    progressTotal.textContent = progress.total.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1592,14 +1603,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                             progressTotal.textContent = totalTracks.toString();
 
                             const importOptions = getImportOptions();
-                            const result = await parseCSV(csvText, api, (progress) => {
-                                const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseCSV(
+                                csvText,
+                                api,
+                                (progress) => {
+                                    const percentage = totalTracks > 0 ? (progress.current / totalTracks) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1649,15 +1665,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const xspfText = await file.text();
 
                             const importOptions = getImportOptions();
-                            const result = await parseXSPF(xspfText, api, (progress) => {
-                                const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                progressTotal.textContent = progress.total.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseXSPF(
+                                xspfText,
+                                api,
+                                (progress) => {
+                                    const percentage =
+                                        progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    progressTotal.textContent = progress.total.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1707,15 +1729,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const xmlText = await file.text();
 
                             const importOptions = getImportOptions();
-                            const result = await parseXML(xmlText, api, (progress) => {
-                                const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                progressTotal.textContent = progress.total.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseXML(
+                                xmlText,
+                                api,
+                                (progress) => {
+                                    const percentage =
+                                        progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    progressTotal.textContent = progress.total.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
@@ -1765,15 +1793,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const m3uText = await file.text();
 
                             const importOptions = getImportOptions();
-                            const result = await parseM3U(m3uText, api, (progress) => {
-                                const percentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
-                                progressFill.style.width = `${Math.min(percentage, 100)}%`;
-                                progressCurrent.textContent = progress.current.toString();
-                                progressTotal.textContent = progress.total.toString();
-                                currentTrackElement.textContent = progress.currentTrack;
-                                if (currentArtistElement)
-                                    currentArtistElement.textContent = progress.currentArtist || '';
-                            }, importOptions);
+                            const result = await parseM3U(
+                                m3uText,
+                                api,
+                                (progress) => {
+                                    const percentage =
+                                        progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+                                    progressFill.style.width = `${Math.min(percentage, 100)}%`;
+                                    progressCurrent.textContent = progress.current.toString();
+                                    progressTotal.textContent = progress.total.toString();
+                                    currentTrackElement.textContent = progress.currentTrack;
+                                    if (currentArtistElement)
+                                        currentArtistElement.textContent = progress.currentArtist || '';
+                                },
+                                importOptions
+                            );
 
                             tracks = result.tracks;
                             const missingTracks = result.missingTracks;
