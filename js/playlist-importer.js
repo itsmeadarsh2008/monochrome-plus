@@ -8,7 +8,8 @@ function getTrackArtists(track) {
     return track.artist?.name || 'Unknown Artist';
 }
 
-const IMPORT_SEARCH_DELAY_MS = 220;
+const IMPORT_SEARCH_CONCURRENCY = 8;
+const IMPORT_BATCH_INTERVAL_MS = 80;
 
 const IMPORT_MATCH_PROFILES = {
     strict: {
@@ -280,34 +281,48 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
     const missingTracks = [];
     const totalTracks = entries.length;
 
-    for (let i = 0; i < entries.length; i++) {
-        const entry = {
-            title: sanitizeImportValue(entries[i]?.title),
-            artist: sanitizeImportValue(entries[i]?.artist),
-            album: sanitizeImportValue(entries[i]?.album),
-        };
+    const concurrency = Math.max(1, Number(options?.concurrency) || IMPORT_SEARCH_CONCURRENCY);
+    let completed = 0;
 
-        if (onProgress) {
-            onProgress({
-                current: i,
-                total: totalTracks,
-                currentTrack: entry.title || 'Unknown track',
-                currentArtist: entry.artist || '',
-            });
+    for (let start = 0; start < entries.length; start += concurrency) {
+        const batch = entries.slice(start, start + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (rawEntry) => {
+                const entry = {
+                    title: sanitizeImportValue(rawEntry?.title),
+                    artist: sanitizeImportValue(rawEntry?.artist),
+                    album: sanitizeImportValue(rawEntry?.album),
+                };
+
+                if (!entry.title) {
+                    return { entry, match: null };
+                }
+
+                const match = await findBestTrackMatch(api, entry, importOptions);
+                return { entry, match };
+            })
+        );
+
+        for (const result of batchResults) {
+            if (result.match) {
+                tracks.push(result.match);
+            } else {
+                missingTracks.push(result.entry);
+            }
+
+            completed += 1;
+            if (onProgress) {
+                onProgress({
+                    current: completed,
+                    total: totalTracks,
+                    currentTrack: result.entry.title || 'Unknown track',
+                    currentArtist: result.entry.artist || '',
+                });
+            }
         }
 
-        if (!entry.title) {
-            missingTracks.push(entry);
-            continue;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, IMPORT_SEARCH_DELAY_MS));
-
-        const match = await findBestTrackMatch(api, entry, importOptions);
-        if (match) {
-            tracks.push(match);
-        } else {
-            missingTracks.push(entry);
+        if (start + concurrency < entries.length && IMPORT_BATCH_INTERVAL_MS > 0) {
+            await new Promise((resolve) => setTimeout(resolve, IMPORT_BATCH_INTERVAL_MS));
         }
     }
 

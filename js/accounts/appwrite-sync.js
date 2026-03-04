@@ -24,6 +24,8 @@ const MAX_PUBLIC_PLAYLIST_TRACKS = 500;
 const MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
 const MAX_COLLAB_PLAYLIST_TRACKS = 700;
 const MAX_COLLAB_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
+const PLAYLIST_SYNC_BATCH_SIZE = 2;
+const PLAYLIST_SYNC_INTERVAL_MS = 900;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,6 +50,9 @@ const syncManager = {
     _publicPlaylistSyncTimeoutId: null,
     _collaborativePlaylistSyncPromise: null,
     _collaborativePlaylistSyncTimeoutId: null,
+    _playlistSyncQueue: new Map(),
+    _playlistSyncInFlight: false,
+    _playlistSyncTimerId: null,
 
     _safeParseJSON(value, fallback) {
         if (value === null || value === undefined || value === '') return fallback;
@@ -306,7 +311,9 @@ const syncManager = {
     },
 
     _mapPublicPlaylistDoc(doc) {
-        const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
+        const tracks = this._safeArray(doc?.tracks, [])
+            .map((track) => this._inflateSyncedPlaylistTrack(track))
+            .filter((track) => track && typeof track === 'object');
         const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
         const numberOfTracks =
             Number.isFinite(rawTrackCount) && rawTrackCount > 0
@@ -330,7 +337,9 @@ const syncManager = {
     },
 
     _mapCollaborativePlaylistDoc(doc) {
-        const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
+        const tracks = this._safeArray(doc?.tracks, [])
+            .map((track) => this._inflateSyncedPlaylistTrack(track))
+            .filter((track) => track && typeof track === 'object');
         const parsedMembers = this._safeArray(doc?.members, [])
             .map((memberId) => String(memberId || '').trim())
             .filter(Boolean);
@@ -395,31 +404,72 @@ const syncManager = {
         };
 
         const primaryArtist = toArtistRef(track.artist) || toArtistRef(track.artists?.[0]);
-        const artists = Array.isArray(track.artists)
-            ? track.artists.map((artist) => toArtistRef(artist)).filter(Boolean)
-            : primaryArtist
-              ? [primaryArtist]
-              : [];
+        const compact = {
+            i: track.id ?? null,
+        };
+
+        if (track.title) compact.t = String(track.title);
+        if (Number.isFinite(track.duration)) compact.d = Number(track.duration);
+        if (track.explicit) compact.e = 1;
+
+        const addedAt = Number(track.addedAt);
+        if (Number.isFinite(addedAt)) compact.ad = addedAt;
+
+        if (primaryArtist?.name) compact.an = String(primaryArtist.name);
+        if (primaryArtist?.id !== undefined && primaryArtist?.id !== null && primaryArtist?.id !== '') {
+            compact.ai = primaryArtist.id;
+        }
+
+        const album = track.album || null;
+        if (album?.title) compact.lt = String(album.title);
+        if (album?.cover) compact.lc = String(album.cover);
+        if (album?.id !== undefined && album?.id !== null && album?.id !== '') {
+            compact.li = album.id;
+        }
+
+        if (track.trackNumber !== undefined && track.trackNumber !== null && track.trackNumber !== '') {
+            compact.tn = track.trackNumber;
+        }
+
+        return compact;
+    },
+
+    _inflateSyncedPlaylistTrack(track) {
+        if (!track || typeof track !== 'object') return null;
+
+        if (Object.hasOwn(track, 'id')) {
+            return track;
+        }
+
+        const id = track.i ?? null;
+        if (!id) return null;
+
+        const artistId = track.ai ?? null;
+        const artistName = track.an || null;
+        const artist = artistId || artistName ? { id: artistId, name: artistName } : null;
+
+        const albumId = track.li ?? null;
+        const albumTitle = track.lt || null;
+        const albumCover = track.lc || null;
+        const album = artist || albumId || albumTitle || albumCover
+            ? {
+                  id: albumId,
+                  title: albumTitle,
+                  cover: albumCover,
+                  artist,
+              }
+            : null;
 
         return {
-            id: track.id ?? null,
-            title: track.title || null,
-            duration: Number.isFinite(track.duration) ? track.duration : null,
-            explicit: !!track.explicit,
-            addedAt: Number.isFinite(Number(track.addedAt)) ? Number(track.addedAt) : null,
-            addedById: track.addedById ? String(track.addedById) : null,
-            addedByName: track.addedByName ? String(track.addedByName) : null,
-            artist: primaryArtist,
-            artists,
-            album: track.album
-                ? {
-                      id: track.album.id ?? null,
-                      title: track.album.title || null,
-                      cover: track.album.cover || null,
-                      artist: toArtistRef(track.album.artist),
-                  }
-                : null,
-            trackNumber: track.trackNumber || null,
+            id,
+            title: track.t || null,
+            duration: Number.isFinite(Number(track.d)) ? Number(track.d) : null,
+            explicit: !!track.e,
+            addedAt: Number.isFinite(Number(track.ad)) ? Number(track.ad) : null,
+            artist,
+            artists: artist ? [artist] : [],
+            album,
+            trackNumber: track.tn || null,
         };
     },
 
@@ -922,7 +972,75 @@ const syncManager = {
         }
     },
 
-    async syncUserPlaylist(playlist, action = 'update') {
+    _schedulePlaylistSyncFlush(delayMs = PLAYLIST_SYNC_INTERVAL_MS) {
+        if (this._playlistSyncTimerId) {
+            return;
+        }
+
+        this._playlistSyncTimerId = setTimeout(() => {
+            this._playlistSyncTimerId = null;
+            this._flushPlaylistSyncQueue().catch((error) => {
+                console.warn('[Appwrite Sync] Playlist sync queue flush failed:', error);
+            });
+        }, Math.max(0, delayMs));
+    },
+
+    _enqueuePlaylistSync(playlist, action = 'update') {
+        const playlistId = String(playlist?.id || playlist?.uuid || '').trim();
+        if (!playlistId) return Promise.resolve(false);
+
+        return new Promise((resolve, reject) => {
+            const existing = this._playlistSyncQueue.get(playlistId);
+            const nextAction = action === 'delete' ? 'delete' : action === 'create' ? 'create' : 'update';
+
+            if (existing) {
+                existing.action = nextAction === 'delete' ? 'delete' : existing.action === 'delete' ? 'update' : nextAction;
+                existing.playlist = { ...(existing.playlist || {}), ...(playlist || {}), id: playlistId };
+                existing.waiters.push({ resolve, reject });
+            } else {
+                this._playlistSyncQueue.set(playlistId, {
+                    playlistId,
+                    action: nextAction,
+                    playlist: { ...(playlist || {}), id: playlistId },
+                    waiters: [{ resolve, reject }],
+                });
+            }
+
+            this._schedulePlaylistSyncFlush(80);
+        });
+    },
+
+    async _flushPlaylistSyncQueue() {
+        if (this._playlistSyncInFlight || this._playlistSyncQueue.size === 0) return;
+
+        this._playlistSyncInFlight = true;
+        try {
+            const items = Array.from(this._playlistSyncQueue.values()).slice(0, PLAYLIST_SYNC_BATCH_SIZE);
+
+            for (const item of items) {
+                this._playlistSyncQueue.delete(item.playlistId);
+
+                try {
+                    await this._syncUserPlaylistNow(item.playlist, item.action);
+                    item.waiters.forEach(({ resolve }) => {
+                        resolve(true);
+                    });
+                } catch (error) {
+                    console.warn('[Appwrite Sync] Queued playlist sync failed:', error);
+                    item.waiters.forEach(({ reject }) => {
+                        reject(error);
+                    });
+                }
+            }
+        } finally {
+            this._playlistSyncInFlight = false;
+            if (this._playlistSyncQueue.size > 0) {
+                this._schedulePlaylistSyncFlush(PLAYLIST_SYNC_INTERVAL_MS);
+            }
+        }
+    },
+
+    async _syncUserPlaylistNow(playlist, action = 'update') {
         const record = await this._getUserRecord();
         if (!record) return;
 
@@ -961,6 +1079,11 @@ const syncManager = {
         } catch (error) {
             console.warn('[Appwrite Sync] Failed syncing user playlist metadata:', error);
         }
+    },
+
+    async syncUserPlaylist(playlist, action = 'update') {
+        if (!authManager.user) return false;
+        return this._enqueuePlaylistSync(playlist, action);
     },
 
     async syncUserFolder(folder, action = 'update') {
@@ -1974,6 +2097,12 @@ const syncManager = {
                 clearTimeout(this._collaborativePlaylistSyncTimeoutId);
                 this._collaborativePlaylistSyncTimeoutId = null;
             }
+            if (this._playlistSyncTimerId) {
+                clearTimeout(this._playlistSyncTimerId);
+                this._playlistSyncTimerId = null;
+            }
+            this._playlistSyncQueue.clear();
+            this._playlistSyncInFlight = false;
             if (this._realtimeUnsubscribe) {
                 this._realtimeUnsubscribe();
                 this._realtimeUnsubscribe = null;
