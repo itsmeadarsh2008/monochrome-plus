@@ -1562,12 +1562,17 @@ const syncManager = {
                     const allReq = store.getAll();
                     allReq.onsuccess = () => {
                         const existing = allReq.result || [];
+                        const existingById = new Map(
+                            existing
+                                .filter((playlist) => playlist?.id)
+                                .map((playlist) => [String(playlist.id), playlist])
+                        );
                         const existingPublicById = new Map(
                             existing
                                 .filter((playlist) => playlist?.isPublic && playlist?.id)
-                                .map((playlist) => [playlist.id, playlist])
+                                .map((playlist) => [String(playlist.id), playlist])
                         );
-                        const incomingById = new Map(cloudPlaylists.map((playlist) => [playlist.id, playlist]));
+                        const incomingById = new Map(cloudPlaylists.map((playlist) => [String(playlist.id), playlist]));
 
                         existingPublicById.forEach((_playlist, playlistId) => {
                             if (!incomingById.has(playlistId)) {
@@ -1577,14 +1582,23 @@ const syncManager = {
                         });
 
                         cloudPlaylists.forEach((playlist) => {
-                            const existingPlaylist = existingPublicById.get(playlist.id);
+                            const playlistId = String(playlist.id);
+                            const existingPlaylist = existingById.get(playlistId);
                             const existingTracks = this._safeArray(existingPlaylist?.tracks, []);
                             const incomingTracks = this._safeArray(playlist?.tracks, []);
+
+                            const incomingExpectedCount = Number(playlist?.numberOfTracks) || incomingTracks.length;
+                            const incomingLikelyTruncated =
+                                incomingTracks.length > 0 && incomingExpectedCount > incomingTracks.length;
+
                             const mergedTracks =
-                                existingTracks.length >= incomingTracks.length ? existingTracks : incomingTracks;
+                                existingTracks.length > incomingTracks.length ||
+                                (incomingLikelyTruncated && existingTracks.length > 0)
+                                    ? existingTracks
+                                    : incomingTracks;
                             const mergedTrackCount = Math.max(
                                 Number(existingPlaylist?.numberOfTracks) || 0,
-                                Number(playlist?.numberOfTracks) || 0,
+                                incomingExpectedCount,
                                 mergedTracks.length
                             );
                             const mergedPlaylist = {
