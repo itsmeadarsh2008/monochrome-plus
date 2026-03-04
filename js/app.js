@@ -1334,7 +1334,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
 
                         try {
-                            await syncManager.publishPlaylist(playlist);
+                            await syncManager.pushLocalPlaylistToCloud(playlist, {
+                                chunkSize: 100,
+                                intervalMs: 0,
+                            });
                         } catch (e) {
                             console.error('Failed to publish playlist:', e);
                             playlist.isPublic = false;
@@ -1359,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 rawMessage.includes('tracks') &&
                                 (rawMessage.includes('size') || rawMessage.includes('too large'))
                             ) {
-                                message = 'Playlist is too large to publish. Reduce track count and retry.';
+                                message = 'Playlist is too large to sync fully. Try splitting it into smaller playlists.';
                             }
 
                             const { showNotification } = await loadDownloadsModule();
