@@ -181,7 +181,9 @@ const syncManager = {
         if (track.trackId != null) return `trackId:${track.trackId}`;
         if (track.isrc) return `isrc:${String(track.isrc).toLowerCase()}`;
 
-        const title = String(track.title || '').trim().toLowerCase();
+        const title = String(track.title || '')
+            .trim()
+            .toLowerCase();
         const artistKey = artists.map((artist) => artist.name.toLowerCase()).join(',');
         if (!title && !artistKey) return null;
         return `meta:${title}::${artistKey}`;
@@ -2044,9 +2046,7 @@ const syncManager = {
                 const publicPlaylists = {};
                 const publicPlaylistIds = new Set();
                 const publicPlaylistDocuments = [];
-                const cloudPlaylistMetadata = shouldProtectCloudPlaylists
-                    ? { ...existingCloudPlaylistMetadata }
-                    : {};
+                const cloudPlaylistMetadata = shouldProtectCloudPlaylists ? { ...existingCloudPlaylistMetadata } : {};
                 for (const playlist of playlists) {
                     if (!playlist?.id) continue;
 
@@ -2113,12 +2113,18 @@ const syncManager = {
                         await Promise.allSettled(
                             existingCloudPlaylists.documents
                                 .filter((doc) => !publicPlaylistIds.has(doc.id))
-                                .map((doc) => databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id))
+                                .map((doc) =>
+                                    databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id)
+                                )
                         );
 
-                        await Promise.allSettled(publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist)));
+                        await Promise.allSettled(
+                            publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist))
+                        );
                     } else if (hasCloudPlaylistMetadata) {
-                        console.log('[Appwrite Sync] Skipping destructive public playlist sync because local metadata is empty.');
+                        console.log(
+                            '[Appwrite Sync] Skipping destructive public playlist sync because local metadata is empty.'
+                        );
                     }
                 } catch (playlistError) {
                     console.warn('[Appwrite Sync] Periodic public playlist sync failed:', playlistError);

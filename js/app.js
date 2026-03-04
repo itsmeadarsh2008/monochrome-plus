@@ -2654,7 +2654,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.addEventListener('disc-size-changed', (event) => {
         const size = Number.parseInt(String(event?.detail?.size ?? ''), 10);
-        const discSize = Number.isFinite(size) ? rotatingCoverSettings.setDiscSize(size) : rotatingCoverSettings.getDiscSize();
+        const discSize = Number.isFinite(size)
+            ? rotatingCoverSettings.setDiscSize(size)
+            : rotatingCoverSettings.getDiscSize();
         document.documentElement.style.setProperty('--vinyl-disc-size', `${discSize}px`);
     });
 

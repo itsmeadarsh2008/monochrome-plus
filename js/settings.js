@@ -130,7 +130,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
         if (track.trackId != null) return `trackId:${track.trackId}`;
         if (track.isrc) return `isrc:${String(track.isrc).toLowerCase()}`;
 
-        const title = String(track.title || '').trim().toLowerCase();
+        const title = String(track.title || '')
+            .trim()
+            .toLowerCase();
         const artists = normalizeArtists(track)
             .map((artist) => artist.name.toLowerCase())
             .join(',');

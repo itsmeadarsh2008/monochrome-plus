@@ -4871,13 +4871,21 @@ export class UIRenderer {
                 if (item.trackId != null) return `trackId:${item.trackId}`;
                 if (item.isrc) return `isrc:${String(item.isrc).toLowerCase()}`;
 
-                const title = String(item.title || '').trim().toLowerCase();
+                const title = String(item.title || '')
+                    .trim()
+                    .toLowerCase();
                 const artists = Array.isArray(item.artists)
                     ? item.artists
-                          .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                          .map((artist) =>
+                              String(artist?.name || artist || '')
+                                  .trim()
+                                  .toLowerCase()
+                          )
                           .filter(Boolean)
                           .join(',')
-                    : String(item.artist?.name || item.artist || '').trim().toLowerCase();
+                    : String(item.artist?.name || item.artist || '')
+                          .trim()
+                          .toLowerCase();
 
                 if (!title && !artists) return null;
                 return `meta:${title}::${artists}`;

@@ -19,7 +19,10 @@ function toUnixSecondsFromNow(msFromNow = 0) {
 
 function buildTidalCoverUrl(coverId, size = 320) {
     if (typeof coverId !== 'string') return null;
-    const normalized = coverId.trim().replace(/-/g, '/').replace(/^\/+|\/+$/g, '');
+    const normalized = coverId
+        .trim()
+        .replace(/-/g, '/')
+        .replace(/^\/+|\/+$/g, '');
     if (!normalized) return null;
     return `https://resources.tidal.com/images/${normalized}/${size}x${size}.jpg`;
 }
@@ -60,12 +63,7 @@ function resolveTrackCoverCandidates(player, track) {
     const candidates = [];
 
     const directUrl =
-        track.cover ||
-        track.image ||
-        track.artwork ||
-        track.thumbnail ||
-        track.album?.image ||
-        track.album?.coverUrl;
+        track.cover || track.image || track.artwork || track.thumbnail || track.album?.image || track.album?.coverUrl;
     if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
         candidates.push(directUrl);
     }
