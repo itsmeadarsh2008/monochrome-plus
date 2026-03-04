@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-const DEFAULT_DISCORD_CLIENT_ID: &str = "1466351059843809282";
+const DEFAULT_DISCORD_CLIENT_ID: &str = "1478608904609857576";
 const RPC_START_ATTEMPTS: usize = 6;
 const RPC_START_SLEEP_MS: u64 = 80;
 

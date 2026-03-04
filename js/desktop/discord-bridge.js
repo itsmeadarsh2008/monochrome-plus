@@ -1,7 +1,7 @@
 import { getTrackArtists, getTrackTitle, deriveTrackQuality } from '../utils.js';
 import { invokeTauri, isTauriRuntime } from './tauri-runtime.js';
 
-const DISCORD_CLIENT_ID = '1466351059843809282';
+const DISCORD_CLIENT_ID = '1478608904609857576';
 
 const QUALITY_LABELS = {
     HI_RES_LOSSLESS: 'Hi-Res Lossless',
