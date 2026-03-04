@@ -1126,7 +1126,11 @@ const syncManager = {
         let existing = await this._findPublicPlaylistDoc(playlistId);
 
         const serializeBestEffort = (tracksSlice) => {
-            const candidates = [tracksSlice, compactTracks.slice(0, tracksSlice.length), idOnlyTracks.slice(0, tracksSlice.length)];
+            const candidates = [
+                tracksSlice,
+                compactTracks.slice(0, tracksSlice.length),
+                idOnlyTracks.slice(0, tracksSlice.length),
+            ];
             for (const candidate of candidates) {
                 const serialized = JSON.stringify(candidate);
                 if (serialized.length <= MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS) {
@@ -1156,11 +1160,17 @@ const syncManager = {
             if (existing?.$id) {
                 await databases.updateDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, existing.$id, payload);
             } else {
-                existing = await databases.createDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, ID.unique(), payload, [
-                    Permission.read(Role.any()),
-                    Permission.update(Role.user(user.$id)),
-                    Permission.delete(Role.user(user.$id)),
-                ]);
+                existing = await databases.createDocument(
+                    DATABASE_ID,
+                    PUBLIC_PLAYLISTS_COLLECTION,
+                    ID.unique(),
+                    payload,
+                    [
+                        Permission.read(Role.any()),
+                        Permission.update(Role.user(user.$id)),
+                        Permission.delete(Role.user(user.$id)),
+                    ]
+                );
             }
         };
 

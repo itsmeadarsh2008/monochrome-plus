@@ -1362,7 +1362,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 rawMessage.includes('tracks') &&
                                 (rawMessage.includes('size') || rawMessage.includes('too large'))
                             ) {
-                                message = 'Playlist is too large to sync fully. Try splitting it into smaller playlists.';
+                                message =
+                                    'Playlist is too large to sync fully. Try splitting it into smaller playlists.';
                             }
 
                             const { showNotification } = await loadDownloadsModule();
