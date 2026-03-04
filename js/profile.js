@@ -3,7 +3,7 @@ import { authManager } from './accounts/auth.js';
 import { navigate } from './router.js';
 import { MusicAPI } from './music-api.js';
 import { apiSettings } from './storage.js';
-import { debounce, escapeHtml, getShareUrl } from './utils.js';
+import { debounce, escapeHtml, getShareUrl, copyTextToClipboard } from './utils.js';
 import { storage, client } from './lib/appwrite.js';
 import { ID } from 'appwrite';
 
@@ -706,7 +706,11 @@ saveProfileBtn.addEventListener('click', saveProfile);
 shareProfileBtn?.addEventListener('click', () => {
     if (!currentProfileUsername) return;
     const url = getShareUrl(`/user/@${currentProfileUsername}`);
-    navigator.clipboard.writeText(url).then(() => {
+    copyTextToClipboard(url).then((copied) => {
+        if (!copied) {
+            alert('Could not copy link on this browser.');
+            return;
+        }
         const originalContent = shareProfileBtn.innerHTML;
         shareProfileBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">

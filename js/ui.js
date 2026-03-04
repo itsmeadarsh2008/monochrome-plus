@@ -20,6 +20,8 @@ import {
     formatDuration,
     escapeHtml,
     getShareUrl,
+    createTimeoutSignal,
+    copyTextToClipboard,
 } from './utils.js';
 import { openLyricsPanel } from './lyrics.js';
 import {
@@ -846,10 +848,28 @@ export class UIRenderer {
             href: `/artist/${artist.id}`,
             title: escapeHtml(artist.name),
             subtitle: '',
-            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'">`,
             actionButtonsHTML: '',
             isCompact,
             extraClasses: `artist${isBlocked ? ' blocked' : ''}`,
+            extraAttributes: isBlocked ? 'title="Blocked: Artist blocked"' : '',
+        });
+    }
+
+    createSearchArtistCardHTML(artist) {
+        const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
+        const picture = artist?.picture || 'assets/appicon.png';
+
+        return this.createBaseCardHTML({
+            type: 'artist',
+            id: artist.id,
+            href: `/artist/${artist.id}`,
+            title: escapeHtml(artist.name),
+            subtitle: '',
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'">`,
+            actionButtonsHTML: '',
+            isCompact: false,
+            extraClasses: `artist search-artist-card${isBlocked ? ' blocked' : ''}`,
             extraAttributes: isBlocked ? 'title="Blocked: Artist blocked"' : '',
         });
     }
@@ -863,7 +883,7 @@ export class UIRenderer {
             href: `/artist/${artist.id}`,
             title: escapeHtml(artist.name),
             subtitle: '',
-            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy">`,
+            imageHTML: `<img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" class="card-image" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'">`,
             actionButtonsHTML: '',
             isCompact: false,
             extraClasses: `artist-circular${isBlocked ? ' blocked' : ''}`,
@@ -2073,6 +2093,9 @@ export class UIRenderer {
     }
 
     showPage(pageId) {
+        const didPageChange = this._activePageId !== pageId;
+        this._activePageId = pageId;
+
         document.querySelectorAll('.page').forEach((page) => {
             page.classList.toggle('active', page.id === `page-${pageId}`);
         });
@@ -2088,9 +2111,13 @@ export class UIRenderer {
             link.classList.toggle('active', isHome || isProfile || isMatch);
         });
 
-        const mainContent = document.querySelector('.main-content');
-        mainContent.scrollTop = 0;
-        scrollToTop();
+        if (didPageChange) {
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.scrollTop = 0;
+            }
+            scrollToTop();
+        }
 
         // Clear background and color if not on album, artist, playlist, or mix page
         if (!['album', 'artist', 'playlist', 'mix'].includes(pageId)) {
@@ -2104,9 +2131,9 @@ export class UIRenderer {
         }
     }
 
-    activateSearchTab(tabName = 'tracks') {
-        const validTabs = new Set(['tracks', 'albums', 'artists', 'playlists', 'profiles']);
-        const selectedTab = validTabs.has(tabName) ? tabName : 'tracks';
+    activateSearchTab(tabName = 'all') {
+        const validTabs = new Set(['all', 'tracks', 'albums', 'artists', 'playlists', 'profiles']);
+        const selectedTab = validTabs.has(tabName) ? tabName : 'all';
 
         const searchPage = document.getElementById('page-search');
         if (!searchPage) return selectedTab;
@@ -3230,6 +3257,10 @@ export class UIRenderer {
                     .sort((a, b) => b.score - a.score)
                     .map((entry) => entry.artist);
 
+                if (forceRefresh && rankedArtists.length > 1) {
+                    rankedArtists = [...rankedArtists].sort(() => Math.random() - 0.5);
+                }
+
                 const novelArtists = rankedArtists.filter((artist) => !recentArtistIds.has(artist.id));
                 if (novelArtists.length >= 8) {
                     rankedArtists = novelArtists;
@@ -3417,10 +3448,13 @@ export class UIRenderer {
         return items.filter((item) => !favoriteIds.has(item.id));
     }
 
-    async renderSearchPage(query, activeTab = 'tracks') {
+    async renderSearchPage(query, activeTab = 'all') {
         this.showPage('search');
-        this.activateSearchTab(activeTab);
-        document.getElementById('search-results-title').textContent = `Search Results for "${query}"`;
+        const selectedTab = this.activateSearchTab(activeTab);
+        const normalizedQuery = String(query || '').trim();
+        document.getElementById('search-results-title').textContent = normalizedQuery
+            ? `Search Results for "${normalizedQuery}"`
+            : 'Search Results';
 
         const tracksContainer = document.getElementById('search-tracks-container');
         const artistsContainer = document.getElementById('search-artists-container');
@@ -3428,11 +3462,46 @@ export class UIRenderer {
         const playlistsContainer = document.getElementById('search-playlists-container');
         const usersContainer = document.getElementById('search-users-container');
 
-        tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
-        artistsContainer.innerHTML = this.createSkeletonCards(6, true);
-        albumsContainer.innerHTML = this.createSkeletonCards(6, false);
-        playlistsContainer.innerHTML = this.createSkeletonCards(6, false);
-        if (usersContainer) usersContainer.innerHTML = this.createSkeletonCards(6, false);
+        const allTracksContainer = document.getElementById('search-all-tracks-container');
+        const allArtistsContainer = document.getElementById('search-all-artists-container');
+        const allAlbumsContainer = document.getElementById('search-all-albums-container');
+        const allPlaylistsContainer = document.getElementById('search-all-playlists-container');
+        const allUsersContainer = document.getElementById('search-all-users-container');
+
+        if (!normalizedQuery) {
+            const emptyState = createPlaceholder('Start typing to search tracks, artists, albums, playlists, and profiles.');
+            tracksContainer.innerHTML = emptyState;
+            artistsContainer.innerHTML = emptyState;
+            albumsContainer.innerHTML = emptyState;
+            playlistsContainer.innerHTML = emptyState;
+            if (usersContainer) usersContainer.innerHTML = emptyState;
+            if (allTracksContainer) allTracksContainer.innerHTML = emptyState;
+            if (allArtistsContainer) allArtistsContainer.innerHTML = emptyState;
+            if (allAlbumsContainer) allAlbumsContainer.innerHTML = emptyState;
+            if (allPlaylistsContainer) allPlaylistsContainer.innerHTML = emptyState;
+            if (allUsersContainer) allUsersContainer.innerHTML = emptyState;
+            return;
+        }
+
+        const shouldFetchTracks = selectedTab === 'all' || selectedTab === 'tracks';
+        const shouldFetchArtists = selectedTab === 'all' || selectedTab === 'artists';
+        const shouldFetchAlbums = selectedTab === 'all' || selectedTab === 'albums';
+        const shouldFetchPlaylists = selectedTab === 'all' || selectedTab === 'playlists';
+        const shouldFetchUsers = selectedTab === 'all' || selectedTab === 'profiles';
+
+        if (shouldFetchTracks) tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
+        if (shouldFetchArtists) artistsContainer.innerHTML = this.createSkeletonCards(6, true);
+        if (shouldFetchAlbums) albumsContainer.innerHTML = this.createSkeletonCards(6, false);
+        if (shouldFetchPlaylists) playlistsContainer.innerHTML = this.createSkeletonCards(6, false);
+        if (shouldFetchUsers && usersContainer) usersContainer.innerHTML = this.createSkeletonCards(6, false);
+
+        if (selectedTab === 'all') {
+            if (allTracksContainer) allTracksContainer.innerHTML = this.createSkeletonTracks(8, true);
+            if (allArtistsContainer) allArtistsContainer.innerHTML = this.createSkeletonCards(6, true);
+            if (allAlbumsContainer) allAlbumsContainer.innerHTML = this.createSkeletonCards(6, false);
+            if (allPlaylistsContainer) allPlaylistsContainer.innerHTML = this.createSkeletonCards(6, false);
+            if (allUsersContainer) allUsersContainer.innerHTML = this.createSkeletonCards(6, false);
+        }
 
         if (this.searchAbortController) {
             this.searchAbortController.abort();
@@ -3443,11 +3512,19 @@ export class UIRenderer {
         try {
             const provider = this.api.getCurrentProvider();
             const [tracksResult, artistsResult, albumsResult, playlistsResult, usersResult] = await Promise.all([
-                this.api.searchTracks(query, { signal, provider }),
-                this.api.searchArtists(query, { signal, provider }),
-                this.api.searchAlbums(query, { signal, provider }),
-                this.api.searchPlaylists(query, { signal, provider }),
-                syncManager.searchUsers(query),
+                shouldFetchTracks
+                    ? this.api.searchTracks(normalizedQuery, { signal, provider })
+                    : Promise.resolve({ items: [] }),
+                shouldFetchArtists
+                    ? this.api.searchArtists(normalizedQuery, { signal, provider })
+                    : Promise.resolve({ items: [] }),
+                shouldFetchAlbums
+                    ? this.api.searchAlbums(normalizedQuery, { signal, provider })
+                    : Promise.resolve({ items: [] }),
+                shouldFetchPlaylists
+                    ? this.api.searchPlaylists(normalizedQuery, { signal, provider })
+                    : Promise.resolve({ items: [] }),
+                shouldFetchUsers ? syncManager.searchUsers(normalizedQuery) : Promise.resolve([]),
             ]);
 
             let finalTracks = tracksResult.items;
@@ -3483,51 +3560,100 @@ export class UIRenderer {
             }
 
             // Track search with results
-            const totalResults = finalTracks.length + finalArtists.length + finalAlbums.length + finalPlaylists.length;
             if (finalTracks.length) {
                 this.renderListWithTracks(tracksContainer, finalTracks, true);
+                if (selectedTab === 'all' && allTracksContainer) this.renderListWithTracks(allTracksContainer, finalTracks, true);
             } else {
-                tracksContainer.innerHTML = createPlaceholder('No tracks found.');
+                if (shouldFetchTracks) tracksContainer.innerHTML = createPlaceholder('No tracks found.');
+                if (selectedTab === 'all' && allTracksContainer) allTracksContainer.innerHTML = createPlaceholder('No tracks found.');
             }
 
-            artistsContainer.innerHTML = finalArtists.length
-                ? finalArtists.map((artist) => this.createArtistCardHTML(artist)).join('')
-                : createPlaceholder('No artists found.');
+            if (shouldFetchArtists) {
+                artistsContainer.innerHTML = finalArtists.length
+                    ? finalArtists.map((artist) => this.createSearchArtistCardHTML(artist)).join('')
+                    : createPlaceholder('No artists found.');
+            }
+
+            if (selectedTab === 'all' && allArtistsContainer) {
+                allArtistsContainer.innerHTML = finalArtists.length
+                    ? finalArtists.map((artist) => this.createSearchArtistCardHTML(artist)).join('')
+                    : createPlaceholder('No artists found.');
+            }
 
             finalArtists.forEach((artist) => {
                 const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
-                if (el) {
+                if (shouldFetchArtists && el) {
                     trackDataStore.set(el, artist);
                     this.updateLikeState(el, 'artist', artist.id);
                 }
+
+                const allEl = allArtistsContainer?.querySelector(`[data-artist-id="${artist.id}"]`);
+                if (selectedTab === 'all' && allEl) {
+                    trackDataStore.set(allEl, artist);
+                    this.updateLikeState(allEl, 'artist', artist.id);
+                }
             });
 
-            albumsContainer.innerHTML = finalAlbums.length
-                ? finalAlbums.map((album) => this.createAlbumCardHTML(album)).join('')
-                : createPlaceholder('No albums found.');
+            if (shouldFetchAlbums) {
+                albumsContainer.innerHTML = finalAlbums.length
+                    ? finalAlbums.map((album) => this.createAlbumCardHTML(album)).join('')
+                    : createPlaceholder('No albums found.');
+            }
+
+            if (selectedTab === 'all' && allAlbumsContainer) {
+                allAlbumsContainer.innerHTML = finalAlbums.length
+                    ? finalAlbums.map((album) => this.createAlbumCardHTML(album)).join('')
+                    : createPlaceholder('No albums found.');
+            }
 
             finalAlbums.forEach((album) => {
                 const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                if (el) {
+                if (shouldFetchAlbums && el) {
                     trackDataStore.set(el, album);
                     this.updateLikeState(el, 'album', album.id);
                 }
-            });
 
-            playlistsContainer.innerHTML = finalPlaylists.length
-                ? finalPlaylists.map((playlist) => this.createPlaylistCardHTML(playlist)).join('')
-                : createPlaceholder('No playlists found.');
-
-            finalPlaylists.forEach((playlist) => {
-                const el = playlistsContainer.querySelector(`[data-playlist-id="${playlist.uuid}"]`);
-                if (el) {
-                    trackDataStore.set(el, playlist);
-                    this.updateLikeState(el, 'playlist', playlist.uuid);
+                const allEl = allAlbumsContainer?.querySelector(`[data-album-id="${album.id}"]`);
+                if (selectedTab === 'all' && allEl) {
+                    trackDataStore.set(allEl, album);
+                    this.updateLikeState(allEl, 'album', album.id);
                 }
             });
 
-            if (usersContainer) {
+            if (shouldFetchPlaylists) {
+                playlistsContainer.innerHTML = finalPlaylists.length
+                    ? finalPlaylists.map((playlist) => this.createPlaylistCardHTML(playlist)).join('')
+                    : createPlaceholder('No playlists found.');
+            }
+
+            if (selectedTab === 'all' && allPlaylistsContainer) {
+                allPlaylistsContainer.innerHTML = finalPlaylists.length
+                    ? finalPlaylists.map((playlist) => this.createPlaylistCardHTML(playlist)).join('')
+                    : createPlaceholder('No playlists found.');
+            }
+
+            finalPlaylists.forEach((playlist) => {
+                const el = playlistsContainer.querySelector(`[data-playlist-id="${playlist.uuid}"]`);
+                if (shouldFetchPlaylists && el) {
+                    trackDataStore.set(el, playlist);
+                    this.updateLikeState(el, 'playlist', playlist.uuid);
+                }
+
+                const allEl = allPlaylistsContainer?.querySelector(`[data-playlist-id="${playlist.uuid}"]`);
+                if (selectedTab === 'all' && allEl) {
+                    trackDataStore.set(allEl, playlist);
+                    this.updateLikeState(allEl, 'playlist', playlist.uuid);
+                }
+            });
+
+            if (shouldFetchUsers && usersContainer) {
                 usersContainer.innerHTML = usersResult.length
+                    ? usersResult.map((u) => this.createUserCardHTML(u)).join('')
+                    : createPlaceholder('No users found.');
+            }
+
+            if (selectedTab === 'all' && allUsersContainer) {
+                allUsersContainer.innerHTML = usersResult.length
                     ? usersResult.map((u) => this.createUserCardHTML(u)).join('')
                     : createPlaceholder('No users found.');
             }
@@ -3539,6 +3665,12 @@ export class UIRenderer {
             artistsContainer.innerHTML = errorMsg;
             albumsContainer.innerHTML = errorMsg;
             playlistsContainer.innerHTML = errorMsg;
+            if (usersContainer) usersContainer.innerHTML = errorMsg;
+            if (allTracksContainer) allTracksContainer.innerHTML = errorMsg;
+            if (allArtistsContainer) allArtistsContainer.innerHTML = errorMsg;
+            if (allAlbumsContainer) allAlbumsContainer.innerHTML = errorMsg;
+            if (allPlaylistsContainer) allPlaylistsContainer.innerHTML = errorMsg;
+            if (allUsersContainer) allUsersContainer.innerHTML = errorMsg;
         }
     }
 
@@ -3916,7 +4048,7 @@ export class UIRenderer {
 
                             try {
                                 const searchResult = await this.api.searchTracks(query, {
-                                    signal: AbortSignal.timeout(8000),
+                                    signal: createTimeoutSignal(8000),
                                 });
 
                                 if (myToken !== requestToken) return;
@@ -5753,7 +5885,23 @@ export class UIRenderer {
             tracksContainer.classList.add('is-editable');
 
             // Add remove buttons to each track
-            tracksContainer.querySelectorAll('.track-item').forEach((item) => {
+            tracksContainer.querySelectorAll('.track-item').forEach((item, index) => {
+                const track = tracks[index] || null;
+                const addedAtLabel = track?.addedAt
+                    ? new Date(track.addedAt).toLocaleDateString()
+                    : null;
+                const addedByLabel = String(track?.addedByName || '').trim() || 'Unknown';
+
+                const artistLine = item.querySelector('.track-item-details .artist');
+                if (artistLine && (addedAtLabel || addedByLabel)) {
+                    const collabMeta = document.createElement('span');
+                    collabMeta.className = 'track-collab-meta';
+                    collabMeta.textContent = addedAtLabel
+                        ? ` • Added ${addedAtLabel} by ${addedByLabel}`
+                        : ` • Added by ${addedByLabel}`;
+                    artistLine.appendChild(collabMeta);
+                }
+
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'track-action-btn remove-from-playlist-btn';
                 removeBtn.title = 'Remove from playlist';
@@ -5949,7 +6097,13 @@ export class UIRenderer {
                 shareBtn.style.display = '';
                 shareBtn.onclick = () => {
                     const url = getShareUrl(`/userplaylist/${playlist.id || playlist.uuid}`);
-                    navigator.clipboard.writeText(url).then(() => alert('Link copied to clipboard!'));
+                    copyTextToClipboard(url).then((copied) => {
+                        if (!copied) {
+                            alert('Could not copy link on this browser.');
+                            return;
+                        }
+                        alert('Link copied to clipboard!');
+                    });
                 };
             } else {
                 shareBtn.style.display = 'none';

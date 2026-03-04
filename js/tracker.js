@@ -5,8 +5,6 @@ import { navigate } from './router.js';
 let artistsData = [];
 let artistsPopularity = new Map(); // name -> popularity score
 let globalPlayer = null;
-let hasLoadAttempted = false; // Track if we've attempted to load data
-let isDataLoadFailed = false; // Track if data loading has permanently failed
 
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
@@ -55,7 +53,7 @@ function getTrackerAssetUrl(fileName) {
     if (!safeName) return 'assets/logo.svg';
 
     const [primaryBase, fallbackBase] = TRACKER_ENDPOINTS.assetsBase;
-    return `${primaryBase}/${safeName}.webp` || `${fallbackBase}/${safeName}.webp`;
+    return `${fallbackBase}/${safeName}.webp` || `${primaryBase}/${safeName}.webp`;
 }
 
 // Store all songs for search functionality
@@ -78,7 +76,6 @@ function cleanSongTitle(title) {
 }
 
 async function loadArtistsPopularity() {
-    if (hasLoadAttempted && isDataLoadFailed) return;
     try {
         const data = await fetchWithFallback(TRACKER_ENDPOINTS.trends, { responseType: 'json' });
         if (data.results) {
@@ -94,12 +91,9 @@ async function loadArtistsPopularity() {
 }
 
 async function loadArtistsData() {
-    if (hasLoadAttempted && isDataLoadFailed) return;
-    hasLoadAttempted = true;
-
     try {
         const text = await fetchWithFallback(TRACKER_ENDPOINTS.artistsNdjson, { responseType: 'text' });
-        artistsData = text
+        const nextArtistsData = text
             .trim()
             .split('\n')
             .filter((line) => line.trim())
@@ -113,11 +107,13 @@ async function loadArtistsData() {
             .filter((item) => item !== null);
 
         // Sort by popularity if available
-        artistsData.sort((a, b) => {
+        nextArtistsData.sort((a, b) => {
             const popA = artistsPopularity.get(a.name) || 0;
             const popB = artistsPopularity.get(b.name) || 0;
             return popB - popA;
         });
+
+        artistsData = nextArtistsData;
 
         // Build sheetId lookup map
         artistBySheetId.clear();
@@ -127,13 +123,11 @@ async function loadArtistsData() {
                 artistBySheetId.set(sheetId, artist);
             }
         });
-
-        isDataLoadFailed = false;
     } catch (e) {
-        isDataLoadFailed = true;
         console.warn('[Tracker] Could not load Artists List from ArtistGrid:', e.message || e);
-        // Set empty data to prevent repeated failed attempts
-        artistsData = [];
+        if (!Array.isArray(artistsData)) {
+            artistsData = [];
+        }
     }
 }
 

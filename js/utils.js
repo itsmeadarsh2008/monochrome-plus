@@ -508,7 +508,82 @@ export function positionMenu(menu, x, y, anchorRect = null) {
 }
 
 export const getShareUrl = (path) => {
-    const baseUrl = window.location.origin;
+    const configuredBase = String(window.__SHARE_BASE_URL__ || '').trim();
+    const origin = window.location.origin;
+    const isLocalDesktopOrigin =
+        !origin ||
+        origin.includes('tauri.localhost') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1') ||
+        origin.startsWith('file:');
+    const baseUrl = configuredBase || (isLocalDesktopOrigin ? 'https://monochrome.plus' : origin);
     const safePath = path.startsWith('/') ? path : `/${path}`;
     return `${baseUrl}${safePath}`;
+};
+
+export const createTimeoutSignal = (timeoutMs = 8000) => {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        return AbortSignal.timeout(timeoutMs);
+    }
+
+    const controller = new AbortController();
+    setTimeout(() => {
+        if (!controller.signal.aborted) {
+            controller.abort();
+        }
+    }, timeoutMs);
+    return controller.signal;
+};
+
+export const copyTextToClipboard = async (text) => {
+    const value = String(text ?? '');
+    if (!value) return false;
+
+    if (navigator?.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return true;
+        } catch {
+            // Fall through to legacy method
+        }
+    }
+
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-1000px';
+        textarea.style.left = '-1000px';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return !!copied;
+    } catch {
+        return false;
+    }
+};
+
+export const shareOrCopy = async ({ title = '', text = '', url = '' } = {}) => {
+    const shareData = {};
+    if (title) shareData.title = title;
+    if (text) shareData.text = text;
+    if (url) shareData.url = url;
+
+    if (navigator?.share && Object.keys(shareData).length > 0) {
+        try {
+            await navigator.share(shareData);
+            return 'shared';
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return 'cancelled';
+            }
+        }
+    }
+
+    const copied = await copyTextToClipboard(url || text || title);
+    return copied ? 'copied' : 'failed';
 };

@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.9] - 2026-03-04
+
+### Fixed
+
+- Restored horizontal searchbar/header behavior while keeping sidebar removal mode enabled.
+- Fixed collaborative playlist attribution so tracks keep `addedAt`, `addedById`, and `addedByName` metadata across local storage and cloud sync.
+- Fixed desktop share URL generation to avoid `tauri.localhost`/local origins and prefer canonical public links.
+- Fixed unreleased artist loading from getting stuck after one failed fetch attempt by removing permanent fail lockout behavior.
+- Fixed home recommended artists refresh to produce a genuinely refreshed set and improved artist image fallbacks.
+- Fixed browser compatibility issues for timeout-based fetches by replacing direct `AbortSignal.timeout(...)` usage with a cross-browser timeout signal helper.
+- Fixed share/copy actions across playlist/profile/context menu flows with robust fallbacks (`share` → clipboard API → legacy copy command).
+
+### Changed
+
+- Expanded account listening stats to support Today / This Month / This Year views with updated list rendering and artist avatar support.
+- Removed the Custom Database/Auth settings entry and related inactive settings logic from the app settings UI.
+- Reduced page scroll-jump behavior by only auto-scrolling to top when navigating to a different page, not on same-page re-renders.
+
 ## [2.0.8] - 2026-03-03
 
 ### Fixed

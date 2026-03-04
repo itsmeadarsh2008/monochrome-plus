@@ -11,6 +11,7 @@ import {
     getTrackArtists,
     positionMenu,
     getShareUrl,
+    copyTextToClipboard,
     escapeHtml,
 } from './utils.js';
 import { lastFMStorage, libreFmSettings, waveformSettings, hifiVisualSettings } from './storage.js';
@@ -1175,7 +1176,11 @@ export async function handleTrackAction(
         const storedHref = contextMenu?._contextHref;
         const url = getShareUrl(storedHref ? storedHref : `/track/${item.id || item.uuid}`);
 
-        navigator.clipboard.writeText(url).then(() => {
+        copyTextToClipboard(url).then((copied) => {
+            if (!copied) {
+                showNotification('Could not copy link on this browser.');
+                return;
+            }
             showNotification('Link copied to clipboard!');
         });
     } else if (action === 'open-in-new-tab') {

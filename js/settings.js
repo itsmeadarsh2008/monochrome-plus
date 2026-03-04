@@ -77,10 +77,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
     const statMonthTime = document.getElementById('account-stat-month-time');
     const statMonthPlays = document.getElementById('account-stat-month-plays');
     const statMonthArtists = document.getElementById('account-stat-month-artists');
+    const statsTitle = document.getElementById('account-stats-title');
+    const statsPeriodButtons = Array.from(document.querySelectorAll('.account-stats-period-btn'));
     const topArtistsList = document.getElementById('account-top-artists-list');
     const topTracksList = document.getElementById('account-top-tracks-list');
     let authMode = 'signup';
     let accountStatsRenderToken = 0;
+    let activeStatsPeriod = 'month';
 
     const formatDuration = (totalSeconds = 0) => {
         const seconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -103,9 +106,29 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
     const durationSecondsFromTrack = (track) => {
         if (!track || typeof track !== 'object') return 0;
+        const explicitListened = Number(
+            track.listenedSeconds ?? track.playedSeconds ?? track.playedDuration ?? track.progressSeconds ?? 0
+        );
+        if (Number.isFinite(explicitListened) && explicitListened > 0) {
+            return explicitListened > 10000 ? explicitListened / 1000 : explicitListened;
+        }
         const raw = Number(track.duration ?? track.durationSec ?? track.length ?? 0);
         if (!Number.isFinite(raw) || raw <= 0) return 0;
         return raw > 10000 ? raw / 1000 : raw;
+    };
+
+    const getTimeRangeBoundaries = (period) => {
+        const now = new Date();
+        if (period === 'today') {
+            const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            return { start, end: Date.now(), label: 'Today' };
+        }
+        if (period === 'year') {
+            const start = new Date(now.getFullYear(), 0, 1).getTime();
+            return { start, end: Date.now(), label: 'This Year' };
+        }
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        return { start, end: Date.now(), label: 'This Month' };
     };
 
     const normalizeArtists = (track) => {
@@ -116,12 +139,33 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 .map((artist) => ({
                     id: artist?.id ?? null,
                     name: String(artist?.name || artist || '').trim(),
+                    picture: artist?.picture || artist?.image || null,
                 }))
                 .filter((artist) => artist.name);
         }
 
         const single = String(track.artist?.name || track.artist || '').trim();
-        return single ? [{ id: track.artist?.id ?? null, name: single }] : [];
+        return single
+            ? [{ id: track.artist?.id ?? null, name: single, picture: track.artist?.picture || track.artist?.image || null }]
+            : [];
+    };
+
+    const resolveStatImageUrl = (value, kind = 'artist') => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+
+        if (/^(https?:|blob:|data:|assets\/|\/assets\/)/i.test(raw)) {
+            return raw;
+        }
+
+        try {
+            if (kind === 'cover') {
+                return typeof api?.getCoverUrl === 'function' ? api.getCoverUrl(raw, '160') : raw;
+            }
+            return typeof api?.getArtistPictureUrl === 'function' ? api.getArtistPictureUrl(raw, '160') : raw;
+        } catch {
+            return raw;
+        }
     };
 
     const trackKeyOf = (track) => {
@@ -140,20 +184,30 @@ export function initializeSettings(scrobbler, player, api, ui) {
         return `meta:${title}::${artists}`;
     };
 
-    const renderStatsList = (listEl, items, type) => {
+    const renderStatsList = (listEl, items, type, periodLabel = 'this period') => {
         if (!listEl) return;
         if (!items.length) {
-            listEl.innerHTML = '<li class="account-stats-empty">No listening data this month yet.</li>';
+            listEl.innerHTML = `<li class="account-stats-empty">No listening data for ${periodLabel.toLowerCase()} yet.</li>`;
             return;
         }
 
         listEl.innerHTML = items
-            .map((item) => {
+            .map((item, index) => {
+                const rank = index + 1;
                 if (type === 'artist') {
+                    const artistImage = resolveStatImageUrl(item.artistImage || item.image, 'artist');
+                    const imageHtml = artistImage
+                        ? `
+                            <span class="account-stats-avatar-wrap">
+                                <img src="${escapeHtml(artistImage)}" alt="${escapeHtml(item.name)}" class="account-stats-item-avatar" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'" />
+                            </span>
+                        `
+                        : '';
                     return `
                         <li class="account-stats-item">
+                            <span class="account-stats-rank">${rank}</span>
                             <div class="account-stats-item-main">
-                                <span class="account-stats-item-title">${escapeHtml(item.name)}</span>
+                                <span class="account-stats-item-title">${imageHtml}${escapeHtml(item.name)}</span>
                                 <span class="account-stats-item-sub">${item.plays} play${item.plays === 1 ? '' : 's'}</span>
                             </div>
                             <span class="account-stats-item-meta">${formatDuration(item.seconds)}</span>
@@ -161,10 +215,16 @@ export function initializeSettings(scrobbler, player, api, ui) {
                     `;
                 }
 
+                const trackCover = resolveStatImageUrl(item.coverImage || item.trackCover || item.image, 'cover');
+                const trackCoverHtml = trackCover
+                    ? `<img src="${escapeHtml(trackCover)}" alt="${escapeHtml(item.title)}" class="account-stats-track-thumb" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'" />`
+                    : '';
+
                 return `
                     <li class="account-stats-item">
+                        <span class="account-stats-rank">${rank}</span>
                         <div class="account-stats-item-main">
-                            <span class="account-stats-item-title">${escapeHtml(item.title)}</span>
+                            <span class="account-stats-item-title">${trackCoverHtml}${escapeHtml(item.title)}</span>
                             <span class="account-stats-item-sub">${escapeHtml(item.artistText || 'Unknown Artist')} • ${item.plays} play${item.plays === 1 ? '' : 's'}</span>
                         </div>
                         <span class="account-stats-item-meta">${formatDuration(item.seconds)}</span>
@@ -174,30 +234,36 @@ export function initializeSettings(scrobbler, player, api, ui) {
             .join('');
     };
 
-    const computeMonthlyStats = (history) => {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
-
-        const monthTracks = (Array.isArray(history) ? history : []).filter((entry) => {
+    const computeStatsForPeriod = (history, period = 'month') => {
+        const range = getTimeRangeBoundaries(period);
+        const periodTracks = (Array.isArray(history) ? history : []).filter((entry) => {
             const timestamp = Number(entry?.timestamp || 0);
-            return Number.isFinite(timestamp) && timestamp >= monthStart && timestamp < monthEnd;
+            return Number.isFinite(timestamp) && timestamp >= range.start && timestamp < range.end;
         });
 
         const topArtists = new Map();
         const topTracks = new Map();
         let totalSeconds = 0;
 
-        monthTracks.forEach((track) => {
+        periodTracks.forEach((track) => {
             const seconds = durationSecondsFromTrack(track);
             totalSeconds += seconds;
 
             const artists = normalizeArtists(track);
             artists.forEach((artist) => {
                 const key = artist.id ? `id:${artist.id}` : `name:${artist.name.toLowerCase()}`;
-                const existing = topArtists.get(key) || { name: artist.name, plays: 0, seconds: 0 };
+                const existing = topArtists.get(key) || {
+                    id: artist.id ?? null,
+                    name: artist.name,
+                    plays: 0,
+                    seconds: 0,
+                    artistImage: artist.picture || track.artist?.picture || track.artist?.image || null,
+                };
                 existing.plays += 1;
                 existing.seconds += seconds;
+                if (!existing.artistImage) {
+                    existing.artistImage = artist.picture || track.artist?.picture || track.artist?.image || null;
+                }
                 topArtists.set(key, existing);
             });
 
@@ -212,9 +278,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
                     'Unknown Artist',
                 plays: 0,
                 seconds: 0,
+                coverImage: track.album?.cover || null,
             };
             existingTrack.plays += 1;
             existingTrack.seconds += seconds;
+            if (!existingTrack.coverImage) {
+                existingTrack.coverImage = track.album?.cover || null;
+            }
             topTracks.set(trackKey, existingTrack);
         });
 
@@ -227,9 +297,10 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 .slice(0, 5);
 
         return {
-            monthKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
-            monthTracks,
-            totalPlays: monthTracks.length,
+            period,
+            periodLabel: range.label,
+            periodTracks,
+            totalPlays: periodTracks.length,
             totalSeconds,
             uniqueArtists: topArtists.size,
             topArtists: toSorted(topArtists),
@@ -280,26 +351,85 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
         const cloudStats = normalizeCloudStats(cloudData?.profile?.statistics_summary);
         const monthKey = currentMonthKey();
+        const period = activeStatsPeriod;
+        const localStats = computeStatsForPeriod(history, period);
         let stats = null;
+        const periodLabel = getTimeRangeBoundaries(period).label;
 
-        if (cloudStats && cloudStats.monthKey === monthKey) {
-            stats = cloudStats;
+        if (localStats.totalPlays > 0 || period !== 'month') {
+            stats = localStats;
+        } else if (period === 'month' && cloudStats && cloudStats.monthKey === monthKey) {
+            stats = {
+                ...cloudStats,
+                topArtists:
+                    cloudStats.topArtists.length > 0
+                        ? cloudStats.topArtists.map((artistItem) => {
+                              const fallback = localStats.topArtists.find(
+                                  (candidate) =>
+                                      (candidate.id && artistItem?.id && String(candidate.id) === String(artistItem.id)) ||
+                                      String(candidate.name || '').toLowerCase() ===
+                                          String(artistItem?.name || '').toLowerCase()
+                              );
+                              return {
+                                  ...artistItem,
+                                  artistImage: artistItem?.artistImage || artistItem?.image || fallback?.artistImage || null,
+                              };
+                          })
+                        : localStats.topArtists,
+                topTracks:
+                    cloudStats.topTracks.length > 0
+                        ? cloudStats.topTracks.map((trackItem) => {
+                              const fallback = localStats.topTracks.find(
+                                  (candidate) =>
+                                      String(candidate.title || '').toLowerCase() ===
+                                          String(trackItem?.title || '').toLowerCase() &&
+                                      String(candidate.artistText || '').toLowerCase() ===
+                                          String(trackItem?.artistText || '').toLowerCase()
+                              );
+                              return {
+                                  ...trackItem,
+                                  coverImage: trackItem?.coverImage || trackItem?.trackCover || fallback?.coverImage || null,
+                              };
+                          })
+                        : localStats.topTracks,
+            };
         } else {
-            stats = computeMonthlyStats(history);
-            if (authManager.user) {
+            stats = localStats;
+            if (period === 'month' && authManager.user) {
                 syncManager.syncListeningStats(history).catch((error) => {
                     console.warn('[Account Stats] Failed to backfill cloud stats:', error);
                 });
             }
         }
 
+        if (statsTitle) statsTitle.textContent = periodLabel;
+
         if (statMonthTime) statMonthTime.textContent = formatDuration(stats.totalSeconds);
-        if (statMonthPlays) statMonthPlays.textContent = String(stats.totalPlays || stats.monthTracks?.length || 0);
+        if (statMonthPlays) statMonthPlays.textContent = String(stats.totalPlays || 0);
         if (statMonthArtists) statMonthArtists.textContent = String(stats.uniqueArtists || 0);
 
-        renderStatsList(topArtistsList, stats.topArtists, 'artist');
-        renderStatsList(topTracksList, stats.topTracks, 'track');
+        renderStatsList(topArtistsList, stats.topArtists, 'artist', periodLabel);
+        renderStatsList(topTracksList, stats.topTracks, 'track', periodLabel);
     };
+
+    const updateStatsPeriodButtons = () => {
+        statsPeriodButtons.forEach((button) => {
+            const isActive = button.dataset.period === activeStatsPeriod;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    statsPeriodButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const period = String(button.dataset.period || '').trim();
+            if (!['today', 'month', 'year'].includes(period) || period === activeStatsPeriod) return;
+            activeStatsPeriod = period;
+            updateStatsPeriodButtons();
+            renderAccountStats(authManager.user);
+        });
+    });
+    updateStatsPeriodButtons();
 
     const setFeedback = (message, type = 'info') => {
         if (!feedback) return;
@@ -3393,92 +3523,6 @@ export function initializeSettings(scrobbler, player, api, ui) {
         };
         reader.readAsText(file);
     });
-
-    const customDbBtn = document.getElementById('custom-db-btn');
-    const customDbModal = document.getElementById('custom-db-modal');
-    const customPbUrlInput = document.getElementById('custom-pb-url');
-    const customFirebaseConfigInput = document.getElementById('custom-firebase-config');
-    const customDbSaveBtn = document.getElementById('custom-db-save');
-    const customDbResetBtn = document.getElementById('custom-db-reset');
-    const customDbCancelBtn = document.getElementById('custom-db-cancel');
-
-    if (customDbBtn && customDbModal) {
-        const fbFromEnv = !!window.__FIREBASE_CONFIG__;
-        const pbFromEnv = !!window.__POCKETBASE_URL__;
-
-        // Hide entire setting if both are server-configured
-        if (fbFromEnv && pbFromEnv) {
-            const settingItem = customDbBtn.closest('.setting-item');
-            if (settingItem) settingItem.style.display = 'none';
-        }
-
-        // Hide individual fields in the modal
-        if (pbFromEnv && customPbUrlInput) customPbUrlInput.closest('div[style]').style.display = 'none';
-        if (fbFromEnv && customFirebaseConfigInput)
-            customFirebaseConfigInput.closest('div[style]').style.display = 'none';
-
-        customDbBtn.addEventListener('click', () => {
-            const pbUrl = localStorage.getItem('monochrome-pocketbase-url') || '';
-            const fbConfig = localStorage.getItem('monochrome-firebase-config');
-
-            if (!pbFromEnv) customPbUrlInput.value = pbUrl;
-            if (!fbFromEnv) {
-                if (fbConfig) {
-                    try {
-                        customFirebaseConfigInput.value = JSON.stringify(JSON.parse(fbConfig), null, 2);
-                    } catch {
-                        customFirebaseConfigInput.value = fbConfig;
-                    }
-                } else {
-                    customFirebaseConfigInput.value = '';
-                }
-            }
-
-            customDbModal.classList.add('active');
-        });
-
-        const closeCustomDbModal = () => {
-            customDbModal.classList.remove('active');
-        };
-
-        customDbCancelBtn.addEventListener('click', closeCustomDbModal);
-        customDbModal.querySelector('.modal-overlay').addEventListener('click', closeCustomDbModal);
-
-        customDbSaveBtn.addEventListener('click', () => {
-            const pbUrl = customPbUrlInput.value.trim();
-            const fbConfigStr = customFirebaseConfigInput.value.trim();
-
-            if (pbUrl) {
-                localStorage.setItem('monochrome-pocketbase-url', pbUrl);
-            } else {
-                localStorage.removeItem('monochrome-pocketbase-url');
-            }
-
-            if (fbConfigStr) {
-                try {
-                    const fbConfig = JSON.parse(fbConfigStr);
-                    saveFirebaseConfig(fbConfig);
-                } catch {
-                    alert('Invalid JSON for Firebase Config');
-                    return;
-                }
-            } else {
-                clearFirebaseConfig();
-            }
-
-            alert('Settings saved. Reloading...');
-            window.location.reload();
-        });
-
-        customDbResetBtn.addEventListener('click', () => {
-            if (confirm('Reset custom database settings to default?')) {
-                localStorage.removeItem('monochrome-pocketbase-url');
-                clearFirebaseConfig();
-                alert('Settings reset. Reloading...');
-                window.location.reload();
-            }
-        });
-    }
 
     // PWA Auto-Update Toggle
     const pwaAutoUpdateToggle = document.getElementById('pwa-auto-update-toggle');

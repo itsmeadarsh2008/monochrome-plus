@@ -406,6 +406,9 @@ const syncManager = {
             title: track.title || null,
             duration: Number.isFinite(track.duration) ? track.duration : null,
             explicit: !!track.explicit,
+            addedAt: Number.isFinite(Number(track.addedAt)) ? Number(track.addedAt) : null,
+            addedById: track.addedById ? String(track.addedById) : null,
+            addedByName: track.addedByName ? String(track.addedByName) : null,
             artist: primaryArtist,
             artists,
             album: track.album

@@ -17,7 +17,7 @@ import { LyricsManager, openLyricsPanel, clearLyricsPanelSync } from './lyrics.j
 import { createRouter, updateTabTitle, navigate } from './router.js';
 import { initializePlayerEvents, initializeTrackInteractions, handleTrackAction } from './events.js';
 import { initializeUIInteractions } from './ui-interactions.js';
-import { debounce, SVG_PLAY, getShareUrl } from './utils.js';
+import { debounce, SVG_PLAY, getShareUrl, shareOrCopy } from './utils.js';
 import { SearchEngine } from './search-engine.js';
 import { storage } from './lib/appwrite.js';
 import { ID } from 'appwrite';
@@ -1909,14 +1909,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         shareBtn.style.display = playlist.isPublic ? 'flex' : 'none';
                         shareBtn.onclick = async () => {
                             const url = getShareUrl(`/userplaylist/${playlist.id}`);
-                            if (navigator.share) {
-                                try {
-                                    await navigator.share({ title: playlist.name, url });
-                                } catch {
-                                    /* user cancelled */
-                                }
-                            } else {
-                                await navigator.clipboard.writeText(url);
+                            const shareResult = await shareOrCopy({ title: playlist.name, url });
+                            if (shareResult === 'copied') {
                                 const { showNotification } = await loadDownloadsModule();
                                 showNotification('Link copied to clipboard!');
                             }
@@ -1983,14 +1977,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         shareBtn.style.display = playlist.isPublic ? 'flex' : 'none';
                         shareBtn.onclick = async () => {
                             const url = getShareUrl(`/userplaylist/${playlist.id}`);
-                            if (navigator.share) {
-                                try {
-                                    await navigator.share({ title: playlist.name, url });
-                                } catch {
-                                    /* user cancelled */
-                                }
-                            } else {
-                                await navigator.clipboard.writeText(url);
+                            const shareResult = await shareOrCopy({ title: playlist.name, url });
+                            if (shareResult === 'copied') {
                                 const { showNotification } = await loadDownloadsModule();
                                 showNotification('Link copied to clipboard!');
                             }

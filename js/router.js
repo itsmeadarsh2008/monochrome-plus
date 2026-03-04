@@ -51,7 +51,7 @@ export function createRouter(ui) {
             case 'search': {
                 const searchSegments = param ? param.split('/') : [];
                 const query = decodeURIComponent(searchSegments[0] || '');
-                const activeTab = decodeURIComponent(searchSegments[1] || 'tracks');
+                const activeTab = decodeURIComponent(searchSegments[1] || 'all');
                 await ui.renderSearchPage(query, activeTab);
                 break;
             }

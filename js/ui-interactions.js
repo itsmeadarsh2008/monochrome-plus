@@ -486,7 +486,7 @@ export function initializeUIInteractions(player, api, ui) {
                 const segments = currentPath.split('/').filter(Boolean);
                 const encodedQuery = segments[0] === 'search' ? segments[1] || '' : '';
                 const nextPath = encodedQuery
-                    ? `/search/${encodedQuery}/${encodeURIComponent(tab.dataset.tab || 'tracks')}`
+                    ? `/search/${encodedQuery}/${encodeURIComponent(tab.dataset.tab || 'all')}`
                     : '/search';
                 if (currentPath !== nextPath) {
                     window.history.replaceState({}, '', nextPath);

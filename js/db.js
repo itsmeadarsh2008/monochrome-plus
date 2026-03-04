@@ -240,6 +240,8 @@ export class MusicDatabase {
         if (type === 'track') {
             return {
                 ...base,
+                addedById: item.addedById || null,
+                addedByName: item.addedByName || null,
                 title: item.title || null,
                 duration: item.duration || null,
                 explicit: item.explicit || false,
@@ -1113,9 +1115,26 @@ export class MusicDatabase {
         if (!playlist) throw new Error('Playlist not found');
         playlist.tracks = playlist.tracks || [];
 
+        let addedById = '';
+        let addedByName = '';
+        try {
+            const { authManager } = await import('./accounts/auth.js');
+            const user = authManager?.user || null;
+            addedById = String(user?.$id || '').trim();
+            addedByName = String(user?.name || user?.email || 'Unknown User').trim();
+        } catch {
+            addedById = '';
+            addedByName = '';
+        }
+
         for (const track of tracks) {
             if (!playlist.tracks.some((t) => t.id === track.id)) {
-                const trackWithDate = { ...track, addedAt: Date.now() };
+                const trackWithDate = {
+                    ...track,
+                    addedAt: Date.now(),
+                    addedById: addedById || null,
+                    addedByName: addedByName || null,
+                };
                 playlist.tracks.push(this._minifyItem('track', trackWithDate));
             }
         }

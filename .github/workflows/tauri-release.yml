@@ -86,12 +86,17 @@ jobs:
         shell: bash
         run: |
           APP_VERSION="${GITHUB_REF_NAME#v}"
+          REPO_SLUG="${GITHUB_REPOSITORY}"
           echo "Syncing app version to ${APP_VERSION}"
-          APP_VERSION="${APP_VERSION}" node -e "
+          APP_VERSION="${APP_VERSION}" REPO_SLUG="${REPO_SLUG}" node -e "
             const fs = require('fs');
             const version = process.env.APP_VERSION;
+            const repoSlug = process.env.REPO_SLUG;
             if (!version || version === 'undefined') {
               throw new Error('APP_VERSION is missing or invalid');
+            }
+            if (!repoSlug || repoSlug === 'undefined') {
+              throw new Error('REPO_SLUG is missing or invalid');
             }
             
             // Update package.json
@@ -104,6 +109,10 @@ jobs:
             const tauriPath = 'src-tauri/tauri.conf.json';
             const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
             tauri.version = version;
+            const updaterEndpoint = 'https://github.com/' + repoSlug + '/releases/latest/download/latest.json';
+            if (!tauri.plugins) tauri.plugins = {};
+            if (!tauri.plugins.updater) tauri.plugins.updater = {};
+            tauri.plugins.updater.endpoints = [updaterEndpoint];
             fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 4) + '\\n');
             
             // Update Cargo.toml

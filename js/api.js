@@ -5,6 +5,7 @@ import {
     delay,
     isTrackUnavailable,
     getExtensionFromBlob,
+    createTimeoutSignal,
 } from './utils.js';
 import { trackDateSettings, audioProcessingSettings } from './storage.js';
 import { APICache } from './cache.js';
@@ -1011,7 +1012,7 @@ export class LosslessAPI {
                 try {
                     // Search for the track to get full metadata
                     const searchQuery = `"${track.title}" ${track.artist?.name || ''}`.trim();
-                    const searchResult = await this.searchTracks(searchQuery, { signal: AbortSignal.timeout(5000) });
+                    const searchResult = await this.searchTracks(searchQuery, { signal: createTimeoutSignal(5000) });
 
                     if (searchResult.items && searchResult.items.length > 0) {
                         const foundTrack = searchResult.items[0];
@@ -1358,10 +1359,13 @@ export class LosslessAPI {
 
     getArtistPictureUrl(id, size = '320') {
         if (!id) {
-            return `https://picsum.photos/seed/${Math.random()}/${size}`;
+            return 'assets/appicon.png';
         }
 
-        if (typeof id === 'string' && (id.startsWith('blob:') || id.startsWith('assets/'))) {
+        if (
+            typeof id === 'string' &&
+            (id.startsWith('blob:') || id.startsWith('assets/') || id.startsWith('http') || id.startsWith('data:'))
+        ) {
             return id;
         }
 
