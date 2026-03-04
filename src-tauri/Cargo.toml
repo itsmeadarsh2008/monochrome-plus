@@ -1,6 +1,6 @@
 [package]
 name = "monochrome-plus"
-version = "2.0.10"
+version = "2.0.11"
 description = "Monochrome+ - A high-fidelity music streaming application"
 authors = ["itsmeadarsh2008"]
 license = "ISC"
