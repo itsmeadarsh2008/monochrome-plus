@@ -268,9 +268,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         .then(() => console.log('[Appwrite] Connected'))
         .catch((err) => console.error('[Appwrite] Connection failed', err));
 
-    // Wait for Auth initialization
+    // Wait for Auth initialization, but don't block app startup indefinitely
     console.log('[Appwrite] Waiting for Auth initialization...');
-    await authManager.initialized;
+    const AUTH_INIT_TIMEOUT_MS = 3500;
+    const authInitResult = await Promise.race([
+        authManager.initialized
+            .then(() => 'ready')
+            .catch((error) => {
+                console.warn('[Appwrite] Auth initialization error:', error);
+                return 'error';
+            }),
+        new Promise((resolve) => {
+            setTimeout(() => resolve('timeout'), AUTH_INIT_TIMEOUT_MS);
+        }),
+    ]);
+
+    if (authInitResult === 'timeout') {
+        console.warn(`[Appwrite] Auth initialization timed out after ${AUTH_INIT_TIMEOUT_MS}ms; continuing startup.`);
+        authManager.initialized
+            .then(() => {
+                console.log('[Appwrite] Auth initialized after timeout.');
+                authManager.updateUI(authManager.user);
+                window.dispatchEvent(new CustomEvent('auth-late-ready'));
+            })
+            .catch((error) => {
+                console.warn('[Appwrite] Auth late initialization failed:', error);
+            });
+    }
+
     console.log(
         '[Appwrite] Auth initialized. User:',
         authManager.user ? authManager.user.email || authManager.user.name : 'Guest'

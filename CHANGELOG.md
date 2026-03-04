@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [2.0.8] - 2026-03-03
+
+### Fixed
+
+- Reduced startup "Not Responding" risk by making auth initialization non-blocking with timeout fallback.
+- Improved desktop app startup responsiveness while background auth state hydrates.
+
+### Changed
+
+- Added Rust release profile optimizations (`lto`, `strip`, single codegen unit, abort panic) for faster and leaner Tauri binaries.
+- Improved desktop bundle metadata and file associations so Windows/Linux/macOS recognize the app as a music/audio app.
+
 ## [2.0.7] - 2026-03-03
 
 ### Fixed
