@@ -451,14 +451,15 @@ const syncManager = {
         const albumId = track.li ?? null;
         const albumTitle = track.lt || null;
         const albumCover = track.lc || null;
-        const album = artist || albumId || albumTitle || albumCover
-            ? {
-                  id: albumId,
-                  title: albumTitle,
-                  cover: albumCover,
-                  artist,
-              }
-            : null;
+        const album =
+            artist || albumId || albumTitle || albumCover
+                ? {
+                      id: albumId,
+                      title: albumTitle,
+                      cover: albumCover,
+                      artist,
+                  }
+                : null;
 
         return {
             id,
@@ -977,12 +978,15 @@ const syncManager = {
             return;
         }
 
-        this._playlistSyncTimerId = setTimeout(() => {
-            this._playlistSyncTimerId = null;
-            this._flushPlaylistSyncQueue().catch((error) => {
-                console.warn('[Appwrite Sync] Playlist sync queue flush failed:', error);
-            });
-        }, Math.max(0, delayMs));
+        this._playlistSyncTimerId = setTimeout(
+            () => {
+                this._playlistSyncTimerId = null;
+                this._flushPlaylistSyncQueue().catch((error) => {
+                    console.warn('[Appwrite Sync] Playlist sync queue flush failed:', error);
+                });
+            },
+            Math.max(0, delayMs)
+        );
     },
 
     _enqueuePlaylistSync(playlist, action = 'update') {
@@ -994,7 +998,8 @@ const syncManager = {
             const nextAction = action === 'delete' ? 'delete' : action === 'create' ? 'create' : 'update';
 
             if (existing) {
-                existing.action = nextAction === 'delete' ? 'delete' : existing.action === 'delete' ? 'update' : nextAction;
+                existing.action =
+                    nextAction === 'delete' ? 'delete' : existing.action === 'delete' ? 'update' : nextAction;
                 existing.playlist = { ...(existing.playlist || {}), ...(playlist || {}), id: playlistId };
                 existing.waiters.push({ resolve, reject });
             } else {

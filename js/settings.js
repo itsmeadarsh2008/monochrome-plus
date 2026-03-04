@@ -146,7 +146,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
         const single = String(track.artist?.name || track.artist || '').trim();
         return single
-            ? [{ id: track.artist?.id ?? null, name: single, picture: track.artist?.picture || track.artist?.image || null }]
+            ? [
+                  {
+                      id: track.artist?.id ?? null,
+                      name: single,
+                      picture: track.artist?.picture || track.artist?.image || null,
+                  },
+              ]
             : [];
     };
 
@@ -366,13 +372,16 @@ export function initializeSettings(scrobbler, player, api, ui) {
                         ? cloudStats.topArtists.map((artistItem) => {
                               const fallback = localStats.topArtists.find(
                                   (candidate) =>
-                                      (candidate.id && artistItem?.id && String(candidate.id) === String(artistItem.id)) ||
+                                      (candidate.id &&
+                                          artistItem?.id &&
+                                          String(candidate.id) === String(artistItem.id)) ||
                                       String(candidate.name || '').toLowerCase() ===
                                           String(artistItem?.name || '').toLowerCase()
                               );
                               return {
                                   ...artistItem,
-                                  artistImage: artistItem?.artistImage || artistItem?.image || fallback?.artistImage || null,
+                                  artistImage:
+                                      artistItem?.artistImage || artistItem?.image || fallback?.artistImage || null,
                               };
                           })
                         : localStats.topArtists,
@@ -388,7 +397,8 @@ export function initializeSettings(scrobbler, player, api, ui) {
                               );
                               return {
                                   ...trackItem,
-                                  coverImage: trackItem?.coverImage || trackItem?.trackCover || fallback?.coverImage || null,
+                                  coverImage:
+                                      trackItem?.coverImage || trackItem?.trackCover || fallback?.coverImage || null,
                               };
                           })
                         : localStats.topTracks,
