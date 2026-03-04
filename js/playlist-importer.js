@@ -242,7 +242,9 @@ async function findBestTrackMatch(api, metadata, options = {}) {
 
     for (let start = 0; start < queries.length; start += batchSize) {
         const queryBatch = queries.slice(start, start + batchSize);
-        const batchResults = await Promise.allSettled(queryBatch.map((query) => api.searchTracks(query, { limit: 12 })));
+        const batchResults = await Promise.allSettled(
+            queryBatch.map((query) => api.searchTracks(query, { limit: 12 }))
+        );
 
         batchResults.forEach((result) => {
             if (result.status !== 'fulfilled') return;

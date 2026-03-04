@@ -340,8 +340,9 @@ const syncManager = {
             };
         }
 
-        const chunkTracks = (Array.isArray(parsed.items) ? parsed.items : Array.isArray(parsed.tracks) ? parsed.tracks : [])
-            .filter((track) => track && typeof track === 'object');
+        const chunkTracks = (
+            Array.isArray(parsed.items) ? parsed.items : Array.isArray(parsed.tracks) ? parsed.tracks : []
+        ).filter((track) => track && typeof track === 'object');
         const chunkIndex = Number(parsed.chunkIndex);
         const chunkTotal = Number(parsed.chunkTotal);
         const totalTracks = Number(parsed.totalTracks);
@@ -350,7 +351,8 @@ const syncManager = {
             tracks: chunkTracks,
             chunkIndex: Number.isFinite(chunkIndex) && chunkIndex >= 0 ? Math.floor(chunkIndex) : 0,
             chunkTotal: Number.isFinite(chunkTotal) && chunkTotal > 0 ? Math.floor(chunkTotal) : 1,
-            totalTracks: Number.isFinite(totalTracks) && totalTracks >= 0 ? Math.floor(totalTracks) : chunkTracks.length,
+            totalTracks:
+                Number.isFinite(totalTracks) && totalTracks >= 0 ? Math.floor(totalTracks) : chunkTracks.length,
         };
     },
 
@@ -1327,26 +1329,27 @@ const syncManager = {
                   Permission.delete(Role.user(user.$id)),
               ];
 
-        const taskFactories = chunks.map((chunk) => () =>
-            this._withRetry(
-                () =>
-                    databases.createDocument(
-                        DATABASE_ID,
-                        PUBLIC_PLAYLISTS_COLLECTION,
-                        ID.unique(),
-                        {
-                            id: playlistId,
-                            owner_id: user.$id,
-                            name: desiredName,
-                            description: desiredDescription,
-                            cover: desiredCover,
-                            tracks: chunk.serialized,
-                            is_public: isPublic,
-                        },
-                        permissions
-                    ),
-                { label: `sync playlist chunk ${chunk.chunkIndex + 1}/${chunks.length}` }
-            )
+        const taskFactories = chunks.map(
+            (chunk) => () =>
+                this._withRetry(
+                    () =>
+                        databases.createDocument(
+                            DATABASE_ID,
+                            PUBLIC_PLAYLISTS_COLLECTION,
+                            ID.unique(),
+                            {
+                                id: playlistId,
+                                owner_id: user.$id,
+                                name: desiredName,
+                                description: desiredDescription,
+                                cover: desiredCover,
+                                tracks: chunk.serialized,
+                                is_public: isPublic,
+                            },
+                            permissions
+                        ),
+                    { label: `sync playlist chunk ${chunk.chunkIndex + 1}/${chunks.length}` }
+                )
         );
 
         await this._runBatchedTasks(taskFactories, { batchSize: PLAYLIST_SYNC_BATCH_SIZE });

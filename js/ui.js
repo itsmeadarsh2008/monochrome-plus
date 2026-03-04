@@ -3469,7 +3469,9 @@ export class UIRenderer {
         const allUsersContainer = document.getElementById('search-all-users-container');
 
         if (!normalizedQuery) {
-            const emptyState = createPlaceholder('Start typing to search tracks, artists, albums, playlists, and profiles.');
+            const emptyState = createPlaceholder(
+                'Start typing to search tracks, artists, albums, playlists, and profiles.'
+            );
             tracksContainer.innerHTML = emptyState;
             artistsContainer.innerHTML = emptyState;
             albumsContainer.innerHTML = emptyState;
@@ -3562,10 +3564,12 @@ export class UIRenderer {
             // Track search with results
             if (finalTracks.length) {
                 this.renderListWithTracks(tracksContainer, finalTracks, true);
-                if (selectedTab === 'all' && allTracksContainer) this.renderListWithTracks(allTracksContainer, finalTracks, true);
+                if (selectedTab === 'all' && allTracksContainer)
+                    this.renderListWithTracks(allTracksContainer, finalTracks, true);
             } else {
                 if (shouldFetchTracks) tracksContainer.innerHTML = createPlaceholder('No tracks found.');
-                if (selectedTab === 'all' && allTracksContainer) allTracksContainer.innerHTML = createPlaceholder('No tracks found.');
+                if (selectedTab === 'all' && allTracksContainer)
+                    allTracksContainer.innerHTML = createPlaceholder('No tracks found.');
             }
 
             if (shouldFetchArtists) {
@@ -5887,9 +5891,7 @@ export class UIRenderer {
             // Add remove buttons to each track
             tracksContainer.querySelectorAll('.track-item').forEach((item, index) => {
                 const track = tracks[index] || null;
-                const addedAtLabel = track?.addedAt
-                    ? new Date(track.addedAt).toLocaleDateString()
-                    : null;
+                const addedAtLabel = track?.addedAt ? new Date(track.addedAt).toLocaleDateString() : null;
                 const addedByLabel = String(track?.addedByName || '').trim() || 'Unknown';
 
                 const artistLine = item.querySelector('.track-item-details .artist');
