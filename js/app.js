@@ -1322,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const modal = document.getElementById('playlist-modal');
                 const editingId = modal.dataset.editingId;
 
-                const handlePublicStatus = async (playlist) => {
+                const handlePublicStatus = async (playlist, { syncCloud = true } = {}) => {
                     playlist.isPublic = isPublic;
                     if (isPublic) {
                         await authManager.initialized.catch(() => {});
@@ -1333,39 +1333,41 @@ document.addEventListener('DOMContentLoaded', async () => {
                             return playlist;
                         }
 
-                        try {
-                            await syncManager.publishPlaylist(playlist);
-                        } catch (e) {
-                            console.error('Failed to publish playlist:', e);
-                            playlist.isPublic = false;
-                            const rawMessage = String(e?.message || '').toLowerCase();
-                            let message = 'Failed to publish playlist. Please try again.';
+                        if (syncCloud) {
+                            try {
+                                await syncManager.publishPlaylist(playlist);
+                            } catch (e) {
+                                console.error('Failed to publish playlist:', e);
+                                playlist.isPublic = false;
+                                const rawMessage = String(e?.message || '').toLowerCase();
+                                let message = 'Failed to publish playlist. Please try again.';
 
-                            if (
-                                e?.code === 401 ||
-                                e?.code === 403 ||
-                                rawMessage.includes('not authorized') ||
-                                rawMessage.includes('not authenticated') ||
-                                rawMessage.includes('signed in')
-                            ) {
-                                message = 'Please sign in again to publish playlists.';
-                            } else if (
-                                rawMessage.includes('networkerror') ||
-                                rawMessage.includes('failed to fetch') ||
-                                rawMessage.includes('network')
-                            ) {
-                                message = 'Network error while publishing playlist. Check connection and retry.';
-                            } else if (
-                                rawMessage.includes('tracks') &&
-                                (rawMessage.includes('size') || rawMessage.includes('too large'))
-                            ) {
-                                message = 'Playlist is too large to publish. Reduce track count and retry.';
+                                if (
+                                    e?.code === 401 ||
+                                    e?.code === 403 ||
+                                    rawMessage.includes('not authorized') ||
+                                    rawMessage.includes('not authenticated') ||
+                                    rawMessage.includes('signed in')
+                                ) {
+                                    message = 'Please sign in again to publish playlists.';
+                                } else if (
+                                    rawMessage.includes('networkerror') ||
+                                    rawMessage.includes('failed to fetch') ||
+                                    rawMessage.includes('network')
+                                ) {
+                                    message = 'Network error while publishing playlist. Check connection and retry.';
+                                } else if (
+                                    rawMessage.includes('tracks') &&
+                                    (rawMessage.includes('size') || rawMessage.includes('too large'))
+                                ) {
+                                    message = 'Playlist is too large to publish. Reduce track count and retry.';
+                                }
+
+                                const { showNotification } = await loadDownloadsModule();
+                                showNotification(message);
                             }
-
-                            const { showNotification } = await loadDownloadsModule();
-                            showNotification(message);
                         }
-                    } else {
+                    } else if (syncCloud) {
                         try {
                             await syncManager.unpublishPlaylist(playlist.id);
                         } catch {
@@ -1385,7 +1387,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             playlist.description = description;
                             await handlePublicStatus(playlist);
                             await db.performTransaction('user_playlists', 'readwrite', (store) => store.put(playlist));
-                            syncManager.syncUserPlaylist(playlist, 'update');
+                            await syncManager.syncUserPlaylist(playlist, 'update');
                             ui.renderLibraryPage();
                             // Also update current page if we are on it
                             if (window.location.pathname === `/userplaylist/${editingId}`) {
@@ -1870,14 +1872,38 @@ document.addEventListener('DOMContentLoaded', async () => {
                         console.log(`Added ${tracks.length} tracks (including pending)`);
                     }
 
-                    db.createPlaylist(name, tracks, cover, description).then(async (playlist) => {
-                        await handlePublicStatus(playlist);
+                    try {
+                        const playlist = await db.createPlaylist(name, tracks, cover, description);
+                        const shouldSyncDuringStatusCheck = importSource === 'manual';
+                        await handlePublicStatus(playlist, { syncCloud: shouldSyncDuringStatusCheck });
                         // Update DB again with isPublic flag
                         await db.performTransaction('user_playlists', 'readwrite', (store) => store.put(playlist));
-                        await syncManager.syncUserPlaylist(playlist, 'create');
+                        const syncResult = await syncManager.syncUserPlaylist(playlist, 'create');
+                        const trackSync = syncResult?.trackSync;
+
+                        if (playlist.isPublic && trackSync && !trackSync.cloudSynced) {
+                            const { showNotification } = await loadDownloadsModule();
+                            showNotification(trackSync.error || 'Failed to sync playlist tracks to Appwrite Cloud.');
+                        }
+
+                        if (importSource !== 'manual' && tracks.length > 0) {
+                            if (
+                                trackSync?.cloudSynced &&
+                                Number(trackSync.syncedTrackCount || 0) >= Number(trackSync.expectedTrackCount || 0)
+                            ) {
+                                const { showNotification } = await loadDownloadsModule();
+                                showNotification(
+                                    `Synced all ${trackSync.expectedTrackCount} imported tracks to Appwrite Cloud.`
+                                );
+                            }
+                        }
+
                         ui.renderLibraryPage();
                         modal.classList.remove('active');
-                    });
+                    } catch (error) {
+                        console.error('Failed to create playlist:', error);
+                        alert('Failed to create playlist. Please try again.');
+                    }
                 }
             }
         }

@@ -8,7 +8,10 @@ function getTrackArtists(track) {
     return track.artist?.name || 'Unknown Artist';
 }
 
-const IMPORT_SEARCH_DELAY_MS = 220;
+const IMPORT_DEFAULT_PARALLELISM = 10;
+const IMPORT_MAX_PARALLELISM = 24;
+const IMPORT_DEFAULT_QUERY_BATCH_SIZE = 3;
+const IMPORT_MAX_CANDIDATES = 24;
 
 const IMPORT_MATCH_PROFILES = {
     strict: {
@@ -32,8 +35,19 @@ const IMPORT_MATCH_PROFILES = {
 function resolveImportOptions(options = {}) {
     const mode =
         typeof options === 'string' ? options : options?.mode || options?.matchMode || options?.profile || 'strict';
+    const parsedParallelism = Number(options?.parallelism ?? options?.concurrency);
+    const parsedQueryBatchSize = Number(options?.queryBatchSize ?? options?.queryConcurrency);
+
     return {
         mode: mode === 'lenient' ? 'lenient' : 'strict',
+        parallelism:
+            Number.isFinite(parsedParallelism) && parsedParallelism > 0
+                ? Math.min(Math.floor(parsedParallelism), IMPORT_MAX_PARALLELISM)
+                : IMPORT_DEFAULT_PARALLELISM,
+        queryBatchSize:
+            Number.isFinite(parsedQueryBatchSize) && parsedQueryBatchSize > 0
+                ? Math.min(Math.floor(parsedQueryBatchSize), IMPORT_DEFAULT_PARALLELISM)
+                : IMPORT_DEFAULT_QUERY_BATCH_SIZE,
     };
 }
 
@@ -55,7 +69,7 @@ function normalizeForCompare(value) {
         .replace(/[“”„‟«»]/g, '"')
         .replace(/[’‘‚‛]/g, "'")
         .replace(/[‐‑‒–—―]/g, '-')
-        .replace(/[()\[\]{}]/g, ' ')
+        .replace(/[()[\]{}]/g, ' ')
         .replace(/\s+(feat|featuring|ft)\.?\s+/giu, ' ')
         .replace(/[^\p{L}\p{N}\s]/gu, ' ')
         .replace(/\s+/g, ' ')
@@ -224,23 +238,26 @@ async function findBestTrackMatch(api, metadata, options = {}) {
     const queries = buildSearchQueries(expected);
     const candidates = [];
     const seen = new Set();
+    const batchSize = Math.max(1, Math.min(options?.queryBatchSize || IMPORT_DEFAULT_QUERY_BATCH_SIZE, queries.length));
 
-    for (const query of queries) {
-        try {
-            const result = await api.searchTracks(query, { limit: 12 });
-            const items = Array.isArray(result?.items) ? result.items : [];
+    for (let start = 0; start < queries.length; start += batchSize) {
+        const queryBatch = queries.slice(start, start + batchSize);
+        const batchResults = await Promise.allSettled(queryBatch.map((query) => api.searchTracks(query, { limit: 12 })));
+
+        batchResults.forEach((result) => {
+            if (result.status !== 'fulfilled') return;
+            const items = Array.isArray(result.value?.items) ? result.value.items : [];
 
             for (const item of items) {
                 const key = String(item?.id || `${item?.title || ''}|${getTrackArtists(item)}`);
                 if (!key || seen.has(key)) continue;
                 seen.add(key);
                 candidates.push(item);
+                if (candidates.length >= IMPORT_MAX_CANDIDATES) break;
             }
+        });
 
-            if (candidates.length >= 24) break;
-        } catch {
-            // Continue trying fallback queries
-        }
+        if (candidates.length >= IMPORT_MAX_CANDIDATES) break;
     }
 
     if (!candidates.length) return null;
@@ -276,40 +293,71 @@ async function findBestTrackMatch(api, metadata, options = {}) {
 
 async function importTracksFromMetadata(entries, api, onProgress, options = {}) {
     const importOptions = resolveImportOptions(options);
+    const totalTracks = entries.length;
+    if (!totalTracks) return { tracks: [], missingTracks: [] };
+
+    const normalizedEntries = entries.map((entry) => ({
+        title: sanitizeImportValue(entry?.title),
+        artist: sanitizeImportValue(entry?.artist),
+        album: sanitizeImportValue(entry?.album),
+    }));
+    const lookupResults = new Array(totalTracks);
+    const inFlightLookupByKey = new Map();
+
+    let completed = 0;
+    let nextIndex = 0;
+    const workerCount = Math.max(1, Math.min(importOptions.parallelism, totalTracks));
+
+    const reportProgress = (entry) => {
+        if (!onProgress) return;
+        onProgress({
+            current: completed,
+            total: totalTracks,
+            currentTrack: entry?.title || 'Unknown track',
+            currentArtist: entry?.artist || '',
+        });
+    };
+
+    const worker = async () => {
+        while (true) {
+            const index = nextIndex;
+            nextIndex += 1;
+            if (index >= totalTracks) return;
+
+            const entry = normalizedEntries[index];
+            if (!entry.title) {
+                lookupResults[index] = { match: null, entry };
+                completed += 1;
+                reportProgress(entry);
+                continue;
+            }
+
+            const lookupKey = `${foldForCompare(entry.title)}|${foldForCompare(entry.artist)}|${foldForCompare(entry.album)}|${importOptions.mode}`;
+            let lookupPromise = inFlightLookupByKey.get(lookupKey);
+            if (!lookupPromise) {
+                lookupPromise = findBestTrackMatch(api, entry, importOptions).catch(() => null);
+                inFlightLookupByKey.set(lookupKey, lookupPromise);
+            }
+
+            const match = await lookupPromise;
+            lookupResults[index] = { match, entry };
+            completed += 1;
+            reportProgress(entry);
+        }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
     const tracks = [];
     const missingTracks = [];
-    const totalTracks = entries.length;
-
-    for (let i = 0; i < entries.length; i++) {
-        const entry = {
-            title: sanitizeImportValue(entries[i]?.title),
-            artist: sanitizeImportValue(entries[i]?.artist),
-            album: sanitizeImportValue(entries[i]?.album),
-        };
-
-        if (onProgress) {
-            onProgress({
-                current: i,
-                total: totalTracks,
-                currentTrack: entry.title || 'Unknown track',
-                currentArtist: entry.artist || '',
-            });
-        }
-
-        if (!entry.title) {
-            missingTracks.push(entry);
-            continue;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, IMPORT_SEARCH_DELAY_MS));
-
-        const match = await findBestTrackMatch(api, entry, importOptions);
-        if (match) {
-            tracks.push(match);
+    lookupResults.forEach((result) => {
+        if (!result) return;
+        if (result.match) {
+            tracks.push(result.match);
         } else {
-            missingTracks.push(entry);
+            missingTracks.push(result.entry);
         }
-    }
+    });
 
     return { tracks, missingTracks };
 }

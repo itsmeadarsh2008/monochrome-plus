@@ -22,6 +22,8 @@ const MAX_PLAYLIST_SYNC = 600;
 const MAX_MIX_SYNC = 400;
 const MAX_PUBLIC_PLAYLIST_TRACKS = 500;
 const MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
+const PLAYLIST_TRACK_CHUNK_ESTIMATE_TOTAL = 999999;
+const PLAYLIST_SYNC_BATCH_SIZE = 6;
 const MAX_COLLAB_PLAYLIST_TRACKS = 700;
 const MAX_COLLAB_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
 
@@ -46,6 +48,8 @@ const syncManager = {
     _cloudPullPromise: null,
     _publicPlaylistSyncPromise: null,
     _publicPlaylistSyncTimeoutId: null,
+    _privatePlaylistSyncPromise: null,
+    _privatePlaylistSyncTimeoutId: null,
     _collaborativePlaylistSyncPromise: null,
     _collaborativePlaylistSyncTimeoutId: null,
 
@@ -305,28 +309,138 @@ const syncManager = {
         return uniqueCovers;
     },
 
+    _serializePlaylistTrackChunk(items = [], chunkIndex = 0, chunkTotal = 1, totalTracks = 0) {
+        return JSON.stringify({
+            chunkVersion: 1,
+            chunkIndex,
+            chunkTotal,
+            totalTracks,
+            items,
+        });
+    },
+
+    _parsePlaylistTrackChunk(rawValue) {
+        const parsed = this._safeParseJSON(rawValue, []);
+        if (Array.isArray(parsed)) {
+            const tracks = parsed.filter((track) => track && typeof track === 'object');
+            return {
+                tracks,
+                chunkIndex: 0,
+                chunkTotal: 1,
+                totalTracks: tracks.length,
+            };
+        }
+
+        if (!parsed || typeof parsed !== 'object') {
+            return {
+                tracks: [],
+                chunkIndex: 0,
+                chunkTotal: 1,
+                totalTracks: 0,
+            };
+        }
+
+        const chunkTracks = (Array.isArray(parsed.items) ? parsed.items : Array.isArray(parsed.tracks) ? parsed.tracks : [])
+            .filter((track) => track && typeof track === 'object');
+        const chunkIndex = Number(parsed.chunkIndex);
+        const chunkTotal = Number(parsed.chunkTotal);
+        const totalTracks = Number(parsed.totalTracks);
+
+        return {
+            tracks: chunkTracks,
+            chunkIndex: Number.isFinite(chunkIndex) && chunkIndex >= 0 ? Math.floor(chunkIndex) : 0,
+            chunkTotal: Number.isFinite(chunkTotal) && chunkTotal > 0 ? Math.floor(chunkTotal) : 1,
+            totalTracks: Number.isFinite(totalTracks) && totalTracks >= 0 ? Math.floor(totalTracks) : chunkTracks.length,
+        };
+    },
+
     _mapPublicPlaylistDoc(doc) {
-        const tracks = this._safeArray(doc?.tracks, []).filter((track) => track && typeof track === 'object');
+        const parsedChunk = this._parsePlaylistTrackChunk(doc?.tracks);
+        const tracks = parsedChunk.tracks;
         const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
-        const numberOfTracks =
+        const numberOfTracksBase =
             Number.isFinite(rawTrackCount) && rawTrackCount > 0
-                ? Math.max(rawTrackCount, tracks.length)
-                : tracks.length;
+                ? Math.max(rawTrackCount, parsedChunk.totalTracks, tracks.length)
+                : Math.max(parsedChunk.totalTracks, tracks.length);
         const createdAt = doc?.$createdAt ? Date.parse(doc.$createdAt) : Date.now();
         const updatedAt = doc?.$updatedAt ? Date.parse(doc.$updatedAt) : Date.now();
         return {
             id: doc?.id,
+            owner_id: doc?.owner_id || '',
             name: doc?.name || 'Untitled Playlist',
             title: doc?.name || 'Untitled Playlist',
             description: doc?.description || '',
             cover: doc?.cover || '',
             tracks,
-            numberOfTracks,
+            numberOfTracks: numberOfTracksBase,
+            totalTracks: numberOfTracksBase,
+            chunkIndex: parsedChunk.chunkIndex,
+            chunkTotal: parsedChunk.chunkTotal,
             images: this._getPlaylistCoverCollage(tracks),
             createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
             updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
             isPublic: doc?.is_public !== false,
         };
+    },
+
+    _mergePublicPlaylistDocs(documents = [], { isPublicFallback = true } = {}) {
+        const mappedDocs = (Array.isArray(documents) ? documents : [])
+            .map((doc) => this._mapPublicPlaylistDoc(doc))
+            .filter((doc) => doc?.id);
+        if (!mappedDocs.length) return null;
+
+        const byChunkIndex = new Map();
+        mappedDocs.forEach((doc) => {
+            const index = Number.isFinite(doc.chunkIndex) && doc.chunkIndex >= 0 ? doc.chunkIndex : byChunkIndex.size;
+            const existing = byChunkIndex.get(index);
+            if (!existing || (doc.updatedAt || 0) >= (existing.updatedAt || 0)) {
+                byChunkIndex.set(index, doc);
+            }
+        });
+
+        const orderedChunks = Array.from(byChunkIndex.values()).sort((a, b) => {
+            if (a.chunkIndex !== b.chunkIndex) {
+                return a.chunkIndex - b.chunkIndex;
+            }
+            return (a.updatedAt || 0) - (b.updatedAt || 0);
+        });
+
+        const base = orderedChunks.find((chunk) => chunk.chunkIndex === 0) || orderedChunks[orderedChunks.length - 1];
+        const tracks = orderedChunks.flatMap((chunk) =>
+            this._safeArray(chunk.tracks, []).filter((track) => track && typeof track === 'object')
+        );
+        const numberOfTracks = Math.max(
+            Number(base?.numberOfTracks) || 0,
+            ...orderedChunks.map((chunk) => Number(chunk.totalTracks) || 0),
+            tracks.length
+        );
+
+        return {
+            ...base,
+            tracks,
+            numberOfTracks,
+            totalTracks: numberOfTracks,
+            chunkIndex: 0,
+            chunkTotal: orderedChunks.length,
+            images: this._getPlaylistCoverCollage(tracks),
+            isPublic: typeof base?.isPublic === 'boolean' ? base.isPublic : !!isPublicFallback,
+        };
+    },
+
+    _mergePublicPlaylistDocuments(documents = [], { isPublicFallback = true } = {}) {
+        const grouped = new Map();
+        (Array.isArray(documents) ? documents : []).forEach((doc) => {
+            const playlistId = String(doc?.id || '').trim();
+            if (!playlistId) return;
+            if (!grouped.has(playlistId)) {
+                grouped.set(playlistId, []);
+            }
+            grouped.get(playlistId).push(doc);
+        });
+
+        return Array.from(grouped.values())
+            .map((group) => this._mergePublicPlaylistDocs(group, { isPublicFallback }))
+            .filter((playlist) => playlist?.id);
     },
 
     _mapCollaborativePlaylistDoc(doc) {
@@ -428,21 +542,65 @@ const syncManager = {
             .map((track) => this._minifyPublicPlaylistTrack(track))
             .filter((track) => track?.id);
 
-        if (!normalized.length) {
-            return { serialized: '[]', kept: 0, total: 0 };
+        const chunks = this._chunkPlaylistTracksForCloud(normalized, {
+            maxTracksPerChunk: MAX_PUBLIC_PLAYLIST_TRACKS,
+            maxPayloadChars: MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS,
+        });
+        const kept = chunks.reduce((total, chunk) => total + (chunk.tracksCount || 0), 0);
+        return { chunks, kept, total: normalized.length };
+    },
+
+    _chunkPlaylistTracksForCloud(tracks = [], { maxTracksPerChunk = 500, maxPayloadChars = 62000 } = {}) {
+        if (!Array.isArray(tracks) || !tracks.length) {
+            return [];
         }
 
-        let keepCount = Math.min(normalized.length, MAX_PUBLIC_PLAYLIST_TRACKS);
-        while (keepCount > 0) {
-            const serialized = JSON.stringify(normalized.slice(0, keepCount));
-            if (serialized.length <= MAX_PUBLIC_PLAYLIST_TRACKS_PAYLOAD_CHARS) {
-                return { serialized, kept: keepCount, total: normalized.length };
+        const chunks = [];
+        let cursor = 0;
+
+        while (cursor < tracks.length) {
+            let lower = cursor + 1;
+            let upper = Math.min(tracks.length, cursor + maxTracksPerChunk);
+            let bestEnd = -1;
+
+            while (lower <= upper) {
+                const midpoint = Math.floor((lower + upper) / 2);
+                const candidateItems = tracks.slice(cursor, midpoint);
+                const candidateSerialized = this._serializePlaylistTrackChunk(
+                    candidateItems,
+                    0,
+                    PLAYLIST_TRACK_CHUNK_ESTIMATE_TOTAL,
+                    tracks.length
+                );
+
+                if (candidateSerialized.length <= maxPayloadChars) {
+                    bestEnd = midpoint;
+                    lower = midpoint + 1;
+                } else {
+                    upper = midpoint - 1;
+                }
             }
 
-            keepCount = keepCount > 250 ? keepCount - 50 : keepCount > 120 ? keepCount - 25 : keepCount - 10;
+            if (bestEnd === -1) {
+                const problematicTrack = tracks[cursor];
+                console.warn(
+                    `[Appwrite Sync] Skipping oversized playlist track payload for track "${problematicTrack?.id || 'unknown'}".`
+                );
+                cursor += 1;
+                continue;
+            }
+
+            chunks.push(tracks.slice(cursor, bestEnd));
+            cursor = bestEnd;
         }
 
-        return { serialized: '[]', kept: 0, total: normalized.length };
+        const chunkTotal = chunks.length || 1;
+        return chunks.map((items, index) => ({
+            chunkIndex: index,
+            chunkTotal,
+            tracksCount: items.length,
+            serialized: this._serializePlaylistTrackChunk(items, index, chunkTotal, tracks.length),
+        }));
     },
 
     _serializeCollaborativePlaylistTracks(tracks = []) {
@@ -465,6 +623,24 @@ const syncManager = {
         }
 
         return { serialized: '[]', kept: 0, total: normalized.length };
+    },
+
+    async _runBatchedTasks(taskFactories = [], { batchSize = PLAYLIST_SYNC_BATCH_SIZE } = {}) {
+        const completed = [];
+        for (let start = 0; start < taskFactories.length; start += batchSize) {
+            const batch = taskFactories.slice(start, start + batchSize);
+            const settled = await Promise.allSettled(batch.map((taskFactory) => taskFactory()));
+            const rejected = settled.find((result) => result.status === 'rejected');
+            if (rejected) {
+                throw rejected.reason;
+            }
+            settled.forEach((result) => {
+                if (result.status === 'fulfilled') {
+                    completed.push(result.value);
+                }
+            });
+        }
+        return completed;
     },
 
     _normalizeCollaborativeMembers(members, ownerId = '') {
@@ -735,7 +911,7 @@ const syncManager = {
             if (user) {
                 const published = await databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
                     Query.equal('owner_id', user.$id),
-                    Query.limit(100),
+                    Query.limit(500),
                 ]);
                 await Promise.allSettled(
                     published.documents.map((doc) =>
@@ -930,9 +1106,29 @@ const syncManager = {
         const playlistId = playlist?.id || playlist?.uuid;
         if (!playlistId) return;
 
+        const expectedTrackCount = Array.isArray(playlist?.tracks)
+            ? playlist.tracks.length
+            : Number(playlist?.numberOfTracks || 0);
+        let trackSync = {
+            cloudSynced: action === 'delete',
+            syncedTrackCount: action === 'delete' ? 0 : expectedTrackCount,
+            expectedTrackCount: action === 'delete' ? 0 : expectedTrackCount,
+            chunks: action === 'delete' ? 0 : 1,
+            isPublic: !!playlist?.isPublic,
+            error: null,
+        };
+
         if (action === 'delete') {
             delete playlists[playlistId];
-            await this.unpublishPlaylist(playlistId);
+            try {
+                await this.unpublishPlaylist(playlistId);
+            } catch (error) {
+                trackSync = {
+                    ...trackSync,
+                    cloudSynced: false,
+                    error: String(error?.message || 'Failed to delete playlist from cloud'),
+                };
+            }
         } else if (playlist.isPublic) {
             playlists[playlistId] = {
                 id: playlistId,
@@ -942,7 +1138,16 @@ const syncManager = {
                 numberOfTracks: playlist.tracks?.length || playlist.numberOfTracks || 0,
                 isPublic: true,
             };
-            await this.publishPlaylist(playlist);
+            try {
+                trackSync = await this.publishPlaylist(playlist);
+            } catch (error) {
+                trackSync = {
+                    ...trackSync,
+                    cloudSynced: false,
+                    syncedTrackCount: 0,
+                    error: String(error?.message || 'Failed to publish playlist to cloud'),
+                };
+            }
         } else {
             playlists[playlistId] = {
                 id: playlistId,
@@ -952,15 +1157,32 @@ const syncManager = {
                 numberOfTracks: playlist.tracks?.length || playlist.numberOfTracks || 0,
                 isPublic: false,
             };
-            await this.unpublishPlaylist(playlistId);
+            try {
+                trackSync = await this.syncPrivatePlaylist(playlist);
+            } catch (error) {
+                trackSync = {
+                    ...trackSync,
+                    cloudSynced: false,
+                    syncedTrackCount: 0,
+                    error: String(error?.message || 'Failed to sync private playlist to cloud'),
+                };
+            }
         }
 
+        let metadataSynced = false;
         try {
             await this._updateUserJSON(null, 'user_playlists', playlists);
             window.dispatchEvent(new CustomEvent('library-changed'));
+            metadataSynced = true;
         } catch (error) {
             console.warn('[Appwrite Sync] Failed syncing user playlist metadata:', error);
         }
+
+        return {
+            playlistId,
+            metadataSynced,
+            trackSync,
+        };
     },
 
     async syncUserFolder(folder, action = 'update') {
@@ -991,16 +1213,156 @@ const syncManager = {
         }
     },
 
-    async _findPublicPlaylistDoc(playlistId) {
+    async _listOwnedPlaylistCloudDocs(playlistId) {
         const user = authManager.user;
-        if (!user) return null;
+        if (!user || !playlistId) return [];
 
         const res = await databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
             Query.equal('id', playlistId),
             Query.equal('owner_id', user.$id),
-            Query.limit(1),
+            Query.limit(500),
         ]);
-        return res.documents[0] || null;
+        return res.documents || [];
+    },
+
+    async _syncPlaylistTrackDocuments(playlist, { isPublic = true } = {}) {
+        await authManager.initialized.catch(() => {});
+        const user = authManager.user;
+        const playlistId = playlist?.id || playlist?.uuid;
+        if (!user) {
+            throw new Error('You must be signed in to sync playlists.');
+        }
+        if (!playlistId) {
+            throw new Error('Playlist id is missing.');
+        }
+
+        const tracksPayload = this._serializePublicPlaylistTracks(playlist.tracks || []);
+        if (tracksPayload.kept < tracksPayload.total) {
+            console.warn(
+                `[Appwrite Sync] Playlist "${playlistId}" cloud payload skipped ${tracksPayload.total - tracksPayload.kept} oversized tracks.`
+            );
+        }
+
+        const chunks =
+            tracksPayload.chunks.length > 0
+                ? tracksPayload.chunks
+                : [
+                      {
+                          chunkIndex: 0,
+                          chunkTotal: 1,
+                          tracksCount: 0,
+                          serialized: this._serializePlaylistTrackChunk([], 0, 1, 0),
+                      },
+                  ];
+
+        const desiredName = playlist.name || playlist.title || 'Untitled Playlist';
+        const desiredDescription = playlist.description || '';
+        const desiredCover = playlist.cover || '';
+        const existingDocs = await this._listOwnedPlaylistCloudDocs(playlistId);
+        const matchingVisibilityDocs = existingDocs.filter((doc) => doc?.is_public === isPublic);
+        const existingByChunk = new Map();
+        matchingVisibilityDocs.forEach((doc) => {
+            const parsedChunk = this._parsePlaylistTrackChunk(doc?.tracks);
+            const updatedAt = doc?.$updatedAt ? Date.parse(doc.$updatedAt) : 0;
+            const existing = existingByChunk.get(parsedChunk.chunkIndex);
+            if (!existing || updatedAt >= existing.updatedAt) {
+                existingByChunk.set(parsedChunk.chunkIndex, {
+                    doc,
+                    updatedAt,
+                    serialized: this._serializePlaylistTrackChunk(
+                        parsedChunk.tracks,
+                        parsedChunk.chunkIndex,
+                        parsedChunk.chunkTotal,
+                        parsedChunk.totalTracks
+                    ),
+                });
+            }
+        });
+
+        const isAlreadySynced =
+            existingDocs.length === chunks.length &&
+            matchingVisibilityDocs.length === chunks.length &&
+            existingByChunk.size === chunks.length &&
+            chunks.every((chunk) => {
+                const existing = existingByChunk.get(chunk.chunkIndex);
+                if (!existing) return false;
+
+                return (
+                    existing.serialized === chunk.serialized &&
+                    String(existing.doc?.id || '') === String(playlistId) &&
+                    String(existing.doc?.owner_id || '') === String(user.$id) &&
+                    String(existing.doc?.name || '') === String(desiredName) &&
+                    String(existing.doc?.description || '') === String(desiredDescription) &&
+                    String(existing.doc?.cover || '') === String(desiredCover) &&
+                    existing.doc?.is_public === isPublic
+                );
+            });
+
+        if (isAlreadySynced) {
+            return {
+                cloudSynced: tracksPayload.kept >= tracksPayload.total,
+                syncedTrackCount: tracksPayload.kept,
+                expectedTrackCount: tracksPayload.total,
+                chunks: chunks.length,
+                isPublic,
+                error: null,
+            };
+        }
+
+        if (existingDocs.length) {
+            await Promise.allSettled(
+                existingDocs.map((doc) => databases.deleteDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, doc.$id))
+            );
+        }
+
+        const permissions = isPublic
+            ? [
+                  Permission.read(Role.any()),
+                  Permission.update(Role.user(user.$id)),
+                  Permission.delete(Role.user(user.$id)),
+              ]
+            : [
+                  Permission.read(Role.user(user.$id)),
+                  Permission.update(Role.user(user.$id)),
+                  Permission.delete(Role.user(user.$id)),
+              ];
+
+        const taskFactories = chunks.map((chunk) => () =>
+            this._withRetry(
+                () =>
+                    databases.createDocument(
+                        DATABASE_ID,
+                        PUBLIC_PLAYLISTS_COLLECTION,
+                        ID.unique(),
+                        {
+                            id: playlistId,
+                            owner_id: user.$id,
+                            name: desiredName,
+                            description: desiredDescription,
+                            cover: desiredCover,
+                            tracks: chunk.serialized,
+                            is_public: isPublic,
+                        },
+                        permissions
+                    ),
+                { label: `sync playlist chunk ${chunk.chunkIndex + 1}/${chunks.length}` }
+            )
+        );
+
+        await this._runBatchedTasks(taskFactories, { batchSize: PLAYLIST_SYNC_BATCH_SIZE });
+
+        return {
+            cloudSynced: tracksPayload.kept >= tracksPayload.total,
+            syncedTrackCount: tracksPayload.kept,
+            expectedTrackCount: tracksPayload.total,
+            chunks: chunks.length,
+            isPublic,
+            error: null,
+        };
+    },
+
+    async syncPrivatePlaylist(playlist) {
+        return this._syncPlaylistTrackDocuments(playlist, { isPublic: false });
     },
 
     async _findCollaborativePlaylistDoc(playlistId) {
@@ -1088,33 +1450,7 @@ const syncManager = {
         }
 
         try {
-            const tracksPayload = this._serializePublicPlaylistTracks(playlist.tracks || []);
-            if (tracksPayload.kept < tracksPayload.total) {
-                console.warn(
-                    `[Appwrite Sync] Public playlist "${playlistId}" track list truncated for cloud payload (${tracksPayload.kept}/${tracksPayload.total}).`
-                );
-            }
-
-            const payload = {
-                id: playlistId,
-                owner_id: user.$id,
-                name: playlist.name || playlist.title || 'Untitled Playlist',
-                description: playlist.description || '',
-                cover: playlist.cover || '',
-                tracks: tracksPayload.serialized,
-                is_public: true,
-            };
-
-            const existing = await this._findPublicPlaylistDoc(playlistId);
-            if (existing) {
-                return await databases.updateDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, existing.$id, payload);
-            }
-
-            return await databases.createDocument(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, ID.unique(), payload, [
-                Permission.read(Role.any()),
-                Permission.update(Role.user(user.$id)),
-                Permission.delete(Role.user(user.$id)),
-            ]);
+            return await this._syncPlaylistTrackDocuments(playlist, { isPublic: true });
         } catch (error) {
             console.error('[Appwrite Sync] Failed to publish playlist:', error);
             throw error;
@@ -1129,7 +1465,7 @@ const syncManager = {
             const res = await databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
                 Query.equal('id', playlistId),
                 Query.equal('owner_id', user.$id),
-                Query.limit(25),
+                Query.limit(500),
             ]);
 
             await Promise.allSettled(
@@ -1148,27 +1484,22 @@ const syncManager = {
             const res = await databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
                 Query.equal('id', playlistId),
                 Query.equal('is_public', true),
-                Query.limit(1),
+                Query.limit(500),
             ]);
 
             if (!res.documents.length) return null;
-            const doc = res.documents[0];
-            const tracks = this._safeArray(doc.tracks, []);
-            const rawTrackCount = Number(doc?.numberOfTracks ?? doc?.number_of_tracks);
-            const numberOfTracks =
-                Number.isFinite(rawTrackCount) && rawTrackCount > 0
-                    ? Math.max(rawTrackCount, tracks.length)
-                    : tracks.length;
+            const merged = this._mergePublicPlaylistDocs(res.documents, { isPublicFallback: true });
+            if (!merged) return null;
 
             return {
-                id: doc.id,
-                name: doc.name,
-                title: doc.name,
-                description: doc.description || '',
-                cover: doc.cover || '',
-                tracks,
-                numberOfTracks,
-                owner_id: doc.owner_id,
+                id: merged.id,
+                name: merged.name,
+                title: merged.name,
+                description: merged.description || '',
+                cover: merged.cover || '',
+                tracks: merged.tracks || [],
+                numberOfTracks: merged.numberOfTracks || 0,
+                owner_id: merged.owner_id,
                 isPublic: true,
             };
         } catch (error) {
@@ -1544,14 +1875,14 @@ const syncManager = {
                         databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
                             Query.equal('owner_id', user.$id),
                             Query.equal('is_public', true),
-                            Query.limit(200),
+                            Query.limit(500),
                         ]),
                     { label: 'sync cloud public playlists' }
                 );
 
-                const cloudPlaylists = response.documents
-                    .map((doc) => this._mapPublicPlaylistDoc(doc))
-                    .filter((playlist) => playlist.id);
+                const cloudPlaylists = this._mergePublicPlaylistDocuments(response.documents, {
+                    isPublicFallback: true,
+                });
 
                 const dbHandle = await database.open();
                 const didChange = await new Promise((resolve, reject) => {
@@ -1592,8 +1923,7 @@ const syncManager = {
                                 incomingTracks.length > 0 && incomingExpectedCount > incomingTracks.length;
 
                             const mergedTracks =
-                                existingTracks.length > incomingTracks.length ||
-                                (incomingLikelyTruncated && existingTracks.length > 0)
+                                incomingLikelyTruncated && existingTracks.length > incomingTracks.length
                                     ? existingTracks
                                     : incomingTracks;
                             const mergedTrackCount = Math.max(
@@ -1640,6 +1970,104 @@ const syncManager = {
         })();
 
         return this._publicPlaylistSyncPromise;
+    },
+
+    async syncCloudPrivatePlaylistsToLocal() {
+        const user = authManager.user;
+        if (!user) return false;
+
+        if (this._privatePlaylistSyncPromise) {
+            return this._privatePlaylistSyncPromise;
+        }
+
+        this._privatePlaylistSyncPromise = (async () => {
+            try {
+                const response = await this._withRetry(
+                    () =>
+                        databases.listDocuments(DATABASE_ID, PUBLIC_PLAYLISTS_COLLECTION, [
+                            Query.equal('owner_id', user.$id),
+                            Query.equal('is_public', false),
+                            Query.limit(500),
+                        ]),
+                    { label: 'sync cloud private playlists' }
+                );
+
+                const cloudPlaylists = this._mergePublicPlaylistDocuments(response.documents, {
+                    isPublicFallback: false,
+                });
+
+                const dbHandle = await database.open();
+                const didChange = await new Promise((resolve, reject) => {
+                    const tx = dbHandle.transaction('user_playlists', 'readwrite');
+                    const store = tx.objectStore('user_playlists');
+                    let changed = false;
+
+                    const allReq = store.getAll();
+                    allReq.onsuccess = () => {
+                        const existing = allReq.result || [];
+                        const existingById = new Map(
+                            existing
+                                .filter((playlist) => playlist?.id)
+                                .map((playlist) => [String(playlist.id), playlist])
+                        );
+
+                        cloudPlaylists.forEach((playlist) => {
+                            const playlistId = String(playlist.id);
+                            const existingPlaylist = existingById.get(playlistId);
+                            const existingTracks = this._safeArray(existingPlaylist?.tracks, []);
+                            const incomingTracks = this._safeArray(playlist?.tracks, []);
+                            const incomingExpectedCount = Number(playlist?.numberOfTracks) || incomingTracks.length;
+                            const incomingLikelyTruncated =
+                                incomingTracks.length > 0 && incomingExpectedCount > incomingTracks.length;
+
+                            const mergedTracks =
+                                incomingLikelyTruncated && existingTracks.length > incomingTracks.length
+                                    ? existingTracks
+                                    : incomingTracks;
+                            const mergedTrackCount = Math.max(
+                                Number(existingPlaylist?.numberOfTracks) || 0,
+                                incomingExpectedCount,
+                                mergedTracks.length
+                            );
+                            const mergedPlaylist = {
+                                ...(existingPlaylist || {}),
+                                ...playlist,
+                                tracks: mergedTracks,
+                                numberOfTracks: mergedTrackCount,
+                                isPublic: false,
+                            };
+
+                            if (
+                                !existingPlaylist ||
+                                this._playlistSyncSignature(existingPlaylist) !==
+                                    this._playlistSyncSignature(mergedPlaylist)
+                            ) {
+                                store.put(mergedPlaylist);
+                                changed = true;
+                            }
+                        });
+                    };
+                    allReq.onerror = () => reject(allReq.error || tx.error);
+
+                    tx.oncomplete = () => resolve(changed);
+                    tx.onerror = (event) => reject(event.target.error || tx.error);
+                    tx.onabort = (event) => reject(event.target.error || tx.error);
+                });
+
+                if (didChange) {
+                    window.dispatchEvent(new CustomEvent('library-changed'));
+                }
+
+                return didChange;
+            } catch (error) {
+                console.warn('[Appwrite Sync] Failed to sync cloud private playlists:', error);
+                return false;
+            } finally {
+                this._privatePlaylistSyncPromise = null;
+            }
+        })();
+
+        return this._privatePlaylistSyncPromise;
     },
 
     async syncCloudCollaborativePlaylistsToLocal() {
@@ -1735,6 +2163,19 @@ const syncManager = {
         }, delayMs);
     },
 
+    _scheduleCloudPrivatePlaylistSync(delayMs = 700) {
+        if (this._privatePlaylistSyncTimeoutId) {
+            clearTimeout(this._privatePlaylistSyncTimeoutId);
+        }
+
+        this._privatePlaylistSyncTimeoutId = setTimeout(() => {
+            this._privatePlaylistSyncTimeoutId = null;
+            this.syncCloudPrivatePlaylistsToLocal().catch((error) => {
+                console.warn('[Appwrite Sync] Delayed private playlist sync failed:', error);
+            });
+        }, delayMs);
+    },
+
     _scheduleCloudCollaborativePlaylistSync(delayMs = 700) {
         if (this._collaborativePlaylistSyncTimeoutId) {
             clearTimeout(this._collaborativePlaylistSyncTimeoutId);
@@ -1748,7 +2189,7 @@ const syncManager = {
         }, delayMs);
     },
 
-    async pullCloudData({ syncPublicPlaylists = true } = {}) {
+    async pullCloudData({ syncPublicPlaylists = true, syncPrivatePlaylists = true } = {}) {
         if (!authManager.user) return false;
 
         if (this._cloudPullPromise) {
@@ -1778,7 +2219,13 @@ const syncManager = {
 
                 let playlistChanged = false;
                 if (syncPublicPlaylists) {
-                    playlistChanged = await this.syncCloudPublicPlaylistsToLocal();
+                    const [publicChanged, privateChanged] = await Promise.all([
+                        this.syncCloudPublicPlaylistsToLocal(),
+                        syncPrivatePlaylists ? this.syncCloudPrivatePlaylistsToLocal() : Promise.resolve(false),
+                    ]);
+                    playlistChanged = publicChanged || privateChanged;
+                } else if (syncPrivatePlaylists) {
+                    playlistChanged = await this.syncCloudPrivatePlaylistsToLocal();
                 }
                 const collaborativeChanged = await this.syncCloudCollaborativePlaylistsToLocal();
 
@@ -1860,7 +2307,11 @@ const syncManager = {
                         );
 
                         if (doc.owner_id === user.$id) {
-                            this._scheduleCloudPublicPlaylistSync();
+                            if (doc.is_public === false) {
+                                this._scheduleCloudPrivatePlaylistSync();
+                            } else {
+                                this._scheduleCloudPublicPlaylistSync();
+                            }
                         }
                         return;
                     }
@@ -1925,7 +2376,7 @@ const syncManager = {
         try {
             const userData = await this.getUserData();
             if (userData?.profile?.privacy?.listening === 'private') return;
-        } catch (_error) {
+        } catch {
             // Ignore transient profile lookup failures and proceed with best effort status sync.
         }
 
@@ -1965,10 +2416,15 @@ const syncManager = {
             this._isSyncing = false;
             this._cloudPullPromise = null;
             this._publicPlaylistSyncPromise = null;
+            this._privatePlaylistSyncPromise = null;
             this._collaborativePlaylistSyncPromise = null;
             if (this._publicPlaylistSyncTimeoutId) {
                 clearTimeout(this._publicPlaylistSyncTimeoutId);
                 this._publicPlaylistSyncTimeoutId = null;
+            }
+            if (this._privatePlaylistSyncTimeoutId) {
+                clearTimeout(this._privatePlaylistSyncTimeoutId);
+                this._privatePlaylistSyncTimeoutId = null;
             }
             if (this._collaborativePlaylistSyncTimeoutId) {
                 clearTimeout(this._collaborativePlaylistSyncTimeoutId);
@@ -2000,9 +2456,10 @@ const syncManager = {
                 Object.keys(cloudData.userFolders || {}).length > 0;
 
             if (hasCloudData) {
-                await this.pullCloudData({ syncPublicPlaylists: true });
+                await this.pullCloudData({ syncPublicPlaylists: true, syncPrivatePlaylists: true });
             } else {
                 await this.syncCloudPublicPlaylistsToLocal();
+                await this.syncCloudPrivatePlaylistsToLocal();
                 await this.syncCloudCollaborativePlaylistsToLocal();
             }
 
@@ -2060,9 +2517,7 @@ const syncManager = {
                 const hasCloudPlaylistMetadata = Object.keys(existingCloudPlaylistMetadata).length > 0;
                 const shouldProtectCloudPlaylists = !hasLocalPlaylistMetadata && hasCloudPlaylistMetadata;
 
-                const publicPlaylists = {};
                 const publicPlaylistIds = new Set();
-                const publicPlaylistDocuments = [];
                 const cloudPlaylistMetadata = shouldProtectCloudPlaylists ? { ...existingCloudPlaylistMetadata } : {};
                 for (const playlist of playlists) {
                     if (!playlist?.id) continue;
@@ -2081,15 +2536,6 @@ const syncManager = {
 
                     if (!playlist?.isPublic) continue;
                     publicPlaylistIds.add(playlist.id);
-                    publicPlaylistDocuments.push(playlist);
-                    publicPlaylists[playlist.id] = {
-                        id: playlist.id,
-                        name: playlist.name || 'Untitled Playlist',
-                        cover: playlist.cover || null,
-                        description: playlist.description || '',
-                        numberOfTracks: playlist.tracks?.length || 0,
-                        isPublic: true,
-                    };
                 }
 
                 const hasLocalFolderMetadata = folders.length > 0;
@@ -2124,7 +2570,11 @@ const syncManager = {
                         const existingCloudPlaylists = await databases.listDocuments(
                             DATABASE_ID,
                             PUBLIC_PLAYLISTS_COLLECTION,
-                            [Query.equal('owner_id', authManager.user.$id), Query.limit(300)]
+                            [
+                                Query.equal('owner_id', authManager.user.$id),
+                                Query.equal('is_public', true),
+                                Query.limit(500),
+                            ]
                         );
 
                         await Promise.allSettled(
@@ -2135,9 +2585,12 @@ const syncManager = {
                                 )
                         );
 
-                        await Promise.allSettled(
-                            publicPlaylistDocuments.map((playlist) => this.publishPlaylist(playlist))
-                        );
+                        const playlistSyncTasks = playlists
+                            .filter((playlist) => playlist?.id)
+                            .map((playlist) =>
+                                playlist.isPublic ? this.publishPlaylist(playlist) : this.syncPrivatePlaylist(playlist)
+                            );
+                        await Promise.allSettled(playlistSyncTasks);
                     } else if (hasCloudPlaylistMetadata) {
                         console.log(
                             '[Appwrite Sync] Skipping destructive public playlist sync because local metadata is empty.'
