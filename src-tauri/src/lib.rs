@@ -290,6 +290,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
     let button_label = "Listen to this song".to_string();
     let button_url = payload
         .button_two_url
+        .clone()
         .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
 
     // Optional second button
