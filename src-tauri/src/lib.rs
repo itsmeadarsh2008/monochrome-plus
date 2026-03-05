@@ -22,8 +22,9 @@ struct DiscordBridgePayload {
     large_image_text: Option<String>,
     small_image_key: Option<String>,
     small_image_text: Option<String>,
-    button_label: Option<String>,
-    button_url: Option<String>,
+    // Support for Apple Music-style second button
+    button_two_label: Option<String>,
+    button_two_url: Option<String>,
     start_timestamp: Option<i64>,
     end_timestamp: Option<i64>,
 }
@@ -47,10 +48,17 @@ fn set_idle_activity(client: &mut Client) -> Result<(), String> {
             activity
                 .activity_type(ActivityType::Listening)
                 .details("Monochrome+")
-                .state("Listening on Monochrome+")
+                .state("Idling")
+                .assets(|assets| {
+                    assets
+                        .large_image("monochrome")
+                        .large_text("Monochrome+")
+                        .small_image("paused_icon")
+                        .small_text("Idling")
+                })
                 .append_buttons(|button| {
                     button
-                        .label("Try Monochrome+")
+                        .label("Listen on Monochrome+")
                         .url("https://github.com/itsmeadarsh2008/monochrome-plus")
                 })
         }) {
@@ -65,8 +73,9 @@ fn set_idle_activity(client: &mut Client) -> Result<(), String> {
     Err("Discord RPC not ready (Discord may be closed)".to_string())
 }
 
+/// Percent-encode a string for use in Discord's mp:external/ format
 fn percent_encode_component(input: &str) -> String {
-    let mut encoded = String::with_capacity(input.len());
+    let mut encoded = String::with_capacity(input.len() * 3);
     for byte in input.bytes() {
         let is_unreserved = matches!(byte,
             b'A'..=b'Z' |
@@ -85,15 +94,32 @@ fn percent_encode_component(input: &str) -> String {
     encoded
 }
 
+/// Convert an external URL to Discord's mp:external/ format
+/// Discord requires this format for external images
+fn external_url_to_discord_format(url: &str) -> String {
+    if url.starts_with("mp:external/") {
+        return url.to_string();
+    }
+    format!("mp:external/{}", percent_encode_component(url))
+}
+
 fn normalize_discord_large_image_key(value: &str) -> String {
+    // If it's already an external URL or mp:external format, use it
     if value.starts_with("http://") || value.starts_with("https://") {
-        return format!("mp:external/{}", percent_encode_component(value));
+        return external_url_to_discord_format(value);
     }
 
     if value.trim().is_empty() {
         return "monochrome".to_string();
     }
 
+    // If it looks like a URL-encoded external image, return as-is
+    if value.starts_with("mp:external/") {
+        return value.to_string();
+    }
+
+    // For asset names (like "play", "pause", "monochrome"), return as-is
+    // These must be uploaded to Discord's Rich Presence Assets portal
     value.to_string()
 }
 
@@ -152,6 +178,7 @@ fn resolve_discord_large_image_key(
     large_image_key: &str,
     large_image_base64: Option<&str>,
 ) -> String {
+    // Try base64 decoded value first (for URLs passed from JS)
     if let Some(encoded) = large_image_base64 {
         if let Some(decoded) = decode_base64_to_string(encoded) {
             let normalized = normalize_discord_large_image_key(decoded.trim());
@@ -180,7 +207,7 @@ fn resolve_discord_large_image_candidates(
         for encoded in fallbacks {
             if let Some(decoded) = decode_base64_to_string(encoded) {
                 let normalized = normalize_discord_large_image_key(decoded.trim());
-                if !normalized.trim().is_empty() {
+                if !normalized.trim().is_empty() && !candidates.contains(&normalized) {
                     candidates.push(normalized);
                 }
             }
@@ -189,14 +216,7 @@ fn resolve_discord_large_image_candidates(
 
     candidates.push("monochrome".to_string());
 
-    let mut deduped = Vec::new();
-    for candidate in candidates {
-        if !deduped.contains(&candidate) {
-            deduped.push(candidate);
-        }
-    }
-
-    deduped
+    candidates
 }
 
 #[tauri::command]
@@ -243,8 +263,12 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .as_mut()
         .ok_or_else(|| "Discord bridge is not running".to_string())?;
 
-    let details = payload.details.unwrap_or_else(|| "Idling".to_string());
+    let details = payload
+        .details
+        .unwrap_or_else(|| "Unknown Track".to_string());
     let state = payload.state.unwrap_or_else(|| "Monochrome+".to_string());
+
+    // Get cover image URL candidates
     let large_image_key = payload
         .large_image_key
         .unwrap_or_else(|| "monochrome".to_string());
@@ -253,14 +277,26 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
     let large_image_text = payload
         .large_image_text
         .unwrap_or_else(|| "Monochrome+".to_string());
-    let _small_image_key = payload.small_image_key.unwrap_or_default();
-    let _small_image_text = payload.small_image_text.unwrap_or_default();
-    let button_label = payload
-        .button_label
-        .unwrap_or_else(|| "Try Monochrome+".to_string());
+
+    // Small image for play/pause status
+    let small_image_key = payload
+        .small_image_key
+        .unwrap_or_else(|| "playing_icon".to_string());
+    let small_image_text = payload
+        .small_image_text
+        .unwrap_or_else(|| "Playing".to_string());
+
+    // Primary button - "Listen to this song" (Apple Music style)
+    let button_label = "Listen to this song".to_string();
     let button_url = payload
-        .button_url
+        .button_two_url
         .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
+
+    // Optional second button
+    let has_second_button = payload.button_two_label.is_some() && payload.button_two_url.is_some();
+    let button_two_label = payload.button_two_label;
+    let button_two_url = payload.button_two_url;
+
     let start_timestamp =
         payload
             .start_timestamp
@@ -270,6 +306,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
+    // Get all image candidates to try
     let safe_large_image_candidates = resolve_discord_large_image_candidates(
         &large_image_key,
         large_image_base64.as_deref(),
@@ -278,31 +315,54 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
 
     let mut last_error: Option<String> = None;
 
+    // Try each image candidate until one works
     for safe_large_image in safe_large_image_candidates {
         for _ in 0..10 {
             let details_value = details.clone();
             let state_value = state.clone();
             let large_image_value = safe_large_image.clone();
             let large_image_text_value = large_image_text.clone();
+            let small_image_value = small_image_key.clone();
+            let small_image_text_value = small_image_text.clone();
             let button_label_value = button_label.clone();
             let button_url_value = button_url.clone();
+            let button_two_label_value = button_two_label.clone();
+            let button_two_url_value = button_two_url.clone();
             let start_value = start_timestamp;
             let end_value = end_timestamp;
+            let has_second = has_second_button;
 
             match bridge.client.set_activity(|activity| {
                 let activity = activity
                     .activity_type(ActivityType::Listening)
-                    .details(details_value)
-                    .state(state_value)
+                    .details(&details_value)
+                    .state(&state_value)
                     .assets(|assets| {
                         assets
-                            .large_image(large_image_value)
-                            .large_text(large_image_text_value)
+                            .large_image(&large_image_value)
+                            .large_text(&large_image_text_value)
+                            .small_image(&small_image_value)
+                            .small_text(&small_image_text_value)
                     })
                     .append_buttons(|button| {
-                        button.label(button_label_value).url(button_url_value)
+                        let button = button.label(&button_label_value).url(&button_url_value);
+                        button
                     });
 
+                // Add second button if provided
+                let activity = if has_second {
+                    if let (Some(label), Some(url)) =
+                        (&button_two_label_value, &button_two_url_value)
+                    {
+                        activity.append_buttons(|button| button.label(label).url(url))
+                    } else {
+                        activity
+                    }
+                } else {
+                    activity
+                };
+
+                // Add timestamps for progress bar
                 if start_value.is_some() || end_value.is_some() {
                     activity.timestamps(|timestamps| {
                         let timestamps = if let Some(start) = start_value {
@@ -328,7 +388,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
                 }
                 Err(err) => {
                     last_error = Some(err.to_string());
-                    break;
+                    break; // Try next image candidate
                 }
             }
         }

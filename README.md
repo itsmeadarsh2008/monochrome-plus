@@ -39,7 +39,7 @@
 
 <p align="center">
   <a href="https://monochrome-plus.appwrite.network/#album/90502209">
-    <img width="2559" height="1439" alt="Monochrome UI" src="https://github.com/user-attachments/assets/7973ea9f-c4aa-4c12-b476-f388f614db38" width="800">
+    <img width="2559" height="1439" alt="Monochrome UI" src="" width="800">
   </a>
 </p>
 

@@ -3,6 +3,8 @@
     "productName": "Monochrome+",
     "version": "2.0.9",
     "identifier": "app.monochrome.plus",
+    "authors": ["Monochrome+ Team"],
+    "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus",
     "build": {
         "frontendDist": "../dist",
         "devUrl": "http://localhost:5173",
@@ -12,86 +14,254 @@
     "app": {
         "windows": [
             {
+                "label": "main",
                 "title": "Monochrome+",
                 "width": 1280,
                 "height": 800,
                 "minWidth": 800,
                 "minHeight": 600,
+                "maxWidth": null,
+                "maxHeight": null,
                 "resizable": true,
+                "maximized": false,
                 "fullscreen": false,
-                "center": true,
                 "visible": true,
-                "decorations": true,
                 "transparent": false,
+                "decorations": false,
+                "alwaysOnTop": false,
+                "contentProtected": false,
+                "skipTaskbar": false,
+                "center": true,
+                "focus": true,
                 "shadow": true,
-                "contentProtected": false
+                "windowEffects": {
+                    "effects": [],
+                    "state": null
+                },
+                "additionalBrowserArgs": ""
             }
         ],
         "security": {
             "csp": null,
-            "dangerousDisableAssetCspModification": false
-        }
+            "dangerousDisableAssetCspModification": false,
+            "capabilities": [],
+            "dangerousRemoteDomainIpcAccess": [],
+            "freezePrototype": false,
+            "imgSrc": null,
+            "scriptSrc": null,
+            "styleSrc": null,
+            "defaultSrc": null,
+            "connectSrc": null,
+            "fontSrc": null,
+            "objectSrc": null,
+            "mediaSrc": null,
+            "frameSrc": null,
+            "upgradeInsecureRequests": false
+        },
+        "trayIcon": {
+            "iconPath": "icons/32x32.png",
+            "iconAsTemplate": false,
+            "menuOnLeftClick": true,
+            "title": "Monochrome+",
+            "tooltip": "Monochrome+ - High-fidelity music streaming"
+        },
+        "withGlobalTauri": false,
+        "macOSPrivateApi": false
     },
     "bundle": {
         "active": true,
+        "createUpdaterArtifacts": true,
         "targets": ["appimage", "nsis", "dmg", "app"],
-        "publisher": "Monochrome+",
-        "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+        "publisher": "Monochrome+ Team",
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ],
         "windows": {
             "certificateThumbprint": null,
             "digestAlgorithm": "sha256",
             "timestampUrl": "http://timestamp.digicert.com",
+            "tsp": false,
             "webviewInstallMode": {
-                "type": "embedBootstrapper"
+                "type": "embedBootstrapper",
+                "silent": false
             },
             "nsis": {
+                "template": null,
+                "license": null,
+                "headerImage": null,
+                "sidebarImage": null,
                 "installerIcon": "icons/icon.ico",
-                "displayLanguageSelector": false,
+                "installDisplayName": "Monochrome+",
                 "languages": ["English"],
-                "installMode": "both"
+                "displayLanguageSelector": false,
+                "installMode": "both",
+                "startMenuFolder": "Monochrome+",
+                "customLanguageFiles": {},
+                "compression": "lzma",
+                "solidCompression": true,
+                "preInstallHook": null,
+                "postInstallHook": null,
+                "preUninstallHook": null,
+                "postUninstallHook": null
             },
             "wix": {
                 "language": ["en-US"],
-                "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A"
-            }
+                "template": null,
+                "fragmentPaths": [],
+                "componentRefs": [],
+                "componentGroupRefs": [],
+                "featureRefs": [],
+                "featureGroupRefs": [],
+                "mergeRefs": [],
+                "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A",
+                "customActionRefs": [],
+                "skipWebviewInstall": false,
+                "shortUpgradeCode": null,
+                "license": null,
+                "enableElevatedUpdateTask": false,
+                "bannerPath": null,
+                "dialogImagePath": null
+            },
+            "signCommand": null,
+            "allowDowngrades": true
         },
         "macOS": {
             "frameworks": [],
             "minimumSystemVersion": "10.13",
             "signingIdentity": null,
             "entitlements": null,
-            "exceptionDomain": null
+            "exceptionDomain": null,
+            "license": null,
+            "hardenedRuntime": true,
+            "providerShortName": null
         },
         "linux": {
             "appimage": {
                 "bundleMediaFramework": false
             },
             "deb": {
-                "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+                "files": {},
+                "depends": [
+                    "libwebkit2gtk-4.1-0",
+                    "libgtk-3-0"
+                ],
+                "preDepends": [],
+                "recommends": [],
+                "suggests": [],
+                "enhances": [],
+                "conflicts": [],
+                "breaks": [],
+                "replaces": [],
+                "provides": []
+            },
+            "rpm": {
+                "release": "1",
+                "epoch": 0,
+                "files": {},
+                "requires": [],
+                "obsoletes": [],
+                "conflicts": [],
+                "provides": []
+            },
+            "pacman": {
+                "files": {},
+                "depends": [],
+                "optdepends": [],
+                "provides": [],
+                "conflicts": [],
+                "replaces": [],
+                "options": []
             }
+        },
+        "android": {
+            "minSdkVersion": 21
+        },
+        "iOS": {
+            "developmentTeam": null,
+            "minimumSystemVersion": "13.0"
         },
         "resources": [],
         "externalBin": [],
-        "copyright": "Copyright (c) 2026",
+        "copyright": "Copyright (c) 2026 Monochrome+ Team",
         "category": "Music",
         "shortDescription": "High-fidelity music streaming",
-        "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening.",
+        "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening. Experience your music with exceptional audio quality and a distraction-free interface.",
         "fileAssociations": [
             {
-                "ext": ["mp3", "flac", "wav", "m4a", "aac", "ogg", "opus"],
-                "name": "Audio File",
-                "description": "Audio file playable in Monochrome+",
-                "mimeType": "audio/*",
+                "ext": ["mp3"],
+                "name": "MP3 Audio File",
+                "description": "MP3 audio file playable in Monochrome+",
+                "mimeType": "audio/mpeg",
+                "role": "Viewer"
+            },
+            {
+                "ext": ["flac"],
+                "name": "FLAC Audio File",
+                "description": "FLAC lossless audio file playable in Monochrome+",
+                "mimeType": "audio/flac",
+                "role": "Viewer"
+            },
+            {
+                "ext": ["wav"],
+                "name": "WAV Audio File",
+                "description": "WAV audio file playable in Monochrome+",
+                "mimeType": "audio/wav",
+                "role": "Viewer"
+            },
+            {
+                "ext": ["m4a", "aac"],
+                "name": "AAC Audio File",
+                "description": "AAC audio file playable in Monochrome+",
+                "mimeType": "audio/aac",
+                "role": "Viewer"
+            },
+            {
+                "ext": ["ogg"],
+                "name": "OGG Audio File",
+                "description": "OGG audio file playable in Monochrome+",
+                "mimeType": "audio/ogg",
+                "role": "Viewer"
+            },
+            {
+                "ext": ["opus"],
+                "name": "Opus Audio File",
+                "description": "Opus audio file playable in Monochrome+",
+                "mimeType": "audio/opus",
                 "role": "Viewer"
             }
-        ]
+        ],
+        "protocols": [
+            {
+                "scheme": "monochrome",
+                "name": "Monochrome+ Protocol",
+                "role": "Viewer"
+            }
+        ],
+        "useBootstrapper": false
     },
     "plugins": {
         "updater": {
             "active": true,
             "dialog": true,
             "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyRjQxNjIwMEY1RTQwNTUKUldTbndGZ1FKcFl3VXh2SjRDMG5POUJiRG0wbmZrMlFQMUUxY0tNQUY5eGxVdW1VNjdBVUxGZ0MK",
-            "endpoints": ["https://github.com/monochrome-music/monochrome/releases/latest/download/latest.json"]
+            "endpoints": [
+                "https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"
+            ],
+            "windows": {
+                "installMode": "passive"
+            }
         }
+    },
+    "cli": {
+        "description": "Monochrome+ CLI",
+        "longDescription": "Command line interface for Monochrome+",
+        "beforeHelp": null,
+        "afterHelp": null,
+        "args": [],
+        "subcommands": {}
     }
 }

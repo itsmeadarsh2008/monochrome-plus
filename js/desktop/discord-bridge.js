@@ -10,6 +10,10 @@ const QUALITY_LABELS = {
     LOW: 'Low',
 };
 
+// Small image keys for play/pause status (Discord asset names from Rich Presence Assets portal)
+const PLAYING_ASSET_NAME = 'play';
+const PAUSED_ASSET_NAME = 'pause';
+
 const RPC_START_TIMEOUT_MS = 1500;
 const RPC_RETRY_INTERVAL_MS = 5000;
 
@@ -17,6 +21,9 @@ function toUnixSecondsFromNow(msFromNow = 0) {
     return Math.floor((Date.now() + msFromNow) / 1000);
 }
 
+/**
+ * Build Tidal cover URL from cover ID
+ */
 function buildTidalCoverUrl(coverId, size = 320) {
     if (typeof coverId !== 'string') return null;
     const normalized = coverId
@@ -27,6 +34,18 @@ function buildTidalCoverUrl(coverId, size = 320) {
     return `https://resources.tidal.com/images/${normalized}/${size}x${size}.jpg`;
 }
 
+/**
+ * Build Qobuz cover URL
+ */
+function buildQobuzCoverUrl(coverId, size = 600) {
+    if (typeof coverId !== 'string') return null;
+    // Qobuz uses different URL format
+    return `https://static.qobuz.com/images/covers/${coverId.slice(0, 2)}/${coverId.slice(2, 4)}/${coverId}_${size}.jpg`;
+}
+
+/**
+ * Get unique non-empty strings from array
+ */
 function uniqueNonEmptyStrings(values = []) {
     const seen = new Set();
     const output = [];
@@ -41,6 +60,9 @@ function uniqueNonEmptyStrings(values = []) {
     return output;
 }
 
+/**
+ * Invoke Tauri command with timeout
+ */
 async function invokeWithTimeout(command, payload, timeoutMs = RPC_START_TIMEOUT_MS) {
     let timeoutId = null;
     const timeoutPromise = new Promise((resolve) => {
@@ -57,37 +79,63 @@ async function invokeWithTimeout(command, payload, timeoutMs = RPC_START_TIMEOUT
     }
 }
 
+/**
+ * Resolve track cover candidates from various sources
+ * Returns array of HTTPS URLs to try in order of preference
+ */
 function resolveTrackCoverCandidates(player, track) {
-    if (!track) return null;
+    if (!track) return [];
 
     const candidates = [];
 
+    // 1. Direct URL from track object
     const directUrl =
-        track.cover || track.image || track.artwork || track.thumbnail || track.album?.image || track.album?.coverUrl;
+        track.coverUrl || 
+        track.cover || 
+        track.image || 
+        track.artwork || 
+        track.thumbnail || 
+        track.album?.coverUrl ||
+        track.album?.image || 
+        track.album?.cover;
+    
     if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
-        candidates.push(directUrl);
+        // Ensure HTTPS for Discord
+        const httpsUrl = directUrl.replace(/^http:/i, 'https:');
+        candidates.push(httpsUrl);
     }
 
+    // 2. Tidal-style cover ID
     const coverId = track.album?.cover || track.cover;
-    if (coverId) {
+    if (coverId && typeof coverId === 'string') {
+        // Try multiple sizes (largest first for best quality)
+        candidates.push(buildTidalCoverUrl(coverId, 1280));
         candidates.push(buildTidalCoverUrl(coverId, 640));
         candidates.push(buildTidalCoverUrl(coverId, 320));
-        candidates.push(buildTidalCoverUrl(coverId, 160));
     }
 
+    // 3. Qobuz-style cover
+    if (coverId && typeof coverId === 'string' && coverId.length === 32) {
+        candidates.push(buildQobuzCoverUrl(coverId, 600));
+        candidates.push(buildQobuzCoverUrl(coverId, 300));
+    }
+
+    // 4. API-provided cover URL
     if (coverId && typeof player?.api?.getCoverUrl === 'function') {
         try {
-            candidates.push(player.api.getCoverUrl(coverId, '640'));
-            candidates.push(player.api.getCoverUrl(coverId, '320'));
-            candidates.push(player.api.getCoverUrl(coverId));
+            const apiUrl = player.api.getCoverUrl(coverId, '1280');
+            if (apiUrl) candidates.push(apiUrl.replace(/^http:/i, 'https:'));
         } catch {
             // ignore and rely on other candidates
         }
     }
 
-    return uniqueNonEmptyStrings(candidates).filter((url) => /^https?:\/\//i.test(url));
+    return uniqueNonEmptyStrings(candidates).filter((url) => /^https:\/\//i.test(url));
 }
 
+/**
+ * Encode string to base64 for transmission to Rust
+ */
 function encodeBase64Utf8(value) {
     if (!value || typeof value !== 'string') return null;
     try {
@@ -102,27 +150,50 @@ function encodeBase64Utf8(value) {
     }
 }
 
+/**
+ * Build the Discord Rich Presence payload
+ * Apple Music style with album cover, track info, and progress bar
+ */
 function buildPayload(player, track, isPaused = false) {
     const title = getTrackTitle(track) || 'Unknown Track';
     const artists = getTrackArtists(track) || 'Unknown Artist';
     const coverCandidates = resolveTrackCoverCandidates(player, track) || [];
     const [coverUrl, ...fallbackCoverUrls] = coverCandidates;
+    
+    // Album name for large image text
+    const albumName = track?.album?.title || track?.album || 'Unknown Album';
+    
+    // Quality label for state
     const qualityToken = track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality;
-    const qualityLabel = QUALITY_LABELS[qualityToken] || String(qualityToken || 'Unknown Quality').replace(/_/g, ' ');
+    const qualityLabel = QUALITY_LABELS[qualityToken] || String(qualityToken || '').replace(/_/g, ' ');
+
+    // Build state text (artists + album or quality)
+    let stateText = artists;
+    if (albumName && albumName !== 'Unknown Album') {
+        stateText = `${artists} • ${albumName}`;
+    } else if (qualityLabel) {
+        stateText = `${artists} • ${qualityLabel}`;
+    }
+
+    // Use playing/paused asset names (must be uploaded to Discord Developer Portal)
+    const smallImageKey = isPaused ? PAUSED_ASSET_NAME : PLAYING_ASSET_NAME;
+    const smallImageText = isPaused ? 'Paused' : 'Playing';
 
     const payload = {
         details: title,
-        state: `${artists} • ${qualityLabel}`,
+        state: stateText,
         largeImageKey: coverUrl || 'monochrome',
         largeImageBase64: encodeBase64Utf8(coverUrl),
         largeImageFallbackBase64: fallbackCoverUrls.map((url) => encodeBase64Utf8(url)).filter(Boolean),
-        largeImageText: `Listening on Monochrome+`,
-        smallImageKey: isPaused ? 'paused_icon' : 'playing_icon',
-        smallImageText: isPaused ? 'Paused' : 'Playing',
-        buttonLabel: 'Try Monochrome+',
+        largeImageText: albumName,
+        smallImageKey: smallImageKey,
+        smallImageText: smallImageText,
+        // Apple Music style button
+        buttonLabel: 'Listen to this song',
         buttonUrl: 'https://github.com/itsmeadarsh2008/monochrome-plus',
     };
 
+    // Add timestamps for progress bar (Apple Music style)
     if (!isPaused && track?.duration && player?.audio) {
         const rawDuration = Number(track.duration);
         const trackDurationSeconds = Number.isFinite(rawDuration)
@@ -134,7 +205,9 @@ function buildPayload(player, track, isPaused = false) {
 
         if (trackDurationSeconds > 0) {
             const remaining = Math.max(0, trackDurationSeconds - Math.min(currentTime, trackDurationSeconds));
+            // Start timestamp = now - current position
             payload.startTimestamp = toUnixSecondsFromNow(-Math.floor(currentTime * 1000));
+            // End timestamp = now + remaining time
             payload.endTimestamp = toUnixSecondsFromNow(Math.floor(remaining * 1000));
         }
     }
@@ -142,6 +215,9 @@ function buildPayload(player, track, isPaused = false) {
     return payload;
 }
 
+/**
+ * Initialize Discord Rich Presence bridge
+ */
 export function initializeDiscordBridge(player) {
     if (!player?.audio) return;
     if (window.__monochromeDiscordBridgeCleanup) {
@@ -203,6 +279,7 @@ export function initializeDiscordBridge(player) {
         cleanups.push(() => player.audio.removeEventListener(eventName, handler));
     };
 
+    // Track events
     bind('play', () => {
         void sendCurrent(false);
     });
@@ -224,9 +301,9 @@ export function initializeDiscordBridge(player) {
     });
 
     bind('timeupdate', () => {
+        // Throttle updates to avoid spamming Discord
         if (player.audio.paused || !player.currentTrack) return;
-        if (!heartbeatId) return;
-        // periodic heartbeat handles this; keep handler lightweight
+        // Periodic heartbeat handles this; keep handler lightweight
     });
 
     const cleanup = async () => {
@@ -253,48 +330,69 @@ export function initializeDiscordBridge(player) {
 
     window.__monochromeDiscordBridgeCleanup = cleanup;
 
-    const onBeforeUnload = () => {
-        void cleanup();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload, { once: true });
-    cleanups.push(() => window.removeEventListener('beforeunload', onBeforeUnload));
-
     const startBridge = async () => {
-        if (startInFlight || bridgeActive) return;
-
-        const isTauri = await isTauriRuntime();
-        if (!isTauri) return;
-
+        if (startInFlight) return;
         startInFlight = true;
-
         try {
-            const started = await invokeWithTimeout('discord_bridge_start', { clientId: DISCORD_CLIENT_ID });
-            bridgeActive = !!started;
-            if (!bridgeActive) {
-                console.info('[DiscordBridge] Discord RPC inactive (Discord not running or timed out).');
+            const result = await invokeWithTimeout(
+                'discord_bridge_start',
+                { clientId: DISCORD_CLIENT_ID },
+                RPC_START_TIMEOUT_MS
+            );
+            if (result) {
+                bridgeActive = true;
+                stopReconnectLoop();
+                void sendCurrent(player.audio.paused);
+            } else {
+                bridgeActive = false;
                 ensureReconnectLoop();
-                return;
             }
         } catch (error) {
-            bridgeActive = false;
             console.warn('[DiscordBridge] start failed:', error);
+            bridgeActive = false;
             ensureReconnectLoop();
-            return;
         } finally {
             startInFlight = false;
         }
-
-        stopReconnectLoop();
-        lastSentKey = '';
-        await sendCurrent(player.audio.paused);
-
-        if (!heartbeatId) {
-            heartbeatId = window.setInterval(() => {
-                void sendCurrent(player.audio.paused);
-            }, 12000);
-        }
     };
 
-    ensureReconnectLoop();
+    // Heartbeat to update timestamps and keep connection alive
+    heartbeatId = window.setInterval(() => {
+        if (!bridgeActive) return;
+        void sendCurrent(player.audio.paused);
+    }, 15000);
+
     void startBridge();
+}
+
+/**
+ * Check if Discord bridge is available
+ */
+export async function isDiscordBridgeAvailable() {
+    return await isTauriRuntime();
+}
+
+/**
+ * Manually update Discord presence (for external control)
+ */
+export async function updateDiscordPresence(player, track, isPaused) {
+    if (!await isTauriRuntime()) return;
+    const payload = buildPayload(player, track, isPaused);
+    try {
+        await invokeTauri('discord_bridge_update', { payload });
+    } catch (error) {
+        console.warn('[DiscordBridge] manual update failed:', error);
+    }
+}
+
+/**
+ * Clear Discord presence
+ */
+export async function clearDiscordPresence() {
+    if (!await isTauriRuntime()) return;
+    try {
+        await invokeTauri('discord_bridge_clear');
+    } catch (error) {
+        console.warn('[DiscordBridge] clear failed:', error);
+    }
 }

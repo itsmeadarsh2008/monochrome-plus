@@ -2,7 +2,7 @@
 name = "monochrome-plus"
 version = "2.0.9"
 description = "Monochrome+ - A high-fidelity music streaming application"
-authors = ["itsmeadarsh2008"]
+authors = ["Monochrome+ Team"]
 license = "ISC"
 repository = "https://github.com/itsmeadarsh2008/monochrome-plus"
 edition = "2021"
