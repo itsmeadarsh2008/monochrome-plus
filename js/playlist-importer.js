@@ -8,10 +8,11 @@ function getTrackArtists(track) {
     return track.artist?.name || 'Unknown Artist';
 }
 
-const IMPORT_DEFAULT_PARALLELISM = 10;
-const IMPORT_MAX_PARALLELISM = 24;
-const IMPORT_DEFAULT_QUERY_BATCH_SIZE = 3;
-const IMPORT_MAX_CANDIDATES = 24;
+const IMPORT_DEFAULT_PARALLELISM = 16;
+const IMPORT_MAX_PARALLELISM = 32;
+const IMPORT_DEFAULT_QUERY_BATCH_SIZE = 6;
+const IMPORT_MAX_CANDIDATES = 32;
+const IMPORT_CLOUD_SYNC_BATCH_SIZE = 5; // Sync every 5 tracks to cloud in real-time
 
 const IMPORT_MATCH_PROFILES = {
     strict: {
@@ -310,14 +311,33 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
     let nextIndex = 0;
     const workerCount = Math.max(1, Math.min(importOptions.parallelism, totalTracks));
 
-    const reportProgress = (entry) => {
+    // Real-time sync to playlist if specified
+    const { playlistId, isCollaborative, db } = options;
+    const syncedTrackIds = new Set();
+
+    const reportProgress = async (entry, matchedTrack = null) => {
         if (!onProgress) return;
         onProgress({
             current: completed,
             total: totalTracks,
             currentTrack: entry?.title || 'Unknown track',
             currentArtist: entry?.artist || '',
+            matchedTrack,
         });
+
+        // Real-time sync to cloud playlist if configured
+        if (matchedTrack && playlistId && db) {
+            try {
+                if (isCollaborative) {
+                    await db.addTracksToCollaborativePlaylist(playlistId, [matchedTrack]);
+                } else {
+                    await db.addTrackToPlaylist(playlistId, matchedTrack);
+                }
+                syncedTrackIds.add(matchedTrack.id);
+            } catch (syncError) {
+                console.warn('[Import] Real-time sync failed for track:', matchedTrack.id, syncError);
+            }
+        }
     };
 
     const worker = async () => {
@@ -330,7 +350,7 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
             if (!entry.title) {
                 lookupResults[index] = { match: null, entry };
                 completed += 1;
-                reportProgress(entry);
+                await reportProgress(entry, null);
                 continue;
             }
 
@@ -344,7 +364,7 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
             const match = await lookupPromise;
             lookupResults[index] = { match, entry };
             completed += 1;
-            reportProgress(entry);
+            await reportProgress(entry, match);
         }
     };
 
@@ -361,7 +381,7 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
         }
     });
 
-    return { tracks, missingTracks };
+    return { tracks, missingTracks, syncedCount: syncedTrackIds.size };
 }
 
 /**
@@ -764,6 +784,34 @@ function escapeXml(text) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+/**
+ * Import tracks to a playlist with real-time cloud sync
+ * @param {Array} entries - Array of track metadata objects
+ * @param {Object} api - API instance for searching tracks
+ * @param {Object} options - Import options
+ * @param {string} options.playlistId - Target playlist ID
+ * @param {boolean} options.isCollaborative - Whether it's a collaborative playlist
+ * @param {Object} options.db - Database instance
+ * @param {Function} options.onProgress - Progress callback
+ * @returns {Promise<{tracks: Array, missingTracks: Array, syncedCount: number}>}
+ */
+export async function importTracksToPlaylist(entries, api, options = {}) {
+    const { playlistId, isCollaborative = false, db, onProgress } = options;
+
+    if (!playlistId || !db) {
+        throw new Error('playlistId and db are required for importTracksToPlaylist');
+    }
+
+    const importOptions = {
+        ...options,
+        playlistId,
+        isCollaborative,
+        db,
+    };
+
+    return importTracksFromMetadata(entries, api, onProgress, importOptions);
 }
 
 // Export all functions

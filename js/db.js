@@ -141,9 +141,26 @@ export class MusicDatabase {
                 store.put(entry);
             };
 
-            transaction.oncomplete = () => resolve(entry);
+            transaction.oncomplete = () => {
+                // Sync to cloud immediately
+                this._syncHistoryItemToCloud(entry).catch((error) => {
+                    console.warn('[DB] Failed to sync history to cloud:', error);
+                });
+                resolve(entry);
+            };
             transaction.onerror = (e) => reject(e.target.error);
         });
+    }
+
+    async _syncHistoryItemToCloud(entry) {
+        try {
+            const { syncManager } = await import('./accounts/appwrite-sync.js');
+            if (syncManager?.syncHistoryItem) {
+                await syncManager.syncHistoryItem(entry);
+            }
+        } catch (error) {
+            console.warn('[DB] Cloud sync failed for history item:', error);
+        }
     }
 
     async getHistory() {
@@ -185,12 +202,31 @@ export class MusicDatabase {
 
         if (exists) {
             await this.performTransaction(storeName, 'readwrite', (store) => store.delete(key));
+            // Sync to cloud immediately
+            this._syncLibraryItemToCloud(type, item, false).catch((error) => {
+                console.warn('[DB] Failed to sync library removal to cloud:', error);
+            });
             return false; // Removed
         } else {
             const minified = this._minifyItem(type, item);
             const entry = { ...minified, addedAt: Date.now() };
             await this.performTransaction(storeName, 'readwrite', (store) => store.put(entry));
+            // Sync to cloud immediately
+            this._syncLibraryItemToCloud(type, entry, true).catch((error) => {
+                console.warn('[DB] Failed to sync library addition to cloud:', error);
+            });
             return true; // Added
+        }
+    }
+
+    async _syncLibraryItemToCloud(type, item, added) {
+        try {
+            const { syncManager } = await import('./accounts/appwrite-sync.js');
+            if (syncManager?.syncLibraryItem) {
+                await syncManager.syncLibraryItem(type, item, added);
+            }
+        } catch (error) {
+            console.warn('[DB] Cloud sync failed for library item:', error);
         }
     }
 
@@ -564,6 +600,22 @@ export class MusicDatabase {
                 detail: { action, playlist },
             })
         );
+
+        // Immediately sync to cloud
+        this._syncPlaylistToCloud(action, playlist).catch((error) => {
+            console.warn('[DB] Failed to sync playlist to cloud:', error);
+        });
+    }
+
+    async _syncPlaylistToCloud(action, playlist) {
+        try {
+            const { syncManager } = await import('./accounts/appwrite-sync.js');
+            if (syncManager?.syncUserPlaylist) {
+                await syncManager.syncUserPlaylist(playlist, action);
+            }
+        } catch (error) {
+            console.warn('[DB] Cloud sync failed for playlist:', error);
+        }
     }
 
     async _syncCollaborativePlaylist(action, playlist) {
@@ -651,7 +703,7 @@ export class MusicDatabase {
         const playlist = await this.performTransaction('user_playlists', 'readonly', (store) => store.get(playlistId));
         if (!playlist) throw new Error('Playlist not found');
         playlist.tracks = playlist.tracks || [];
-        playlist.tracks = playlist.tracks.filter((t) => t.id != trackId);
+        playlist.tracks = playlist.tracks.filter((t) => String(t.id) !== String(trackId));
         playlist.updatedAt = Date.now();
         this._updatePlaylistMetadata(playlist);
         await this.performTransaction('user_playlists', 'readwrite', (store) => store.put(playlist));
@@ -690,6 +742,10 @@ export class MusicDatabase {
             folder.playlists.push(playlistId);
             folder.updatedAt = Date.now();
             await this.performTransaction('user_folders', 'readwrite', (store) => store.put(folder));
+            // Sync to cloud immediately
+            this._syncFolderToCloud('update', folder).catch((error) => {
+                console.warn('[DB] Failed to sync folder update to cloud:', error);
+            });
         }
         return folder;
     }
@@ -706,6 +762,10 @@ export class MusicDatabase {
             updatedAt: Date.now(),
         };
         await this.performTransaction('user_folders', 'readwrite', (store) => store.put(folder));
+        // Sync to cloud immediately
+        this._syncFolderToCloud('create', folder).catch((error) => {
+            console.warn('[DB] Failed to sync folder creation to cloud:', error);
+        });
         return folder;
     }
 
@@ -727,6 +787,21 @@ export class MusicDatabase {
 
     async deleteFolder(id) {
         await this.performTransaction('user_folders', 'readwrite', (store) => store.delete(id));
+        // Sync to cloud immediately
+        this._syncFolderToCloud('delete', { id }).catch((error) => {
+            console.warn('[DB] Failed to sync folder deletion to cloud:', error);
+        });
+    }
+
+    async _syncFolderToCloud(action, folder) {
+        try {
+            const { syncManager } = await import('./accounts/appwrite-sync.js');
+            if (syncManager?.syncUserFolder) {
+                await syncManager.syncUserFolder(folder, action);
+            }
+        } catch (error) {
+            console.warn('[DB] Cloud sync failed for folder:', error);
+        }
     }
 
     async getPinned() {
