@@ -3,8 +3,6 @@
     "productName": "Monochrome+",
     "version": "2.0.9",
     "identifier": "app.monochrome.plus",
-    "authors": ["Monochrome+ Team"],
-    "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus",
     "build": {
         "frontendDist": "../dist",
         "devUrl": "http://localhost:5173",
@@ -20,53 +18,23 @@
                 "height": 800,
                 "minWidth": 800,
                 "minHeight": 600,
-                "maxWidth": null,
-                "maxHeight": null,
                 "resizable": true,
-                "maximized": false,
                 "fullscreen": false,
                 "visible": true,
                 "transparent": false,
                 "decorations": false,
-                "alwaysOnTop": false,
-                "contentProtected": false,
-                "skipTaskbar": false,
                 "center": true,
-                "focus": true,
-                "shadow": true,
-                "windowEffects": {
-                    "effects": [],
-                    "state": null
-                },
-                "additionalBrowserArgs": ""
+                "shadow": true
             }
         ],
         "security": {
-            "csp": null,
-            "dangerousDisableAssetCspModification": false,
-            "capabilities": [],
-            "dangerousRemoteDomainIpcAccess": [],
-            "freezePrototype": false,
-            "imgSrc": null,
-            "scriptSrc": null,
-            "styleSrc": null,
-            "defaultSrc": null,
-            "connectSrc": null,
-            "fontSrc": null,
-            "objectSrc": null,
-            "mediaSrc": null,
-            "frameSrc": null,
-            "upgradeInsecureRequests": false
+            "csp": null
         },
         "trayIcon": {
             "iconPath": "icons/32x32.png",
-            "iconAsTemplate": false,
-            "menuOnLeftClick": true,
             "title": "Monochrome+",
             "tooltip": "Monochrome+ - High-fidelity music streaming"
-        },
-        "withGlobalTauri": false,
-        "macOSPrivateApi": false
+        }
     },
     "bundle": {
         "active": true,
@@ -84,97 +52,38 @@
             "certificateThumbprint": null,
             "digestAlgorithm": "sha256",
             "timestampUrl": "http://timestamp.digicert.com",
-            "tsp": false,
             "webviewInstallMode": {
-                "type": "embedBootstrapper",
-                "silent": false
+                "type": "embedBootstrapper"
             },
             "nsis": {
-                "template": null,
-                "license": null,
-                "headerImage": null,
-                "sidebarImage": null,
                 "installerIcon": "icons/icon.ico",
                 "installDisplayName": "Monochrome+",
                 "languages": ["English"],
                 "displayLanguageSelector": false,
                 "installMode": "both",
-                "startMenuFolder": "Monochrome+",
-                "customLanguageFiles": {},
-                "compression": "lzma",
-                "solidCompression": true,
-                "preInstallHook": null,
-                "postInstallHook": null,
-                "preUninstallHook": null,
-                "postUninstallHook": null
+                "startMenuFolder": "Monochrome+"
             },
             "wix": {
                 "language": ["en-US"],
-                "template": null,
-                "fragmentPaths": [],
-                "componentRefs": [],
-                "componentGroupRefs": [],
-                "featureRefs": [],
-                "featureGroupRefs": [],
-                "mergeRefs": [],
-                "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A",
-                "customActionRefs": [],
-                "skipWebviewInstall": false,
-                "shortUpgradeCode": null,
-                "license": null,
-                "enableElevatedUpdateTask": false,
-                "bannerPath": null,
-                "dialogImagePath": null
-            },
-            "signCommand": null,
-            "allowDowngrades": true
+                "upgradeCode": "B5C7A3F2-1D4E-4B8A-9E2C-8F6A3D5B7E1A"
+            }
         },
         "macOS": {
             "frameworks": [],
             "minimumSystemVersion": "10.13",
             "signingIdentity": null,
             "entitlements": null,
-            "exceptionDomain": null,
-            "license": null,
-            "hardenedRuntime": true,
-            "providerShortName": null
+            "exceptionDomain": null
         },
         "linux": {
             "appimage": {
                 "bundleMediaFramework": false
             },
             "deb": {
-                "files": {},
                 "depends": [
                     "libwebkit2gtk-4.1-0",
                     "libgtk-3-0"
-                ],
-                "preDepends": [],
-                "recommends": [],
-                "suggests": [],
-                "enhances": [],
-                "conflicts": [],
-                "breaks": [],
-                "replaces": [],
-                "provides": []
-            },
-            "rpm": {
-                "release": "1",
-                "epoch": 0,
-                "files": {},
-                "requires": [],
-                "obsoletes": [],
-                "conflicts": [],
-                "provides": []
-            },
-            "pacman": {
-                "files": {},
-                "depends": [],
-                "optdepends": [],
-                "provides": [],
-                "conflicts": [],
-                "replaces": [],
-                "options": []
+                ]
             }
         },
         "android": {
@@ -185,63 +94,48 @@
             "minimumSystemVersion": "13.0"
         },
         "resources": [],
-        "externalBin": [],
         "copyright": "Copyright (c) 2026 Monochrome+ Team",
         "category": "Music",
         "shortDescription": "High-fidelity music streaming",
-        "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening. Experience your music with exceptional audio quality and a distraction-free interface.",
+        "longDescription": "Monochrome+ is a privacy-respecting, high-fidelity music streaming application built for focused listening.",
         "fileAssociations": [
             {
                 "ext": ["mp3"],
                 "name": "MP3 Audio File",
-                "description": "MP3 audio file playable in Monochrome+",
                 "mimeType": "audio/mpeg",
                 "role": "Viewer"
             },
             {
                 "ext": ["flac"],
                 "name": "FLAC Audio File",
-                "description": "FLAC lossless audio file playable in Monochrome+",
                 "mimeType": "audio/flac",
                 "role": "Viewer"
             },
             {
                 "ext": ["wav"],
                 "name": "WAV Audio File",
-                "description": "WAV audio file playable in Monochrome+",
                 "mimeType": "audio/wav",
                 "role": "Viewer"
             },
             {
                 "ext": ["m4a", "aac"],
                 "name": "AAC Audio File",
-                "description": "AAC audio file playable in Monochrome+",
                 "mimeType": "audio/aac",
                 "role": "Viewer"
             },
             {
                 "ext": ["ogg"],
                 "name": "OGG Audio File",
-                "description": "OGG audio file playable in Monochrome+",
                 "mimeType": "audio/ogg",
                 "role": "Viewer"
             },
             {
                 "ext": ["opus"],
                 "name": "Opus Audio File",
-                "description": "Opus audio file playable in Monochrome+",
                 "mimeType": "audio/opus",
                 "role": "Viewer"
             }
-        ],
-        "protocols": [
-            {
-                "scheme": "monochrome",
-                "name": "Monochrome+ Protocol",
-                "role": "Viewer"
-            }
-        ],
-        "useBootstrapper": false
+        ]
     },
     "plugins": {
         "updater": {
@@ -255,13 +149,5 @@
                 "installMode": "passive"
             }
         }
-    },
-    "cli": {
-        "description": "Monochrome+ CLI",
-        "longDescription": "Command line interface for Monochrome+",
-        "beforeHelp": null,
-        "afterHelp": null,
-        "args": [],
-        "subcommands": {}
     }
 }
