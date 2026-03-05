@@ -122,7 +122,7 @@
         "updater": {
             "active": true,
             "dialog": true,
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ3QjcyMTAzREVFODRGODcKUldTSFQramVBeUczUjhOaGJuYWpUVmRZUzBLNFAwNlRpQmdWblNqb3JOclpNUktGK01KVlI0Sm0K",
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2MjU0QUM3QzVEODczNjAKUldSZ2M5akZ4MG9sVnV3c3lTbndpSXRDMEtNbHhRUUJIVjlUMGhBTStEWHBlWG1RV3ZCV0JxQS8K",
             "endpoints": [
                 "https://github.com/itsmeadarsh2008/monochrome-plus/releases/latest/download/latest.json"
             ],
