@@ -2,14 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
-## [3.6.5] - 2026-03-06
+## [3.6.6] - 2026-03-06
 
 ### Fixed
 
+- Removed duplicate titlebar, keeping the one with zoom controls.
 - Fixed Windows cross-compilation linking error (export ordinal too large) by adjusting LTO settings.
 - Fixed unused Result warning in Discord RPC code.
 
-## [2.0.9] - 2026-03-04
+## [3.6.5] - 2026-03-06
 
 ### Fixed
 
