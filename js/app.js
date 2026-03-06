@@ -33,6 +33,7 @@ import { openEditProfile } from './profile.js';
 import { initTracker } from './tracker.js';
 import { isTauriRuntime } from './desktop/tauri-runtime.js';
 import { initTitlebar } from '../src-tauri/titlebar.js';
+import { initImageLoader } from './image-loader.js';
 
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
 
@@ -268,6 +269,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isTauri) {
         initTitlebar();
     }
+
+    initImageLoader();
 
     // Ping Appwrite to verify setup
     client

@@ -2512,9 +2512,29 @@ input[type='search']::-webkit-search-cancel-button {
 }
 
 .animate-shimmer {
-    background: linear-gradient(90deg, var(--card) 0%, var(--card-hover) 50%, var(--card) 100%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.animate-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(255, 255, 255, 0.08) 45%,
+        rgba(255, 255, 255, 0.14) 50%,
+        rgba(255, 255, 255, 0.08) 55%,
+        transparent 70%,
+        transparent 100%
+    );
+    animation: skeleton-shine 1.8s ease-in-out infinite;
+    will-change: transform;
+    pointer-events: none;
+    z-index: 1;
 }
 
 .animate-glow-pulse {
@@ -2889,9 +2909,17 @@ html.carousel-mode .card-grid > *,
     0% {
         background-position: 200% 0;
     }
-
     100% {
         background-position: -200% 0;
+    }
+}
+
+@keyframes skeleton-shine {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
     }
 }
 
@@ -3136,15 +3164,47 @@ html.carousel-mode .card-grid > *,
     /* Use standardized animation */
 }
 
-.search-all-section {
-    margin-bottom: 1.15rem;
+#search-tab-all {
+    display: grid;
+    gap: var(--spacing-lg);
 }
 
+#search-tab-all .search-all-section {
+    display: grid;
+    gap: var(--spacing-sm);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+}
+
+#search-tab-all .search-all-section:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.search-all-section-title,
 .search-all-title {
-    font-size: 0.98rem;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin: 0;
+    font-size: 0.84rem;
     font-weight: 700;
-    margin: 0 0 0.45rem;
-    color: color-mix(in srgb, var(--foreground) 92%, transparent);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--muted-foreground) 92%, transparent);
+}
+
+.search-all-section-title::after,
+.search-all-title::after {
+    content: '';
+    flex: 1;
+    min-width: 1rem;
+    height: 1px;
+    background: linear-gradient(
+        to right,
+        color-mix(in srgb, var(--border) 88%, transparent),
+        color-mix(in srgb, var(--border) 20%, transparent)
+    );
 }
 
 #search-artists-container .card.search-artist-card,
@@ -6439,12 +6499,29 @@ input:checked + .slider::before {
 }
 
 .skeleton {
-    background: linear-gradient(90deg, var(--secondary) 0%, var(--muted) 50%, var(--secondary) 100%);
-    background-size: 200% 100%;
-    animation: skeleton-loading 2s infinite ease-in-out;
-
-    /* Slower, smoother pulse */
+    background: var(--secondary);
     border-radius: var(--radius);
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(255, 255, 255, 0.08) 45%,
+        rgba(255, 255, 255, 0.14) 50%,
+        rgba(255, 255, 255, 0.08) 55%,
+        transparent 70%,
+        transparent 100%
+    );
+    animation: skeleton-shine 1.8s ease-in-out infinite;
+    will-change: transform;
 }
 
 .skeleton-track {
@@ -6532,6 +6609,91 @@ input:checked + .slider::before {
 .skeleton-card-subtitle {
     height: 14px;
     width: 60%;
+}
+
+/* Image skeleton shimmer - shown while images load */
+.card-image-wrapper.img-loading {
+    background: var(--secondary);
+}
+
+.card-image-wrapper.img-loading::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(255, 255, 255, 0.06) 45%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.06) 55%,
+        transparent 70%,
+        transparent 100%
+    );
+    animation: skeleton-shine 1.8s ease-in-out infinite;
+    will-change: transform;
+    pointer-events: none;
+}
+
+.card-image-wrapper.img-loading .card-image,
+.card-image-wrapper.img-loading .card-collage {
+    opacity: 0;
+}
+
+.card-image-wrapper .card-image,
+.card-image-wrapper .card-collage {
+    transition: opacity 0.3s ease;
+}
+
+.track-item-cover.img-loading {
+    background: var(--secondary);
+    position: relative;
+    overflow: hidden;
+}
+
+.track-item-cover.img-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(255, 255, 255, 0.06) 45%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.06) 55%,
+        transparent 70%,
+        transparent 100%
+    );
+    animation: skeleton-shine 1.8s ease-in-out infinite;
+    will-change: transform;
+    pointer-events: none;
+}
+
+.detail-header-image.img-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.detail-header-image.img-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(255, 255, 255, 0.06) 45%,
+        rgba(255, 255, 255, 0.12) 50%,
+        rgba(255, 255, 255, 0.06) 55%,
+        transparent 70%,
+        transparent 100%
+    );
+    animation: skeleton-shine 1.8s ease-in-out infinite;
+    will-change: transform;
+    pointer-events: none;
 }
 
 .skeleton-container {

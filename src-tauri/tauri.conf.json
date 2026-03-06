@@ -20,10 +20,24 @@
                 "minHeight": 600,
                 "resizable": true,
                 "fullscreen": false,
-                "visible": true,
+                "visible": false,
                 "transparent": false,
                 "decorations": false,
                 "center": true
+            },
+            {
+                "label": "splashscreen",
+                "title": "Monochrome+",
+                "width": 400,
+                "height": 300,
+                "resizable": false,
+                "fullscreen": false,
+                "visible": true,
+                "transparent": true,
+                "decorations": false,
+                "center": true,
+                "alwaysOnTop": true,
+                "url": "splashscreen.html"
             }
         ],
         "security": {

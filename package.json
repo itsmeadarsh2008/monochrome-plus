@@ -38,10 +38,15 @@
     "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
     "devDependencies": {
         "@tauri-apps/cli": "^2.1.0",
+        "cookie-session": "^2.1.0",
+        "dotenv": "^16.4.5",
         "eslint": "^9.39.2",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.0.0",
         "htmlhint": "^1.8.0",
+        "jose": "^6.0.11",
+        "node-appwrite": "^14.1.0",
+        "pocketbase": "^0.26.5",
         "prettier": "^3.7.4",
         "stylelint": "^16.26.1",
         "stylelint-config-standard": "^39.0.1",
@@ -63,12 +68,7 @@
         "appwrite": "^22.4.0",
         "butterchurn": "^2.6.7",
         "butterchurn-presets": "^2.4.7",
-        "cookie-session": "^2.1.0",
         "dashjs": "^5.1.1",
-        "dotenv": "^16.4.5",
-        "howler": "^2.2.4",
-        "jose": "^6.0.11",
-        "node-appwrite": "^14.1.0",
-        "pocketbase": "^0.26.5"
+        "howler": "^2.2.4"
     }
 }

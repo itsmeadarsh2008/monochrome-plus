@@ -1224,7 +1224,7 @@ export class MusicDatabase {
         const playlist = await this.getCollaborativePlaylist(playlistId);
         if (!playlist) throw new Error('Playlist not found');
         playlist.tracks = playlist.tracks || [];
-        playlist.tracks = playlist.tracks.filter((t) => t.id !== trackId);
+        playlist.tracks = playlist.tracks.filter((t) => String(t.id) !== String(trackId));
         playlist.updatedAt = Date.now();
         await this.performTransaction('collaborative_playlists', 'readwrite', (store) => store.put(playlist));
         this._syncCollaborativePlaylist('update', playlist);

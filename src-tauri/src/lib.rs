@@ -1,3 +1,4 @@
+use tauri::Manager;
 use discord_presence::models::ActivityType;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 use discord_presence::{Client, DiscordError};
@@ -8,8 +9,9 @@ use std::thread;
 use std::time::Duration;
 
 const DEFAULT_DISCORD_CLIENT_ID: &str = "1478608904609857576";
-const RPC_START_ATTEMPTS: usize = 6;
-const RPC_START_SLEEP_MS: u64 = 80;
+// Keep retry counts low to avoid blocking the main thread when Discord isn't running
+const RPC_START_ATTEMPTS: usize = 3;
+const RPC_START_SLEEP_MS: u64 = 50;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -318,7 +320,7 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
 
     // Try each image candidate until one works
     for safe_large_image in safe_large_image_candidates {
-        for _ in 0..10 {
+        for _ in 0..3 {
             let details_value = details.clone();
             let state_value = state.clone();
             let large_image_value = safe_large_image.clone();
@@ -444,13 +446,28 @@ pub fn run() {
             discord_bridge_stop,
         ])
         .setup(|app| {
+            let handle = app.handle().clone();
             if cfg!(debug_assertions) {
-                app.handle().plugin(
+                handle.plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Debug)
                         .build(),
                 )?;
             }
+
+            // Close splash screen and show main window
+            let handle_clone = handle.clone();
+            std::thread::spawn(move || {
+                // Give the main window time to render
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if let Some(splash) = handle_clone.get_webview_window("splashscreen") {
+                    let _ = splash.close();
+                }
+                if let Some(main) = handle_clone.get_webview_window("main") {
+                    let _ = main.show();
+                }
+            });
+
             Ok(())
         })
         .run(tauri::generate_context!())

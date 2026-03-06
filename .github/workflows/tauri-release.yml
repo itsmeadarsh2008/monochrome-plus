@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
@@ -39,6 +43,7 @@ jobs:
             name: "macOS"
 
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -48,11 +53,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: ''
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+          no-cache: true
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -72,13 +79,7 @@ jobs:
             libssl-dev \
             pkg-config
 
-      - name: Clean previous build artifacts
-        shell: bash
-        run: |
-          rm -rf node_modules
-          cargo clean --manifest-path src-tauri/Cargo.toml || true
-
-      - name: Install frontend dependencies (no cache)
+      - name: Install frontend dependencies
         run: bun install --frozen-lockfile --no-cache
 
       - name: Sync app version from tag
@@ -162,6 +163,7 @@ jobs:
   update-release-notes:
     needs: publish-tauri
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write

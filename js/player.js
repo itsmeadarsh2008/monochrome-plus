@@ -1153,10 +1153,13 @@ export class Player {
                 if (this.preloadAbortController.signal.aborted) break;
 
                 this.preloadCache.set(track.id, streamUrl);
-                // Warm connection/cache
-                // For Blob URLs (DASH), this head request is not needed and can cause errors.
+                // Prefetch first ~256KB of audio data for instant playback
                 if (!streamUrl.startsWith('blob:')) {
-                    fetch(streamUrl, { method: 'HEAD', signal: this.preloadAbortController.signal }).catch(() => {});
+                    fetch(streamUrl, {
+                        method: 'GET',
+                        headers: { 'Range': 'bytes=0-262143' },
+                        signal: this.preloadAbortController.signal,
+                    }).catch(() => {});
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
@@ -1174,14 +1177,14 @@ export class Player {
         const mode = performanceModeSettings.getMode();
         switch (mode) {
             case 'extreme':
-                return 5; // Aggressive preloading for best performance
+                return 8; // Aggressive preloading for best performance
             case 'performance':
-                return 3;
+                return 5;
             case 'balanced':
-                return 2;
+                return 3;
             case 'quality':
             default:
-                return 2;
+                return 3;
         }
     }
 

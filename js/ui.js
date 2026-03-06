@@ -589,7 +589,7 @@ export class UIRenderer {
             showCover = false;
         }
         const trackImageHTML = showCover
-            ? `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="Track Cover" class="track-item-cover" loading="lazy">`
+            ? `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="Track Cover" class="track-item-cover img-loading" loading="lazy">`
             : '';
 
         let displayIndex;
@@ -673,7 +673,7 @@ export class UIRenderer {
     }) {
         return `
             <div class="card ${extraClasses} ${isCompact ? 'compact' : ''}" data-${type}-id="${id}" data-href="${href}" ${extraAttributes}>
-                <div class="card-image-wrapper">
+                <div class="card-image-wrapper img-loading">
                     ${imageHTML}
                     ${actionButtonsHTML}
                 </div>

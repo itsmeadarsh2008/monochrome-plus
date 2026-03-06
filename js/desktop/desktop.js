@@ -8,7 +8,7 @@ const DEFAULT_DESKTOP_ZOOM = 0.9;
 const MIN_DESKTOP_ZOOM = 0.75;
 const MAX_DESKTOP_ZOOM = 1;
 const DESKTOP_ZOOM_STEP = 0.05;
-const USE_CUSTOM_WINDOW_CHROME = false;
+const USE_CUSTOM_WINDOW_CHROME = true;
 
 function normalizeDesktopZoom(value) {
     const numeric = Number(value);
