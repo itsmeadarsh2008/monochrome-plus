@@ -1157,7 +1157,7 @@ export class Player {
                 if (!streamUrl.startsWith('blob:')) {
                     fetch(streamUrl, {
                         method: 'GET',
-                        headers: { 'Range': 'bytes=0-262143' },
+                        headers: { Range: 'bytes=0-262143' },
                         signal: this.preloadAbortController.signal,
                     }).catch(() => {});
                 }

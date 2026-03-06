@@ -10,25 +10,25 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
  */
 export async function initTitlebar() {
     const appWindow = getCurrentWindow();
-    
+
     // Detect platform and add appropriate data attribute
     const platform = await detectPlatform();
     document.body.setAttribute('data-platform', platform);
-    
+
     // Insert titlebar HTML if it doesn't exist
     if (!document.querySelector('.titlebar')) {
         insertTitlebar();
     }
-    
+
     // Bind button events
     bindTitlebarEvents(appWindow);
-    
+
     // Add double-click to maximize on drag region
     setupDoubleClickMaximize(appWindow);
-    
+
     // Update maximize button icon based on window state
     setupWindowStateListener(appWindow);
-    
+
     // Setup ephemeral behavior - show on hover
     setupEphemeralBehavior();
 }
@@ -38,7 +38,7 @@ export async function initTitlebar() {
  */
 async function detectPlatform() {
     const userAgent = navigator.userAgent.toLowerCase();
-    
+
     if (userAgent.indexOf('mac') !== -1) {
         return 'macos';
     } else if (userAgent.indexOf('win') !== -1) {
@@ -46,7 +46,7 @@ async function detectPlatform() {
     } else if (userAgent.indexOf('linux') !== -1) {
         return 'linux';
     }
-    
+
     return 'unknown';
 }
 
@@ -88,7 +88,7 @@ function insertTitlebar() {
             </div>
         </div>
     `;
-    
+
     // Insert at the beginning of body
     document.body.insertAdjacentHTML('afterbegin', titlebarHTML);
 }
@@ -99,14 +99,14 @@ function insertTitlebar() {
 function setupEphemeralBehavior() {
     const titlebar = document.querySelector('.titlebar');
     if (!titlebar) return;
-    
+
     let hideTimeout;
-    
+
     const showTitlebar = () => {
         clearTimeout(hideTimeout);
         titlebar.classList.add('visible');
     };
-    
+
     const hideTitlebar = () => {
         // Delay hiding to allow for button interactions
         hideTimeout = setTimeout(() => {
@@ -116,24 +116,24 @@ function setupEphemeralBehavior() {
             }
         }, 500);
     };
-    
+
     // Show on mouse near top of screen
     document.addEventListener('mousemove', (e) => {
         if (e.clientY <= 50) {
             showTitlebar();
         }
     });
-    
+
     // Show/hide based on hover
     titlebar.addEventListener('mouseenter', showTitlebar);
     titlebar.addEventListener('mouseleave', hideTitlebar);
-    
+
     // Also handle focus for accessibility
     titlebar.addEventListener('focusin', showTitlebar);
-    
+
     // Keep visible when any button is focused
     const buttons = titlebar.querySelectorAll('.titlebar-button');
-    buttons.forEach(btn => {
+    buttons.forEach((btn) => {
         btn.addEventListener('mouseenter', showTitlebar);
         btn.addEventListener('mouseleave', hideTitlebar);
     });
@@ -154,7 +154,7 @@ function bindTitlebarEvents(appWindow) {
             }
         });
     }
-    
+
     // Maximize/Restore button
     const maximizeBtn = document.getElementById('titlebar-maximize');
     if (maximizeBtn) {
@@ -166,7 +166,7 @@ function bindTitlebarEvents(appWindow) {
             }
         });
     }
-    
+
     // Close button
     const closeBtn = document.getElementById('titlebar-close');
     if (closeBtn) {
@@ -186,13 +186,13 @@ function bindTitlebarEvents(appWindow) {
 function setupDoubleClickMaximize(appWindow) {
     const dragRegion = document.querySelector('.titlebar-drag-region');
     if (!dragRegion) return;
-    
+
     let lastClickTime = 0;
-    
+
     dragRegion.addEventListener('mousedown', async (e) => {
         const currentTime = new Date().getTime();
         const timeDiff = currentTime - lastClickTime;
-        
+
         // Double click detected (within 300ms)
         if (timeDiff < 300) {
             try {
@@ -201,7 +201,7 @@ function setupDoubleClickMaximize(appWindow) {
                 console.error('Failed to toggle maximize on double-click:', error);
             }
         }
-        
+
         lastClickTime = currentTime;
     });
 }
@@ -213,13 +213,13 @@ function setupWindowStateListener(appWindow) {
     const maximizeIcon = document.getElementById('maximize-icon');
     const restoreIcon = document.getElementById('restore-icon');
     const maximizeBtn = document.getElementById('titlebar-maximize');
-    
+
     if (!maximizeIcon || !restoreIcon || !maximizeBtn) return;
-    
+
     const updateMaximizeIcon = async () => {
         try {
             const isMaximized = await appWindow.isMaximized();
-            
+
             if (isMaximized) {
                 maximizeIcon.style.display = 'none';
                 restoreIcon.style.display = 'block';
@@ -235,15 +235,15 @@ function setupWindowStateListener(appWindow) {
             console.error('Failed to check window state:', error);
         }
     };
-    
+
     // Update on maximize button click
     maximizeBtn.addEventListener('click', () => {
         setTimeout(updateMaximizeIcon, 100);
     });
-    
+
     // Update periodically
     setInterval(updateMaximizeIcon, 500);
-    
+
     // Initial update
     updateMaximizeIcon();
 }
@@ -254,9 +254,9 @@ function setupWindowStateListener(appWindow) {
 export async function initManualDragging() {
     const appWindow = getCurrentWindow();
     const dragRegion = document.querySelector('.titlebar-drag-region');
-    
+
     if (!dragRegion) return;
-    
+
     dragRegion.addEventListener('mousedown', async (e) => {
         if (e.buttons === 1) {
             try {

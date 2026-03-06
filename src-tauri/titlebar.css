@@ -2,6 +2,7 @@
 
 .titlebar {
     height: 38px;
+
     /* Use CSS variables for theme integration */
     background: var(--background);
     border-bottom: 1px solid var(--border);
@@ -14,11 +15,13 @@
     left: 0;
     right: 0;
     z-index: 9999;
-    
+
     /* Ephemeral - hidden by default, shown on hover */
     opacity: 0;
     transform: translateY(-100%);
-    transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        opacity 0.2s ease,
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Show titlebar on hover or when focused */
@@ -138,52 +141,52 @@
 }
 
 /* macOS specific - traffic light buttons on left */
-[data-platform="macos"] .titlebar {
+[data-platform='macos'] .titlebar {
     justify-content: flex-start;
 }
 
-[data-platform="macos"] .titlebar-drag-region {
+[data-platform='macos'] .titlebar-drag-region {
     order: 2;
     justify-content: center;
     flex: 1;
 }
 
-[data-platform="macos"] .titlebar-controls {
+[data-platform='macos'] .titlebar-controls {
     order: 1;
     padding-left: 12px;
 }
 
-[data-platform="macos"] .titlebar-button {
+[data-platform='macos'] .titlebar-button {
     width: 28px;
     margin-right: 8px;
     border-radius: 50%;
 }
 
-[data-platform="macos"] .titlebar-button.close {
+[data-platform='macos'] .titlebar-button.close {
     background-color: #ff5f56;
 }
 
-[data-platform="macos"] .titlebar-button.minimize {
+[data-platform='macos'] .titlebar-button.minimize {
     background-color: #ffbd2e;
 }
 
-[data-platform="macos"] .titlebar-button.maximize {
+[data-platform='macos'] .titlebar-button.maximize {
     background-color: #27c93f;
 }
 
-[data-platform="macos"] .titlebar-button svg {
+[data-platform='macos'] .titlebar-button svg {
     display: none;
 }
 
-[data-platform="macos"] .titlebar-button.close:hover {
+[data-platform='macos'] .titlebar-button.close:hover {
     background-color: #ff5f56;
 }
 
-[data-platform="macos"] .titlebar-button.minimize:hover {
+[data-platform='macos'] .titlebar-button.minimize:hover {
     background-color: #ffbd2e;
 }
 
-[data-platform="macos"] .titlebar-button.maximize:hover {
+[data-platform='macos'] .titlebar-button.maximize:hover {
     background-color: #27c93f;
 }
 

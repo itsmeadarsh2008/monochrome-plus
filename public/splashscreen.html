@@ -1,158 +1,161 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monochrome+</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --background: #0a0a0a;
-            --foreground: #f5f5f5;
-            --card: #141414;
-            --border: #2a2a2a;
-            --muted-foreground: #a0a0a0;
-        }
-
-        html,
-        body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: transparent;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-
-        .splash {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: var(--background);
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* Subtle gradient overlay */
-        .splash::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(ellipse at center bottom,
-                    rgba(255, 255, 255, 0.03) 0%,
-                    transparent 60%);
-            pointer-events: none;
-        }
-
-        /* Minimal grain texture */
-        .splash::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
-            pointer-events: none;
-            opacity: 0.5;
-        }
-
-        .logo-container {
-            position: relative;
-            z-index: 1;
-            width: 56px;
-            height: 56px;
-            margin-bottom: 16px;
-            animation: fadeIn 0.4s ease-out both;
-        }
-
-        .logo-container svg {
-            width: 100%;
-            height: 100%;
-            filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.08));
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: scale(0.95);
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Monochrome+</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
             }
 
-            to {
-                opacity: 1;
-                transform: scale(1);
+            :root {
+                --background: #0a0a0a;
+                --foreground: #f5f5f5;
+                --card: #141414;
+                --border: #2a2a2a;
+                --muted-foreground: #a0a0a0;
             }
-        }
 
-        .wordmark {
-            position: relative;
-            z-index: 1;
-            color: var(--foreground);
-            font-size: 15px;
-            font-weight: 500;
-            letter-spacing: 2.5px;
-            text-transform: uppercase;
-            margin-bottom: 24px;
-            animation: fadeIn 0.4s 0.1s ease-out both;
-        }
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                background: transparent;
+                font-family:
+                    'Inter',
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    'Segoe UI',
+                    sans-serif;
+            }
 
-        .wordmark span {
-            font-weight: 300;
-            opacity: 0.5;
-        }
+            .splash {
+                width: 100%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background: var(--background);
+                position: relative;
+                overflow: hidden;
+            }
 
-        /* Minimal line loader */
-        .loader {
-            position: relative;
-            z-index: 1;
-            width: 24px;
-            height: 2px;
-            background: var(--border);
-            border-radius: 1px;
-            overflow: hidden;
-            animation: fadeIn 0.4s 0.2s ease-out both;
-        }
+            /* Subtle gradient overlay */
+            .splash::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(ellipse at center bottom, rgba(255, 255, 255, 0.03) 0%, transparent 60%);
+                pointer-events: none;
+            }
 
-        .loader::after {
-            content: '';
-            position: absolute;
-            left: -50%;
-            width: 50%;
-            height: 100%;
-            background: var(--foreground);
-            animation: loading 1s ease-in-out infinite;
-            border-radius: 1px;
-        }
+            /* Minimal grain texture */
+            .splash::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
+                pointer-events: none;
+                opacity: 0.5;
+            }
 
-        @keyframes loading {
-            0% {
+            .logo-container {
+                position: relative;
+                z-index: 1;
+                width: 56px;
+                height: 56px;
+                margin-bottom: 16px;
+                animation: fadeIn 0.4s ease-out both;
+            }
+
+            .logo-container svg {
+                width: 100%;
+                height: 100%;
+                filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.08));
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: scale(0.95);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+            }
+
+            .wordmark {
+                position: relative;
+                z-index: 1;
+                color: var(--foreground);
+                font-size: 15px;
+                font-weight: 500;
+                letter-spacing: 2.5px;
+                text-transform: uppercase;
+                margin-bottom: 24px;
+                animation: fadeIn 0.4s 0.1s ease-out both;
+            }
+
+            .wordmark span {
+                font-weight: 300;
+                opacity: 0.5;
+            }
+
+            /* Minimal line loader */
+            .loader {
+                position: relative;
+                z-index: 1;
+                width: 24px;
+                height: 2px;
+                background: var(--border);
+                border-radius: 1px;
+                overflow: hidden;
+                animation: fadeIn 0.4s 0.2s ease-out both;
+            }
+
+            .loader::after {
+                content: '';
+                position: absolute;
                 left: -50%;
+                width: 50%;
+                height: 100%;
+                background: var(--foreground);
+                animation: loading 1s ease-in-out infinite;
+                border-radius: 1px;
             }
 
-            100% {
-                left: 100%;
-            }
-        }
-    </style>
-</head>
+            @keyframes loading {
+                0% {
+                    left: -50%;
+                }
 
-<body>
-    <div class="splash">
-        <div class="logo-container">
-            <!-- Actual Monochrome+ logo -->
-            <svg viewBox="14.75 14.75 70.5 70.5" xmlns="http://www.w3.org/2000/svg">
-                <path fill="white"
-                    d="M38.25 14.75H85.25V61.75H61.75V38.25H38.25ZM14.75 38.25H38.25V61.75H61.75V85.25H14.75Z" />
-            </svg>
+                100% {
+                    left: 100%;
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="splash">
+            <div class="logo-container">
+                <!-- Actual Monochrome+ logo -->
+                <svg viewBox="14.75 14.75 70.5 70.5" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        fill="white"
+                        d="M38.25 14.75H85.25V61.75H61.75V38.25H38.25ZM14.75 38.25H38.25V61.75H61.75V85.25H14.75Z"
+                    />
+                </svg>
+            </div>
+            <div class="wordmark">Monochrome<span>+</span></div>
+            <div class="loader"></div>
         </div>
-        <div class="wordmark">Monochrome<span>+</span></div>
-        <div class="loader"></div>
-    </div>
-</body>
-
+    </body>
 </html>
