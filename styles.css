@@ -2525,9 +2525,9 @@ input[type='search']::-webkit-search-cancel-button {
         90deg,
         transparent 0%,
         transparent 30%,
-        rgba(255, 255, 255, 0.08) 45%,
-        rgba(255, 255, 255, 0.14) 50%,
-        rgba(255, 255, 255, 0.08) 55%,
+        rgb(255, 255, 255, 0.08) 45%,
+        rgb(255, 255, 255, 0.14) 50%,
+        rgb(255, 255, 255, 0.08) 55%,
         transparent 70%,
         transparent 100%
     );
@@ -2909,6 +2909,7 @@ html.carousel-mode .card-grid > *,
     0% {
         background-position: 200% 0;
     }
+
     100% {
         background-position: -200% 0;
     }
@@ -2918,6 +2919,7 @@ html.carousel-mode .card-grid > *,
     0% {
         transform: translateX(-100%);
     }
+
     100% {
         transform: translateX(100%);
     }
@@ -6514,9 +6516,9 @@ input:checked + .slider::before {
         90deg,
         transparent 0%,
         transparent 30%,
-        rgba(255, 255, 255, 0.08) 45%,
-        rgba(255, 255, 255, 0.14) 50%,
-        rgba(255, 255, 255, 0.08) 55%,
+        rgb(255, 255, 255, 0.08) 45%,
+        rgb(255, 255, 255, 0.14) 50%,
+        rgb(255, 255, 255, 0.08) 55%,
         transparent 70%,
         transparent 100%
     );
@@ -6625,9 +6627,9 @@ input:checked + .slider::before {
         90deg,
         transparent 0%,
         transparent 30%,
-        rgba(255, 255, 255, 0.06) 45%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.06) 55%,
+        rgb(255, 255, 255, 0.06) 45%,
+        rgb(255, 255, 255, 0.12) 50%,
+        rgb(255, 255, 255, 0.06) 55%,
         transparent 70%,
         transparent 100%
     );
@@ -6660,9 +6662,9 @@ input:checked + .slider::before {
         90deg,
         transparent 0%,
         transparent 30%,
-        rgba(255, 255, 255, 0.06) 45%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.06) 55%,
+        rgb(255, 255, 255, 0.06) 45%,
+        rgb(255, 255, 255, 0.12) 50%,
+        rgb(255, 255, 255, 0.06) 55%,
         transparent 70%,
         transparent 100%
     );
@@ -6685,9 +6687,9 @@ input:checked + .slider::before {
         90deg,
         transparent 0%,
         transparent 30%,
-        rgba(255, 255, 255, 0.06) 45%,
-        rgba(255, 255, 255, 0.12) 50%,
-        rgba(255, 255, 255, 0.06) 55%,
+        rgb(255, 255, 255, 0.06) 45%,
+        rgb(255, 255, 255, 0.12) 50%,
+        rgb(255, 255, 255, 0.06) 55%,
         transparent 70%,
         transparent 100%
     );

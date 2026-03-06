@@ -90,15 +90,15 @@ function resolveTrackCoverCandidates(player, track) {
 
     // 1. Direct URL from track object
     const directUrl =
-        track.coverUrl || 
-        track.cover || 
-        track.image || 
-        track.artwork || 
-        track.thumbnail || 
+        track.coverUrl ||
+        track.cover ||
+        track.image ||
+        track.artwork ||
+        track.thumbnail ||
         track.album?.coverUrl ||
-        track.album?.image || 
+        track.album?.image ||
         track.album?.cover;
-    
+
     if (typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl)) {
         // Ensure HTTPS for Discord
         const httpsUrl = directUrl.replace(/^http:/i, 'https:');
@@ -159,10 +159,10 @@ function buildPayload(player, track, isPaused = false) {
     const artists = getTrackArtists(track) || 'Unknown Artist';
     const coverCandidates = resolveTrackCoverCandidates(player, track) || [];
     const [coverUrl, ...fallbackCoverUrls] = coverCandidates;
-    
+
     // Album name for large image text
     const albumName = track?.album?.title || track?.album || 'Unknown Album';
-    
+
     // Quality label for state
     const qualityToken = track?.streamedQuality || track?.audioQuality || deriveTrackQuality(track) || player?.quality;
     const qualityLabel = QUALITY_LABELS[qualityToken] || String(qualityToken || '').replace(/_/g, ' ');
@@ -376,7 +376,7 @@ export async function isDiscordBridgeAvailable() {
  * Manually update Discord presence (for external control)
  */
 export async function updateDiscordPresence(player, track, isPaused) {
-    if (!await isTauriRuntime()) return;
+    if (!(await isTauriRuntime())) return;
     const payload = buildPayload(player, track, isPaused);
     try {
         await invokeTauri('discord_bridge_update', { payload });
@@ -389,7 +389,7 @@ export async function updateDiscordPresence(player, track, isPaused) {
  * Clear Discord presence
  */
 export async function clearDiscordPresence() {
-    if (!await isTauriRuntime()) return;
+    if (!(await isTauriRuntime())) return;
     try {
         await invokeTauri('discord_bridge_clear');
     } catch (error) {

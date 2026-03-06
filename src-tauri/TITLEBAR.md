@@ -18,7 +18,7 @@ A beautiful, cross-platform custom titlebar for Monochrome+.
 Add the titlebar CSS to your HTML `<head>`:
 
 ```html
-<link rel="stylesheet" href="../src-tauri/titlebar.css">
+<link rel="stylesheet" href="../src-tauri/titlebar.css" />
 ```
 
 Or import it in your JavaScript:
@@ -109,10 +109,12 @@ The titlebar requires these settings in `tauri.conf.json`:
 ```json
 {
     "app": {
-        "windows": [{
-            "decorations": false,
-            "transparent": false
-        }]
+        "windows": [
+            {
+                "decorations": false,
+                "transparent": false
+            }
+        ]
     },
     "capabilities": {
         "permissions": [
