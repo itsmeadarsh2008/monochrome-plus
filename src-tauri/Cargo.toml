@@ -1,6 +1,6 @@
 [package]
 name = "monochrome-plus"
-version = "2.0.9"
+version = "3.6.5"
 description = "Monochrome+ - A high-fidelity music streaming application"
 authors = ["Monochrome+ Team"]
 license = "ISC"
@@ -36,7 +36,7 @@ discord-presence = "3.2"
 
 [profile.release]
 panic = "abort"
-codegen-units = 1
-lto = true
+codegen-units = 16
+lto = "thin"
 opt-level = "z"
 strip = true

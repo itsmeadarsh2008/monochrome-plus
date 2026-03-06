@@ -4,6 +4,7 @@ dist
 *.local
 .vite
 .cargo
+.secrets
 
 # Docker
 .env

@@ -17,6 +17,8 @@
         "core:window:allow-set-focus",
         "core:window:allow-start-dragging",
         "core:window:allow-toggle-maximize",
+        "core:window:allow-is-maximized",
+        "core:window:allow-is-minimized",
         "core:webview:default",
         "core:webview:allow-print",
         "core:event:default",

@@ -1,7 +1,7 @@
 {
     "name": "monochrome-plus",
     "type": "module",
-    "version": "3.0.0",
+    "version": "3.6.5",
     "description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
     "main": "sw.js",
     "scripts": {

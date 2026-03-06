@@ -1,6 +1,6 @@
 /**
  * Monochrome+ Custom Titlebar
- * Beautiful, cross-platform window controls
+ * Ephemeral design - visible on hover only
  */
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -28,6 +28,9 @@ export async function initTitlebar() {
     
     // Update maximize button icon based on window state
     setupWindowStateListener(appWindow);
+    
+    // Setup ephemeral behavior - show on hover
+    setupEphemeralBehavior();
 }
 
 /**
@@ -51,32 +54,35 @@ async function detectPlatform() {
  * Insert the titlebar HTML into the page
  */
 function insertTitlebar() {
+    // Use the actual app logo (L-shaped geometric design from public/assets/logo.svg)
     const titlebarHTML = `
         <div class="titlebar">
             <div class="titlebar-drag-region" data-tauri-drag-region>
-                <svg class="titlebar-logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="4" fill="currentColor"/>
-                </svg>
+                <div class="titlebar-logo">
+                    <svg viewBox="14.75 14.75 70.5 70.5" xmlns="http://www.w3.org/2000/svg">
+                        <path fill="currentColor" d="M38.25 14.75H85.25V61.75H61.75V38.25H38.25ZM14.75 38.25H38.25V61.75H61.75V85.25H14.75Z"/>
+                    </svg>
+                </div>
                 <span class="titlebar-app-name">Monochrome+</span>
             </div>
             <div class="titlebar-controls">
-                <button id="titlebar-minimize" class="titlebar-button" title="Minimize" aria-label="Minimize">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="4" y="11" width="16" height="2" rx="1"/>
+                <button id="titlebar-minimize" class="titlebar-button minimize" title="Minimize" aria-label="Minimize">
+                    <svg viewBox="0 0 10 1" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="10" height="1" fill="currentColor"/>
                     </svg>
                 </button>
-                <button id="titlebar-maximize" class="titlebar-button" title="Maximize" aria-label="Maximize">
-                    <svg id="maximize-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                <button id="titlebar-maximize" class="titlebar-button maximize" title="Maximize" aria-label="Maximize">
+                    <svg id="maximize-icon" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/>
                     </svg>
-                    <svg id="restore-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display: none;">
-                        <path fill="none" stroke="currentColor" stroke-width="2" d="M4 9V6a2 2 0 0 1 2-2h3M4 15v3a2 2 0 0 0 2 2h3M20 9V6a2 2 0 0 0-2-2h-3M20 15v3a2 2 0 0 1-2 2h-3"/>
+                    <svg id="restore-icon" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                        <rect x="2" y="0" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/>
+                        <rect x="0" y="2" width="8" height="8" fill="var(--background)" stroke="currentColor" stroke-width="1"/>
                     </svg>
                 </button>
-                <button id="titlebar-close" class="titlebar-button" title="Close" aria-label="Close">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <button id="titlebar-close" class="titlebar-button close" title="Close" aria-label="Close">
+                    <svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
                     </svg>
                 </button>
             </div>
@@ -85,12 +91,52 @@ function insertTitlebar() {
     
     // Insert at the beginning of body
     document.body.insertAdjacentHTML('afterbegin', titlebarHTML);
+}
+
+/**
+ * Setup ephemeral behavior - show titlebar on hover
+ */
+function setupEphemeralBehavior() {
+    const titlebar = document.querySelector('.titlebar');
+    if (!titlebar) return;
     
-    // Adjust content to account for titlebar
-    const mainContent = document.querySelector('main') || document.querySelector('#app') || document.body.firstElementChild;
-    if (mainContent && !mainContent.classList.contains('titlebar')) {
-        mainContent.classList.add('content-with-titlebar');
-    }
+    let hideTimeout;
+    
+    const showTitlebar = () => {
+        clearTimeout(hideTimeout);
+        titlebar.classList.add('visible');
+    };
+    
+    const hideTitlebar = () => {
+        // Delay hiding to allow for button interactions
+        hideTimeout = setTimeout(() => {
+            // Only hide if not hovering over titlebar or its children
+            if (!titlebar.matches(':hover')) {
+                titlebar.classList.remove('visible');
+            }
+        }, 500);
+    };
+    
+    // Show on mouse near top of screen
+    document.addEventListener('mousemove', (e) => {
+        if (e.clientY <= 50) {
+            showTitlebar();
+        }
+    });
+    
+    // Show/hide based on hover
+    titlebar.addEventListener('mouseenter', showTitlebar);
+    titlebar.addEventListener('mouseleave', hideTitlebar);
+    
+    // Also handle focus for accessibility
+    titlebar.addEventListener('focusin', showTitlebar);
+    
+    // Keep visible when any button is focused
+    const buttons = titlebar.querySelectorAll('.titlebar-button');
+    buttons.forEach(btn => {
+        btn.addEventListener('mouseenter', showTitlebar);
+        btn.addEventListener('mouseleave', hideTitlebar);
+    });
 }
 
 /**
@@ -170,7 +216,6 @@ function setupWindowStateListener(appWindow) {
     
     if (!maximizeIcon || !restoreIcon || !maximizeBtn) return;
     
-    // Check window state periodically (Tauri doesn't have a direct event for this)
     const updateMaximizeIcon = async () => {
         try {
             const isMaximized = await appWindow.isMaximized();
@@ -193,7 +238,6 @@ function setupWindowStateListener(appWindow) {
     
     // Update on maximize button click
     maximizeBtn.addEventListener('click', () => {
-        // Small delay to let the window state update
         setTimeout(updateMaximizeIcon, 100);
     });
     
@@ -206,7 +250,6 @@ function setupWindowStateListener(appWindow) {
 
 /**
  * Alternative manual drag implementation
- * Use this if data-tauri-drag-region doesn't work as expected
  */
 export async function initManualDragging() {
     const appWindow = getCurrentWindow();
@@ -215,7 +258,7 @@ export async function initManualDragging() {
     if (!dragRegion) return;
     
     dragRegion.addEventListener('mousedown', async (e) => {
-        if (e.buttons === 1) { // Primary (left) button
+        if (e.buttons === 1) {
             try {
                 await appWindow.startDragging();
             } catch (error) {

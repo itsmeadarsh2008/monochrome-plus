@@ -1,4 +1,3 @@
-use tauri::Manager;
 use discord_presence::models::ActivityType;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 use discord_presence::{Client, DiscordError};
@@ -7,11 +6,11 @@ use serde::Deserialize;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use tauri::Manager;
 
 const DEFAULT_DISCORD_CLIENT_ID: &str = "1478608904609857576";
-// Keep retry counts low to avoid blocking the main thread when Discord isn't running
-const RPC_START_ATTEMPTS: usize = 3;
-const RPC_START_SLEEP_MS: u64 = 50;
+// Quick timeout to prevent app hanging when Discord is not available
+const RPC_START_TIMEOUT_MS: u64 = 300;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,34 +44,31 @@ fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
 }
 
 fn set_idle_activity(client: &mut Client) -> Result<(), String> {
-    for _ in 0..RPC_START_ATTEMPTS {
-        match client.set_activity(|activity| {
-            activity
-                .activity_type(ActivityType::Listening)
-                .details("Monochrome+")
-                .state("Idling")
-                .assets(|assets| {
-                    assets
-                        .large_image("monochrome")
-                        .large_text("Monochrome+")
-                        .small_image("paused_icon")
-                        .small_text("Idling")
-                })
-                .append_buttons(|button| {
-                    button
-                        .label("Listen on Monochrome+")
-                        .url("https://github.com/itsmeadarsh2008/monochrome-plus")
-                })
-        }) {
-            Ok(_) => return Ok(()),
-            Err(DiscordError::NotStarted) => {
-                thread::sleep(Duration::from_millis(RPC_START_SLEEP_MS));
-            }
-            Err(err) => return Err(err.to_string()),
+    // Only try once - fail quickly if Discord isn't running
+    match client.set_activity(|activity| {
+        activity
+            .activity_type(ActivityType::Listening)
+            .details("Monochrome+")
+            .state("Idling")
+            .assets(|assets| {
+                assets
+                    .large_image("monochrome")
+                    .large_text("Monochrome+")
+                    .small_image("paused_icon")
+                    .small_text("Idling")
+            })
+            .append_buttons(|button| {
+                button
+                    .label("Listen on Monochrome+")
+                    .url("https://github.com/itsmeadarsh2008/monochrome-plus")
+            })
+    }) {
+        Ok(_) => Ok(()),
+        Err(DiscordError::NotStarted) => {
+            Err("Discord RPC not started (Discord may be closed)".to_string())
         }
+        Err(err) => Err(err.to_string()),
     }
-
-    Err("Discord RPC not ready (Discord may be closed)".to_string())
 }
 
 /// Percent-encode a string for use in Discord's mp:external/ format
@@ -97,7 +93,6 @@ fn percent_encode_component(input: &str) -> String {
 }
 
 /// Convert an external URL to Discord's mp:external/ format
-/// Discord requires this format for external images
 fn external_url_to_discord_format(url: &str) -> String {
     if url.starts_with("mp:external/") {
         return url.to_string();
@@ -106,7 +101,6 @@ fn external_url_to_discord_format(url: &str) -> String {
 }
 
 fn normalize_discord_large_image_key(value: &str) -> String {
-    // If it's already an external URL or mp:external format, use it
     if value.starts_with("http://") || value.starts_with("https://") {
         return external_url_to_discord_format(value);
     }
@@ -115,13 +109,10 @@ fn normalize_discord_large_image_key(value: &str) -> String {
         return "monochrome".to_string();
     }
 
-    // If it looks like a URL-encoded external image, return as-is
     if value.starts_with("mp:external/") {
         return value.to_string();
     }
 
-    // For asset names (like "play", "pause", "monochrome"), return as-is
-    // These must be uploaded to Discord's Rich Presence Assets portal
     value.to_string()
 }
 
@@ -180,7 +171,6 @@ fn resolve_discord_large_image_key(
     large_image_key: &str,
     large_image_base64: Option<&str>,
 ) -> String {
-    // Try base64 decoded value first (for URLs passed from JS)
     if let Some(encoded) = large_image_base64 {
         if let Some(decoded) = decode_base64_to_string(encoded) {
             let normalized = normalize_discord_large_image_key(decoded.trim());
@@ -224,35 +214,73 @@ fn resolve_discord_large_image_candidates(
 #[tauri::command]
 fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
     let desired_client_id = parse_client_id(client_id)?;
-    let mut guard = DISCORD_BRIDGE
-        .lock()
-        .map_err(|_| "Bridge lock poisoned".to_string())?;
 
-    if let Some(existing) = guard.as_ref() {
-        if existing.client_id == desired_client_id {
-            return Ok(true);
+    // Check if already running with same client ID
+    {
+        let guard = DISCORD_BRIDGE
+            .lock()
+            .map_err(|_| "Bridge lock poisoned".to_string())?;
+
+        if let Some(existing) = guard.as_ref() {
+            if existing.client_id == desired_client_id {
+                return Ok(true);
+            }
         }
     }
 
-    if let Some(mut existing) = guard.take() {
-        let _ = existing.client.clear_activity();
-        let _ = existing.client.shutdown();
+    // Clean up existing connection
+    {
+        let mut guard = DISCORD_BRIDGE
+            .lock()
+            .map_err(|_| "Bridge lock poisoned".to_string())?;
+        if let Some(mut existing) = guard.take() {
+            let _ = existing.client.clear_activity();
+            let _ = existing.client.shutdown();
+        }
     }
 
-    let mut client = Client::new(desired_client_id);
-    client.start();
+    // Create client - start in background thread to not block the app
+    let client = Client::new(desired_client_id);
 
-    if let Err(error) = set_idle_activity(&mut client) {
-        let _ = client.clear_activity();
-        let _ = client.shutdown();
-        eprintln!("[Discord RPC] Startup skipped: {error}");
-        return Ok(false);
-    }
+    // Use a channel to communicate result from background thread
+    let (tx, rx) = std::sync::mpsc::channel();
 
-    *guard = Some(DiscordRpc {
-        client,
-        client_id: desired_client_id,
+    // Spawn background thread for Discord RPC initialization
+    thread::spawn(move || {
+        let mut client = client;
+        client.start();
+
+        let result = set_idle_activity(&mut client);
+        if let Err(error) = result {
+            eprintln!("[Discord RPC] Startup skipped: {}", error);
+            let _ = client.shutdown();
+            let _ = tx.send(None);
+            return;
+        }
+
+        let _ = tx.send(Some(DiscordRpc {
+            client,
+            client_id: desired_client_id,
+        }));
     });
+
+    // Wait for initialization with short timeout
+    let start_time = std::time::Instant::now();
+    while start_time.elapsed().as_millis() < RPC_START_TIMEOUT_MS as u128 {
+        if let Ok(result) = rx.try_recv() {
+            if let Some(discord_rpc) = result {
+                let mut guard = DISCORD_BRIDGE
+                    .lock()
+                    .map_err(|_| "Bridge lock poisoned".to_string())?;
+                *guard = Some(discord_rpc);
+                return Ok(true);
+            }
+            return Ok(false);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    // Timeout - still return true to not block app, Discord will init lazily on next track
     Ok(true)
 }
 
@@ -270,7 +298,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .unwrap_or_else(|| "Unknown Track".to_string());
     let state = payload.state.unwrap_or_else(|| "Monochrome+".to_string());
 
-    // Get cover image URL candidates
     let large_image_key = payload
         .large_image_key
         .unwrap_or_else(|| "monochrome".to_string());
@@ -280,7 +307,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .large_image_text
         .unwrap_or_else(|| "Monochrome+".to_string());
 
-    // Small image for play/pause status
     let small_image_key = payload
         .small_image_key
         .unwrap_or_else(|| "playing_icon".to_string());
@@ -288,14 +314,12 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
         .small_image_text
         .unwrap_or_else(|| "Playing".to_string());
 
-    // Primary button - "Listen to this song" (Apple Music style)
     let button_label = "Listen to this song".to_string();
     let button_url = payload
         .button_two_url
         .clone()
         .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
 
-    // Optional second button
     let has_second_button = payload.button_two_label.is_some() && payload.button_two_url.is_some();
     let button_two_label = payload.button_two_label;
     let button_two_url = payload.button_two_url;
@@ -309,7 +333,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
             .end_timestamp
             .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
 
-    // Get all image candidates to try
     let safe_large_image_candidates = resolve_discord_large_image_candidates(
         &large_image_key,
         large_image_base64.as_deref(),
@@ -318,7 +341,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
 
     let mut last_error: Option<String> = None;
 
-    // Try each image candidate until one works
     for safe_large_image in safe_large_image_candidates {
         for _ in 0..3 {
             let details_value = details.clone();
@@ -352,7 +374,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
                         button
                     });
 
-                // Add second button if provided
                 let activity = if has_second {
                     if let (Some(label), Some(url)) =
                         (&button_two_label_value, &button_two_url_value)
@@ -365,7 +386,6 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
                     activity
                 };
 
-                // Add timestamps for progress bar
                 if start_value.is_some() || end_value.is_some() {
                     activity.timestamps(|timestamps| {
                         let timestamps = if let Some(start) = start_value {
@@ -387,11 +407,11 @@ fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
                 Ok(_) => return Ok(()),
                 Err(DiscordError::NotStarted) => {
                     last_error = Some("Discord RPC not started".to_string());
-                    thread::sleep(Duration::from_millis(120));
+                    thread::sleep(Duration::from_millis(50));
                 }
                 Err(err) => {
                     last_error = Some(err.to_string());
-                    break; // Try next image candidate
+                    break;
                 }
             }
         }
@@ -455,11 +475,11 @@ pub fn run() {
                 )?;
             }
 
-            // Close splash screen and show main window
+            // Close splash screen and show main window - reduced timeout for faster startup
             let handle_clone = handle.clone();
             std::thread::spawn(move || {
-                // Give the main window time to render
-                std::thread::sleep(std::time::Duration::from_secs(2));
+                // Give the main window minimal time to render
+                std::thread::sleep(std::time::Duration::from_millis(500));
                 if let Some(splash) = handle_clone.get_webview_window("splashscreen") {
                     let _ = splash.close();
                 }

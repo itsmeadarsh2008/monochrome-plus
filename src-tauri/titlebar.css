@@ -1,58 +1,84 @@
-/* Monochrome+ Custom Titlebar - Beautiful, Elegant Design */
+/* Monochrome+ Custom Titlebar - Ephemeral Design */
 
 .titlebar {
-    height: 40px;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    height: 38px;
+    /* Use CSS variables for theme integration */
+    background: var(--background);
+    border-bottom: 1px solid var(--border);
     user-select: none;
-    display: grid;
-    grid-template-columns: 1fr auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     z-index: 9999;
-    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    
+    /* Ephemeral - hidden by default, shown on hover */
+    opacity: 0;
+    transform: translateY(-100%);
+    transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Drag region - the area that allows window dragging */
+/* Show titlebar on hover or when focused */
+.titlebar.visible,
+.titlebar:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Also show when any titlebar child is focused */
+.titlebar:has(*:focus),
+.titlebar:has(*:hover) {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Drag region */
 .titlebar-drag-region {
     display: flex;
     align-items: center;
     padding: 0 16px;
+    height: 100%;
+    flex: 1;
     app-region: drag;
     -webkit-app-region: drag;
-    cursor: default;
 }
 
-/* App logo/icon in titlebar */
+/* App logo - matching the actual app logo (L-shaped geometric) */
 .titlebar-logo {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     margin-right: 10px;
-    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+    flex-shrink: 0;
 }
 
-/* App name in titlebar */
+.titlebar-logo svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* App name */
 .titlebar-app-name {
-    color: #ffffff;
-    font-size: 13px;
+    color: var(--foreground);
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 0.5px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    opacity: 0.7;
 }
 
-/* Window controls container */
+/* Window controls */
 .titlebar-controls {
     display: flex;
     align-items: center;
-    gap: 0;
+    height: 100%;
+    app-region: no-drag;
+    -webkit-app-region: no-drag;
 }
 
-/* Base button styles */
+/* Window control buttons */
 .titlebar-button {
     appearance: none;
     padding: 0;
@@ -62,199 +88,109 @@
     justify-content: center;
     align-items: center;
     width: 46px;
-    height: 40px;
+    height: 100%;
     background-color: transparent;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
+    transition: background-color 0.15s ease;
+    color: var(--foreground);
 }
 
 /* Button icons */
 .titlebar-button svg {
-    width: 12px;
-    height: 12px;
-    fill: rgba(255, 255, 255, 0.9);
-    transition: all 0.2s ease;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+    width: 10px;
+    height: 10px;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+}
+
+.titlebar-button:hover svg {
+    opacity: 1;
 }
 
 /* Minimize button hover */
-#titlebar-minimize:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-#titlebar-minimize:hover svg {
-    fill: #ffffff;
-    transform: translateY(1px);
+.titlebar-button.minimize:hover {
+    background-color: var(--card);
 }
 
 /* Maximize button hover */
-#titlebar-maximize:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+.titlebar-button.maximize:hover {
+    background-color: var(--card);
 }
 
-#titlebar-maximize:hover svg {
-    fill: #ffffff;
-    transform: scale(1.1);
+/* Close button hover */
+.titlebar-button.close:hover {
+    background-color: #e81123;
+    color: white;
 }
 
-/* Close button with red gradient */
-#titlebar-close:hover {
-    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+.titlebar-button.close:hover svg {
+    opacity: 1;
 }
 
-#titlebar-close:hover svg {
-    fill: #ffffff;
-    transform: rotate(90deg);
+/* Content offset to account for titlebar when visible */
+.content-with-titlebar {
+    margin-top: 0;
+    transition: margin-top 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Ripple effect on click */
-.titlebar-button::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.3s, height 0.3s;
+.titlebar.visible + .content-with-titlebar {
+    margin-top: 38px;
 }
 
-.titlebar-button:active::after {
-    width: 100px;
-    height: 100px;
-}
-
-/* Platform-specific adjustments */
-/* macOS - traffic lights on the left */
+/* macOS specific - traffic light buttons on left */
 [data-platform="macos"] .titlebar {
-    grid-template-columns: auto 1fr auto;
+    justify-content: flex-start;
 }
 
 [data-platform="macos"] .titlebar-drag-region {
     order: 2;
     justify-content: center;
+    flex: 1;
 }
 
 [data-platform="macos"] .titlebar-controls {
     order: 1;
-    padding-left: 8px;
+    padding-left: 12px;
 }
 
 [data-platform="macos"] .titlebar-button {
-    width: 12px;
-    height: 12px;
+    width: 28px;
+    margin-right: 8px;
     border-radius: 50%;
-    margin: 0 4px;
-    position: relative;
 }
 
-[data-platform="macos"] #titlebar-close {
-    background: #ff5f56;
+[data-platform="macos"] .titlebar-button.close {
+    background-color: #ff5f56;
 }
 
-[data-platform="macos"] #titlebar-close:hover {
-    background: #ff5f56;
+[data-platform="macos"] .titlebar-button.minimize {
+    background-color: #ffbd2e;
 }
 
-[data-platform="macos"] #titlebar-minimize {
-    background: #ffbd2e;
-}
-
-[data-platform="macos"] #titlebar-maximize {
-    background: #27c93f;
+[data-platform="macos"] .titlebar-button.maximize {
+    background-color: #27c93f;
 }
 
 [data-platform="macos"] .titlebar-button svg {
     display: none;
 }
 
-/* Linux specific adjustments */
-[data-platform="linux"] .titlebar {
-    background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+[data-platform="macos"] .titlebar-button.close:hover {
+    background-color: #ff5f56;
 }
 
-/* Content offset to account for titlebar */
-.content-with-titlebar {
-    margin-top: 40px;
-    height: calc(100vh - 40px);
-    overflow-y: auto;
+[data-platform="macos"] .titlebar-button.minimize:hover {
+    background-color: #ffbd2e;
 }
 
-/* Responsive adjustments */
-@media (max-width: 600px) {
-    .titlebar-app-name {
-        font-size: 12px;
-    }
-    
-    .titlebar-button {
-        width: 40px;
-    }
-}
-
-/* Animation for window state changes */
-@keyframes titlebarAppear {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.titlebar {
-    animation: titlebarAppear 0.3s ease-out;
-}
-
-/* Dark/Light theme support */
-@media (prefers-color-scheme: light) {
-    .titlebar {
-        background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 50%, #d0d0d0 100%);
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    }
-    
-    .titlebar-app-name {
-        color: #333333;
-        text-shadow: none;
-    }
-    
-    .titlebar-button svg {
-        fill: rgba(0, 0, 0, 0.7);
-    }
-    
-    #titlebar-minimize:hover,
-    #titlebar-maximize:hover {
-        background-color: rgba(0, 0, 0, 0.1);
-    }
-    
-    #titlebar-minimize:hover svg,
-    #titlebar-maximize:hover svg {
-        fill: #000000;
-    }
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-    .titlebar {
-        border-bottom: 2px solid currentColor;
-    }
-    
-    .titlebar-button {
-        border: 1px solid currentColor;
-    }
+[data-platform="macos"] .titlebar-button.maximize:hover {
+    background-color: #27c93f;
 }
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
     .titlebar,
-    .titlebar-button,
-    .titlebar-button svg {
+    .titlebar-button {
         transition: none;
-        animation: none;
     }
 }
