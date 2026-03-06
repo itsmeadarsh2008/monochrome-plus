@@ -1,8 +1,5 @@
 /* stylelint-disable no-descending-specificity */
 
-/* Import Custom Titlebar Styles */
-@import url('./src-tauri/titlebar.css');
-
 /* ==========================================================================
    DESIGN SYSTEM - Monochrome
    A comprehensive design language for consistent UI/UX

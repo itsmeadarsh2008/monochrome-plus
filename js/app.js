@@ -32,7 +32,6 @@ import { openEditProfile } from './profile.js';
 
 import { initTracker } from './tracker.js';
 import { isTauriRuntime } from './desktop/tauri-runtime.js';
-import { initTitlebar } from '../src-tauri/titlebar.js';
 import { initImageLoader } from './image-loader.js';
 
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
@@ -264,11 +263,7 @@ async function uploadCoverImage(file) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize custom titlebar for desktop app
     const isTauri = await isTauriRuntime();
-    if (isTauri) {
-        initTitlebar();
-    }
 
     initImageLoader();
 
