@@ -1,74 +1,74 @@
 {
-    "name": "monochrome-plus",
-    "type": "module",
-    "version": "3.6.8",
-    "description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
-    "main": "sw.js",
-    "scripts": {
-        "dev": "vite",
-        "dev:tauri": "tauri dev",
-        "build:tauri:dev": "bash scripts/build-dev.sh",
-        "dev:tauri:polling": "VITE_USE_POLLING=true npm run dev:tauri",
-        "dev:tauri:wsl": "TAURI_DEV_HOST=127.0.0.1 VITE_USE_POLLING=true npm run dev:tauri",
-        "build:web": "vite build",
-        "build:tauri": "bash scripts/build-production.sh",
-        "build:tauri:fast": "tauri build",
-        "build:tauri:windows": "bash scripts/build-windows.sh",
-        "build:tauri:windows:cross": "bash scripts/cross-compile-windows.sh",
-        "build:tauri:all": "bash scripts/build-all.sh",
-        "build": "vite build",
-        "preview": "vite preview",
-        "lint:js": "eslint .",
-        "lint:css": "stylelint \"**/*.css\"",
-        "lint:html": "htmlhint \"**/*.html\" --ignore=\"dist/**,legacy/**,node_modules/**\"",
-        "lint": "npm run lint:js && npm run lint:css && npm run lint:html",
-        "format": "prettier --write .",
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/itsmeadarsh2008/monochrome-plus.git"
-    },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
-    "bugs": {
-        "url": "https://github.com/itsmeadarsh2008/monochrome-plus/issues"
-    },
-    "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
-    "devDependencies": {
-        "@tauri-apps/cli": "^2.1.0",
-        "cookie-session": "^2.1.0",
-        "dotenv": "^16.4.5",
-        "eslint": "^9.39.2",
-        "eslint-config-prettier": "^10.1.8",
-        "globals": "^17.0.0",
-        "htmlhint": "^1.8.0",
-        "jose": "^6.0.11",
-        "node-appwrite": "^14.1.0",
-        "pocketbase": "^0.26.5",
-        "prettier": "^3.7.4",
-        "stylelint": "^16.26.1",
-        "stylelint-config-standard": "^39.0.1",
-        "stylelint-config-standard-scss": "^16.0.0",
-        "vite": "^7.3.0",
-        "vite-plugin-pwa": "^1.2.0"
-    },
-    "overrides": {
-        "sourcemap-codec": "npm:@jridgewell/sourcemap-codec@^1.4.14",
-        "source-map": "^0.7.4"
-    },
-    "dependencies": {
-        "@tauri-apps/api": "^2.0.0",
-        "@tauri-apps/plugin-log": "^2.0.0",
-        "@tauri-apps/plugin-notification": "^2.0.0",
-        "@tauri-apps/plugin-process": "^2.0.0",
-        "@tauri-apps/plugin-shell": "^2.0.0",
-        "@tauri-apps/plugin-updater": "^2.0.0",
-        "appwrite": "^22.4.0",
-        "butterchurn": "^2.6.7",
-        "butterchurn-presets": "^2.4.7",
-        "dashjs": "^5.1.1",
-        "howler": "^2.2.4"
-    }
+	"name": "monochrome-plus",
+	"type": "module",
+	"version": "3.6.9",
+	"description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
+	"main": "sw.js",
+	"scripts": {
+		"dev": "vite",
+		"dev:tauri": "tauri dev",
+		"build:tauri:dev": "bash scripts/build-dev.sh",
+		"dev:tauri:polling": "VITE_USE_POLLING=true npm run dev:tauri",
+		"dev:tauri:wsl": "TAURI_DEV_HOST=127.0.0.1 VITE_USE_POLLING=true npm run dev:tauri",
+		"build:web": "vite build",
+		"build:tauri": "bash scripts/build-production.sh",
+		"build:tauri:fast": "tauri build",
+		"build:tauri:windows": "bash scripts/build-windows.sh",
+		"build:tauri:windows:cross": "bash scripts/cross-compile-windows.sh",
+		"build:tauri:all": "bash scripts/build-all.sh",
+		"build": "vite build",
+		"preview": "vite preview",
+		"lint:js": "eslint .",
+		"lint:css": "stylelint \"**/*.css\"",
+		"lint:html": "htmlhint \"**/*.html\" --ignore=\"dist/**,legacy/**,node_modules/**\"",
+		"lint": "npm run lint:js && npm run lint:css && npm run lint:html",
+		"format": "prettier --write .",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/itsmeadarsh2008/monochrome-plus.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/itsmeadarsh2008/monochrome-plus/issues"
+	},
+	"homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
+	"devDependencies": {
+		"@tauri-apps/cli": "^2.1.0",
+		"cookie-session": "^2.1.0",
+		"dotenv": "^16.4.5",
+		"eslint": "^9.39.2",
+		"eslint-config-prettier": "^10.1.8",
+		"globals": "^17.0.0",
+		"htmlhint": "^1.8.0",
+		"jose": "^6.0.11",
+		"node-appwrite": "^14.1.0",
+		"pocketbase": "^0.26.5",
+		"prettier": "^3.7.4",
+		"stylelint": "^16.26.1",
+		"stylelint-config-standard": "^39.0.1",
+		"stylelint-config-standard-scss": "^16.0.0",
+		"vite": "^7.3.0",
+		"vite-plugin-pwa": "^1.2.0"
+	},
+	"overrides": {
+		"sourcemap-codec": "npm:@jridgewell/sourcemap-codec@^1.4.14",
+		"source-map": "^0.7.4"
+	},
+	"dependencies": {
+		"@tauri-apps/api": "^2.0.0",
+		"@tauri-apps/plugin-log": "^2.0.0",
+		"@tauri-apps/plugin-notification": "^2.0.0",
+		"@tauri-apps/plugin-process": "^2.0.0",
+		"@tauri-apps/plugin-shell": "^2.0.0",
+		"@tauri-apps/plugin-updater": "^2.0.0",
+		"appwrite": "^22.4.0",
+		"butterchurn": "^2.6.7",
+		"butterchurn-presets": "^2.4.7",
+		"dashjs": "^5.1.1",
+		"howler": "^2.2.4"
+	}
 }

@@ -1,3 +1,10 @@
+
+# [3.6.9] - 2026-03-09
+
+### Fixed
+
+- Hardened Discord RPC startup and error handling: always returns quickly, logs failures, and never blocks Monochrome+ startup. Ready for retry if Discord is not running.
+
 # [3.6.8] - 2026-03-09
 
 ### Changed
