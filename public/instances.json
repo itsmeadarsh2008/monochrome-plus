@@ -12,8 +12,5 @@
         "https://katze.qqdl.site",
         "https://hund.qqdl.site"
     ],
-    "streaming": [
-        "https://api.monochrome.tf/",
-        "https://triton.squid.wtf"
-    ]
+    "streaming": ["https://api.monochrome.tf/", "https://triton.squid.wtf"]
 }

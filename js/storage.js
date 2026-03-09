@@ -255,9 +255,7 @@ export const proxySettings = {
             })
         );
         this._save(data);
-        return results
-            .filter((r) => r.status === 'fulfilled')
-            .map((r) => r.value);
+        return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
     },
 
     getFastestProxy() {

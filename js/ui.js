@@ -6317,7 +6317,9 @@ export class UIRenderer {
         container.innerHTML = proxies
             .map((p, index) => {
                 const latencyText =
-                    p.latency != null ? `<span class="proxy-latency">${p.latency}ms</span>` : '<span class="proxy-latency untested">untested</span>';
+                    p.latency != null
+                        ? `<span class="proxy-latency">${p.latency}ms</span>`
+                        : '<span class="proxy-latency untested">untested</span>';
                 const fastestBadge = index === 0 && p.latency != null ? '<span class="proxy-badge">fastest</span>' : '';
                 return `
                 <li data-url="${escapeHtml(p.url)}">

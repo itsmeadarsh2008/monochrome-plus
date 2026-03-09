@@ -33,13 +33,13 @@ The proxy must URL-decode the first path segment to obtain the full target URL.
 2. URL-decode it to get the target URL.
 3. Validate the target URL against the hostname allowlist (see below).
 4. Forward the request to the target URL preserving:
-   - HTTP method (`GET`, `HEAD`, `POST`, etc.)
-   - Request headers (except `Host`, which must be set to the target's host)
-   - Request body (if any)
+    - HTTP method (`GET`, `HEAD`, `POST`, etc.)
+    - Request headers (except `Host`, which must be set to the target's host)
+    - Request body (if any)
 5. Stream the upstream response back to the client preserving:
-   - Status code
-   - Response headers
-   - Response body (streamed, not buffered — critical for audio streaming)
+    - Status code
+    - Response headers
+    - Response body (streamed, not buffered — critical for audio streaming)
 
 ### CORS Headers
 
@@ -71,12 +71,12 @@ This prevents the proxy from being abused as an open relay.
 
 ### Error Responses
 
-| Condition | Status | Body |
-|---|---|---|
-| Missing/empty target URL | `400` | `{"error": "Missing target URL"}` |
-| Target URL fails allowlist | `403` | `{"error": "Target host not allowed"}` |
-| Upstream connection failure | `502` | `{"error": "Upstream unreachable"}` |
-| Upstream timeout (>15s) | `504` | `{"error": "Upstream timeout"}` |
+| Condition                   | Status | Body                                   |
+| --------------------------- | ------ | -------------------------------------- |
+| Missing/empty target URL    | `400`  | `{"error": "Missing target URL"}`      |
+| Target URL fails allowlist  | `403`  | `{"error": "Target host not allowed"}` |
+| Upstream connection failure | `502`  | `{"error": "Upstream unreachable"}`    |
+| Upstream timeout (>15s)     | `504`  | `{"error": "Upstream timeout"}`        |
 
 All error responses must include the CORS headers above.
 
@@ -89,12 +89,12 @@ All error responses must include the CORS headers above.
 
 The proxy should be deployable on any of these (pick one or support multiple):
 
-| Platform | Runtime | Notes |
-|---|---|---|
-| Cloudflare Workers | JS | Free tier: 100k req/day. Best latency via edge. |
-| Deno Deploy | TS/JS | Free tier available. Native `fetch` streaming. |
-| Fly.io | Node/Docker | Persistent process, good for streaming. |
-| Self-hosted VPS | Node/Bun | Full control. Use behind nginx/caddy for TLS. |
+| Platform           | Runtime     | Notes                                           |
+| ------------------ | ----------- | ----------------------------------------------- |
+| Cloudflare Workers | JS          | Free tier: 100k req/day. Best latency via edge. |
+| Deno Deploy        | TS/JS       | Free tier available. Native `fetch` streaming.  |
+| Fly.io             | Node/Docker | Persistent process, good for streaming.         |
+| Self-hosted VPS    | Node/Bun    | Full control. Use behind nginx/caddy for TLS.   |
 
 ## Health Endpoint
 
@@ -103,8 +103,9 @@ GET https://proxy.example.com/
 ```
 
 Must return `200 OK` with:
+
 ```json
-{"status": "ok"}
+{ "status": "ok" }
 ```
 
 This is NOT a proxied request — it's a direct health check on the proxy itself. Only requests with a non-empty encoded URL after `/` are forwarded.
