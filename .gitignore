@@ -20,3 +20,6 @@ src-tauri/gen/schemas/
 .tmp/
 .storage/
 auth_storage/
+
+# opensrc - source code for packages
+opensrc/

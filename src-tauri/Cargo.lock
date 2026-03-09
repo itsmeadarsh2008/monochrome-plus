@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "monochrome-plus"
-version = "3.6.6"
+version = "3.6.8"
 dependencies = [
  "anyhow",
  "discord-presence",

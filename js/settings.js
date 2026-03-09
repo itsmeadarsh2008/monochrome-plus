@@ -39,6 +39,7 @@ import {
     animationSettings,
     responsiveSettings,
     audioProcessingSettings,
+    proxySettings,
 } from './storage.js';
 import { audioContextManager, EQ_PRESETS } from './audio-context.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
@@ -3435,6 +3436,47 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 btn.disabled = false;
             }, 1500);
         }
+    });
+
+    // Proxy settings
+    ui.renderProxySettings();
+
+    document.getElementById('proxy-enabled-toggle')?.addEventListener('change', (e) => {
+        proxySettings.setEnabled(e.target.checked);
+    });
+
+    document.getElementById('proxy-add-btn')?.addEventListener('click', () => {
+        const input = document.getElementById('proxy-url-input');
+        const url = input?.value?.trim();
+        if (!url) return;
+        try {
+            new URL(url);
+        } catch {
+            return;
+        }
+        if (proxySettings.addProxy(url)) {
+            input.value = '';
+            ui.renderProxySettings();
+        }
+    });
+
+    document.getElementById('proxy-test-all-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('proxy-test-all-btn');
+        btn.textContent = 'Testing...';
+        btn.disabled = true;
+        await proxySettings.testAllProxies();
+        ui.renderProxySettings();
+        btn.textContent = 'Test All';
+        btn.disabled = false;
+    });
+
+    document.getElementById('proxy-list')?.addEventListener('click', (e) => {
+        const button = e.target.closest('.proxy-remove');
+        if (!button) return;
+        const li = button.closest('li');
+        if (!li) return;
+        proxySettings.removeProxy(li.dataset.url);
+        ui.renderProxySettings();
     });
 
     document.getElementById('api-instance-list')?.addEventListener('click', async (e) => {

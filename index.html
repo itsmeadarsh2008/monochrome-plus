@@ -5459,6 +5459,35 @@
                                     </div>
                                     <button id="custom-db-btn" class="btn-secondary">Configure</button>
                                 </div>
+                                <div id="proxy-manager">
+                                    <div class="setting-item" style="padding-bottom: 0.5rem; border: none">
+                                        <div class="info">
+                                            <span class="label">Proxies</span>
+                                            <span class="description"
+                                                >Route instance requests through proxies. Fastest proxy gets
+                                                priority.</span
+                                            >
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="proxy-enabled-toggle" />
+                                            <span class="slider"></span>
+                                        </label>
+                                    </div>
+                                    <div id="proxy-add-row" style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem">
+                                        <input
+                                            type="url"
+                                            id="proxy-url-input"
+                                            placeholder="https://your-proxy.example.com"
+                                            class="track-list-search-input"
+                                            style="flex: 1"
+                                            autocomplete="off"
+                                        />
+                                        <button id="proxy-add-btn" class="btn-secondary">Add</button>
+                                        <button id="proxy-test-all-btn" class="btn-secondary">Test All</button>
+                                    </div>
+                                    <ul id="proxy-list"></ul>
+                                </div>
+
                                 <div id="api-instance-manager">
                                     <div class="setting-item" style="padding-bottom: 1rem; border: none">
                                         <div class="info">

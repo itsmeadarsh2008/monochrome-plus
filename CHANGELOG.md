@@ -1,3 +1,9 @@
+# [3.6.8] - 2026-03-09
+
+### Changed
+
+- Bumped version to 3.6.8 across all manifests (package.json, tauri.conf.json, Cargo.toml, Cargo.lock) for maintenance and release consistency. No user-facing changes.
+
 # Changelog
 
 All notable changes to this project are documented in this file.

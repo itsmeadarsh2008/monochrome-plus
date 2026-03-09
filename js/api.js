@@ -7,7 +7,7 @@ import {
     getExtensionFromBlob,
     createTimeoutSignal,
 } from './utils.js';
-import { trackDateSettings, audioProcessingSettings } from './storage.js';
+import { trackDateSettings, audioProcessingSettings, proxySettings } from './storage.js';
 import { APICache } from './cache.js';
 import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
@@ -41,20 +41,55 @@ export class LosslessAPI {
         }
     }
 
+    _buildFetchUrl(baseUrl, relativePath, proxy) {
+        const url = baseUrl.endsWith('/') ? `${baseUrl}${relativePath.substring(1)}` : `${baseUrl}${relativePath}`;
+        if (proxy) {
+            return proxySettings.buildProxiedUrl(proxy.url, url);
+        }
+        return url;
+    }
+
     async fetchWithRetry(relativePath, options = {}) {
         const type = options.type || 'api';
-        const instances = await this.settings.getInstances(type);
+        let instances = await this.settings.getInstances(type);
         if (instances.length === 0) {
             throw new Error(`No API instances configured for type: ${type}`);
         }
 
-        const maxTotalAttempts = instances.length * 2; // Allow some retries across instances
+        if (options.minVersion) {
+            instances = instances.filter((instance) => {
+                if (!instance.version) return false;
+                return parseFloat(instance.version) >= parseFloat(options.minVersion);
+            });
+            if (instances.length === 0) {
+                throw new Error(`No API instances configured for type: ${type} with minVersion: ${options.minVersion}`);
+            }
+        }
+
+        if (options.allowedDomains) {
+            instances = instances.filter((instance) => {
+                const url = typeof instance === 'string' ? instance : instance.url;
+                return options.allowedDomains.some((domain) => url.includes(domain));
+            });
+            if (instances.length === 0) {
+                throw new Error(
+                    `No API instances configured for type: ${type} matching allowedDomains: ${options.allowedDomains.join(', ')}`
+                );
+            }
+        }
+
+        const useProxy = proxySettings.isEnabled();
+        const proxies = useProxy ? proxySettings.getProxies() : [];
+        const activeProxy = proxies.length > 0 ? proxies[0] : null;
+
+        const maxTotalAttempts = instances.length * 2;
         let lastError = null;
         let instanceIndex = Math.floor(Math.random() * instances.length);
 
         for (let attempt = 1; attempt <= maxTotalAttempts; attempt++) {
-            const baseUrl = instances[instanceIndex % instances.length];
-            const url = baseUrl.endsWith('/') ? `${baseUrl}${relativePath.substring(1)}` : `${baseUrl}${relativePath}`;
+            const instance = instances[instanceIndex % instances.length];
+            const baseUrl = typeof instance === 'string' ? instance : instance.url;
+            const url = this._buildFetchUrl(baseUrl, relativePath, activeProxy);
 
             try {
                 const response = await fetch(url, { signal: options.signal });
@@ -62,7 +97,7 @@ export class LosslessAPI {
                 if (response.status === 429) {
                     console.warn(`Rate limit hit on ${baseUrl}. Trying next instance...`);
                     instanceIndex++;
-                    await delay(500); // Small delay before trying next instance
+                    await delay(500);
                     continue;
                 }
 
@@ -393,8 +428,22 @@ export class LosslessAPI {
     }
 
     extractStreamUrlFromManifest(manifest) {
+        if (!manifest) return null;
+
         try {
-            const decoded = atob(manifest);
+            let decoded;
+            if (typeof manifest === 'string') {
+                try {
+                    decoded = atob(manifest);
+                } catch {
+                    decoded = manifest;
+                }
+            } else if (typeof manifest === 'object') {
+                if (manifest.urls?.[0]) return manifest.urls[0];
+                return null;
+            } else {
+                return null;
+            }
 
             // Check if it's a DASH manifest (XML)
             if (decoded.includes('<MPD')) {
@@ -788,7 +837,7 @@ export class LosslessAPI {
         const cached = await this.cache.get('mix', id);
         if (cached) return cached;
 
-        const response = await this.fetchWithRetry(`/mix/?id=${id}`, { type: 'api' });
+        const response = await this.fetchWithRetry(`/mix/?id=${id}`, { type: 'api', minVersion: '2.3' });
         const data = await response.json();
 
         const mixData = data.mix;
@@ -922,7 +971,10 @@ export class LosslessAPI {
         if (cached) return cached;
 
         try {
-            const response = await this.fetchWithRetry(`/artist/similar/?id=${artistId}`, { type: 'api' });
+            const response = await this.fetchWithRetry(`/artist/similar/?id=${artistId}`, {
+                type: 'api',
+                minVersion: '2.3',
+            });
             const data = await response.json();
 
             // Handle various response structures
@@ -973,7 +1025,10 @@ export class LosslessAPI {
         if (cached) return cached;
 
         try {
-            const response = await this.fetchWithRetry(`/album/similar/?id=${albumId}`, { type: 'api' });
+            const response = await this.fetchWithRetry(`/album/similar/?id=${albumId}`, {
+                type: 'api',
+                minVersion: '2.3',
+            });
             const data = await response.json();
 
             const items = data.items || data.albums || data.data || (Array.isArray(data) ? data : []);
@@ -1103,7 +1158,11 @@ export class LosslessAPI {
         if (cached) return cached;
 
         try {
-            const response = await this.fetchWithRetry(`/recommendations/?id=${trackId}`, options);
+            const response = await this.fetchWithRetry(`/recommendations/?id=${trackId}`, {
+                ...options,
+                type: 'api',
+                minVersion: '2.4',
+            });
             const payload = await response.json();
             const data = payload?.data || payload;
             const items = Array.isArray(data?.items) ? data.items : [];

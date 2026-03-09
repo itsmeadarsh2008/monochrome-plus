@@ -35,6 +35,7 @@ import {
     fontSettings,
     contentBlockingSettings,
     rotatingCoverSettings,
+    proxySettings,
 } from './storage.js';
 import { db } from './db.js';
 import { applyPaletteFromImage, resetPalette } from './palette.js';
@@ -6251,11 +6252,18 @@ export class UIRenderer {
                     if (!instances || instances.length === 0) return '';
 
                     const listHtml = instances
-                        .map((url, index) => {
+                        .map((instance, index) => {
+                            const isObject = instance && typeof instance === 'object';
+                            const instanceUrl = isObject ? instance.url || '' : String(instance || '');
+                            const instanceVersion = isObject && instance.version ? String(instance.version) : '';
+                            const safeUrl = escapeHtml(instanceUrl || '');
+                            const safeVersion = escapeHtml(instanceVersion);
+
                             return `
                         <li data-index="${index}" data-type="${type}">
                             <div style="flex: 1; min-width: 0;">
-                                <div class="instance-url">${url}</div>
+                                <div class="instance-url">${safeUrl}</div>
+                                ${safeVersion ? `<div style="font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.1rem;">v${safeVersion}</div>` : ''}
                             </div>
                             <div class="controls">
                                 <button class="move-up" title="Move Up" ${index === 0 ? 'disabled' : ''}>
@@ -6291,6 +6299,43 @@ export class UIRenderer {
                 }
             }
         );
+    }
+
+    renderProxySettings() {
+        const container = document.getElementById('proxy-list');
+        if (!container) return;
+
+        const toggle = document.getElementById('proxy-enabled-toggle');
+        if (toggle) toggle.checked = proxySettings.isEnabled();
+
+        const proxies = proxySettings.getProxies();
+        if (proxies.length === 0) {
+            container.innerHTML = '<li class="proxy-empty">No proxies configured</li>';
+            return;
+        }
+
+        container.innerHTML = proxies
+            .map((p, index) => {
+                const latencyText =
+                    p.latency != null ? `<span class="proxy-latency">${p.latency}ms</span>` : '<span class="proxy-latency untested">untested</span>';
+                const fastestBadge = index === 0 && p.latency != null ? '<span class="proxy-badge">fastest</span>' : '';
+                return `
+                <li data-url="${escapeHtml(p.url)}">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="instance-url">${escapeHtml(p.url)}</div>
+                        <div class="proxy-meta">${latencyText}${fastestBadge}</div>
+                    </div>
+                    <div class="controls">
+                        <button class="proxy-remove" title="Remove">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </li>
+            `;
+            })
+            .join('');
     }
 
     async renderTrackPage(trackId, provider = null) {
