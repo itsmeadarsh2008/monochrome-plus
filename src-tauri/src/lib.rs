@@ -248,20 +248,29 @@ fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
     // Spawn background thread for Discord RPC initialization
     thread::spawn(move || {
         let mut client = client;
-        client.start();
-
-        let result = set_idle_activity(&mut client);
-        if let Err(error) = result {
-            eprintln!("[Discord RPC] Startup skipped: {}", error);
-            let _ = client.shutdown();
-            let _ = tx.send(None);
-            return;
-        }
-
-        let _ = tx.send(Some(DiscordRpc {
-            client,
-            client_id: desired_client_id,
+        // Always wrap in catch_unwind to avoid panics propagating
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.start();
+            set_idle_activity(&mut client)
         }));
+        match result {
+            Ok(Ok(_)) => {
+                let _ = tx.send(Some(DiscordRpc {
+                    client,
+                    client_id: desired_client_id,
+                }));
+            }
+            Ok(Err(error)) => {
+                eprintln!("[Discord RPC] Startup failed: {}", error);
+                let _ = client.shutdown();
+                let _ = tx.send(None);
+            }
+            Err(_) => {
+                eprintln!("[Discord RPC] Startup panicked");
+                let _ = client.shutdown();
+                let _ = tx.send(None);
+            }
+        }
     });
 
     // Wait for initialization with short timeout
@@ -275,12 +284,14 @@ fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
                 *guard = Some(discord_rpc);
                 return Ok(true);
             }
+            // Failed to start, but don't block app
             return Ok(false);
         }
         thread::sleep(Duration::from_millis(10));
     }
 
     // Timeout - still return true to not block app, Discord will init lazily on next track
+    eprintln!("[Discord RPC] Startup timed out after {}ms", RPC_START_TIMEOUT_MS);
     Ok(true)
 }
 
