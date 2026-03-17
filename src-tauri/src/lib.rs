@@ -172,7 +172,7 @@ impl WorkerState {
         };
 
         let result = match &self.desired {
-            DesiredPresence::None => client.clear_activity().map_err(|e| e.to_string()),
+            DesiredPresence::None => client.clear_activity().map(|_| ()).map_err(|e| e.to_string()),
             DesiredPresence::Idle => client
                 .set_activity(|activity| {
                     activity
@@ -192,6 +192,7 @@ impl WorkerState {
                                 .url("https://github.com/itsmeadarsh2008/monochrome-plus")
                         })
                 })
+                .map(|_| ())
                 .map_err(|e| e.to_string()),
             DesiredPresence::Track(payload) => Self::set_track_activity(client, payload),
         };
@@ -211,7 +212,7 @@ impl WorkerState {
     fn set_track_activity(
         client: &mut Client,
         payload: &DiscordPresencePayload,
-    ) -> Result<Payload<Activity>, String> {
+    ) -> Result<(), String> {
         let details = payload
             .details
             .clone()
@@ -293,6 +294,7 @@ impl WorkerState {
                     activity
                 }
             })
+            .map(|_| ())
             .map_err(|e| e.to_string())
     }
 
