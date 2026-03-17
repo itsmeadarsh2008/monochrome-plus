@@ -9,21 +9,25 @@ let globalPlayer = null;
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
 
-// Tauri webview doesn't have a dev proxy or _redirects, so use direct URLs first.
-// Web (dev/prod) uses proxy paths first to avoid CORS.
+// Tauri production has no local proxy, so route through the production web proxy.
+// Web (dev: Vite proxy, prod: _redirects) uses relative proxy paths.
 const isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__);
+const PROD_PROXY = 'https://monochrome-plus.appwrite.network';
 
 const TRACKER_ENDPOINTS = isTauri
     ? {
-          artistsNdjson: ['https://sheets.artistgrid.cx/artists.ndjson'],
-          trends: ['https://trends.artistgrid.cx'],
-          trackerGet: ['https://tracker.israeli.ovh/get'],
+          artistsNdjson: [
+              '/artistgrid-api/artists.ndjson',
+              `${PROD_PROXY}/artistgrid-api/artists.ndjson`,
+          ],
+          trends: ['/artistgrid-trends', `${PROD_PROXY}/artistgrid-trends`, 'https://trends.artistgrid.cx'],
+          trackerGet: ['/tracker-api/get', `${PROD_PROXY}/tracker-api/get`],
           assetsBase: ['https://assets.artistgrid.cx'],
       }
     : {
-          artistsNdjson: ['/artistgrid-api/artists.ndjson', 'https://sheets.artistgrid.cx/artists.ndjson'],
+          artistsNdjson: ['/artistgrid-api/artists.ndjson'],
           trends: ['/artistgrid-trends', 'https://trends.artistgrid.cx'],
-          trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
+          trackerGet: ['/tracker-api/get'],
           assetsBase: ['/artistgrid-assets', 'https://assets.artistgrid.cx'],
       };
 
