@@ -1,87 +1,377 @@
 use discord_presence::models::ActivityType;
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-use discord_presence::{Client, DiscordError};
-use once_cell::sync::Lazy;
+use discord_presence::Client;
 use serde::Deserialize;
-use std::sync::Mutex;
+use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
-const DEFAULT_DISCORD_CLIENT_ID: &str = "1478608904609857576";
-// Quick timeout to prevent app hanging when Discord is not available
-const RPC_START_TIMEOUT_MS: u64 = 300;
+const DEFAULT_DISCORD_CLIENT_ID: u64 = 1478608904609857576;
+const WORKER_POLL_INTERVAL_MS: u64 = 500;
+const INITIAL_RECONNECT_DELAY_MS: u64 = 2000;
+const MAX_RECONNECT_DELAY_MS: u64 = 30000;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DiscordBridgePayload {
+struct DiscordPresencePayload {
     details: Option<String>,
     state: Option<String>,
     large_image_key: Option<String>,
-    large_image_base64: Option<String>,
-    large_image_fallback_base64: Option<Vec<String>>,
     large_image_text: Option<String>,
     small_image_key: Option<String>,
     small_image_text: Option<String>,
-    // Support for Apple Music-style second button
     button_two_label: Option<String>,
     button_two_url: Option<String>,
     start_timestamp: Option<i64>,
     end_timestamp: Option<i64>,
 }
 
-struct DiscordRpc {
-    client: Client,
+enum RpcCommand {
+    Start { client_id: u64 },
+    Update(DiscordPresencePayload),
+    Clear,
+    Stop,
+    Shutdown,
+}
+
+struct DiscordRpcHandle {
+    tx: mpsc::Sender<RpcCommand>,
+}
+
+enum DesiredPresence {
+    None,
+    Idle,
+    Track(DiscordPresencePayload),
+}
+
+struct WorkerState {
+    enabled: bool,
     client_id: u64,
+    client: Option<Client>,
+    desired: DesiredPresence,
+    dirty: bool,
+    next_attempt_at: Instant,
+    reconnect_delay: Duration,
 }
 
-static DISCORD_BRIDGE: Lazy<Mutex<Option<DiscordRpc>>> = Lazy::new(|| Mutex::new(None));
-
-fn parse_client_id(client_id: Option<String>) -> Result<u64, String> {
-    let raw = client_id.unwrap_or_else(|| DEFAULT_DISCORD_CLIENT_ID.to_string());
-    raw.parse::<u64>()
-        .map_err(|_| format!("Invalid Discord client ID: {raw}"))
-}
-
-fn set_idle_activity(client: &mut Client) -> Result<(), String> {
-    // Only try once - fail quickly if Discord isn't running
-    match client.set_activity(|activity| {
-        activity
-            .activity_type(ActivityType::Listening)
-            .details("Monochrome+")
-            .state("Idling")
-            .assets(|assets| {
-                assets
-                    .large_image("monochrome")
-                    .large_text("Monochrome+")
-                    .small_image("paused_icon")
-                    .small_text("Idling")
-            })
-            .append_buttons(|button| {
-                button
-                    .label("Listen on Monochrome+")
-                    .url("https://github.com/itsmeadarsh2008/monochrome-plus")
-            })
-    }) {
-        Ok(_) => Ok(()),
-        Err(DiscordError::NotStarted) => {
-            Err("Discord RPC not started (Discord may be closed)".to_string())
+impl WorkerState {
+    fn new() -> Self {
+        Self {
+            enabled: false,
+            client_id: DEFAULT_DISCORD_CLIENT_ID,
+            client: None,
+            desired: DesiredPresence::None,
+            dirty: false,
+            next_attempt_at: Instant::now(),
+            reconnect_delay: Duration::from_millis(INITIAL_RECONNECT_DELAY_MS),
         }
-        Err(err) => Err(err.to_string()),
+    }
+
+    fn handle(&mut self, cmd: RpcCommand) {
+        match cmd {
+            RpcCommand::Start { client_id } => {
+                if self.enabled && self.client_id == client_id && self.client.is_some() {
+                    return;
+                }
+                self.disconnect();
+                self.client_id = client_id;
+                self.enabled = true;
+                self.desired = DesiredPresence::Idle;
+                self.dirty = true;
+                self.next_attempt_at = Instant::now();
+                self.reconnect_delay = Duration::from_millis(INITIAL_RECONNECT_DELAY_MS);
+            }
+            RpcCommand::Update(payload) => {
+                self.desired = DesiredPresence::Track(payload);
+                self.dirty = true;
+            }
+            RpcCommand::Clear => {
+                self.desired = DesiredPresence::Idle;
+                self.dirty = true;
+            }
+            RpcCommand::Stop => {
+                self.enabled = false;
+                self.desired = DesiredPresence::None;
+                self.dirty = false;
+                self.disconnect();
+            }
+            RpcCommand::Shutdown => {}
+        }
+    }
+
+    fn disconnect(&mut self) {
+        if let Some(mut client) = self.client.take() {
+            let _ = client.clear_activity();
+            let _ = client.shutdown();
+        }
+    }
+
+    fn tick(&mut self) {
+        if !self.enabled {
+            if self.client.is_some() {
+                self.disconnect();
+            }
+            return;
+        }
+
+        if self.client.is_none() {
+            if Instant::now() < self.next_attempt_at {
+                return;
+            }
+
+            if !Self::discord_ipc_available() {
+                self.schedule_reconnect();
+                return;
+            }
+
+            self.try_connect();
+            return;
+        }
+
+        if self.dirty {
+            self.apply_presence();
+        }
+    }
+
+    fn try_connect(&mut self) {
+        let mut client = Client::new(self.client_id);
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.start();
+        }));
+
+        match result {
+            Ok(()) => {
+                log::info!("[Discord RPC] Connected successfully");
+                self.client = Some(client);
+                self.reconnect_delay = Duration::from_millis(INITIAL_RECONNECT_DELAY_MS);
+                self.dirty = true;
+            }
+            Err(_) => {
+                log::warn!("[Discord RPC] Connection failed (panic caught)");
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    client.shutdown();
+                }));
+                self.schedule_reconnect();
+            }
+        }
+    }
+
+    fn schedule_reconnect(&mut self) {
+        self.next_attempt_at = Instant::now() + self.reconnect_delay;
+        self.reconnect_delay = std::cmp::min(
+            self.reconnect_delay * 2,
+            Duration::from_millis(MAX_RECONNECT_DELAY_MS),
+        );
+    }
+
+    fn apply_presence(&mut self) {
+        let client = match self.client.as_mut() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let result = match &self.desired {
+            DesiredPresence::None => client.clear_activity().map_err(|e| e.to_string()),
+            DesiredPresence::Idle => client
+                .set_activity(|activity| {
+                    activity
+                        .activity_type(ActivityType::Listening)
+                        .details("Monochrome+")
+                        .state("Idling")
+                        .assets(|assets| {
+                            assets
+                                .large_image("monochrome")
+                                .large_text("Monochrome+")
+                                .small_image("paused_icon")
+                                .small_text("Idling")
+                        })
+                        .append_buttons(|button| {
+                            button
+                                .label("Listen on Monochrome+")
+                                .url("https://github.com/itsmeadarsh2008/monochrome-plus")
+                        })
+                })
+                .map_err(|e| e.to_string()),
+            DesiredPresence::Track(payload) => Self::set_track_activity(client, payload),
+        };
+
+        match result {
+            Ok(_) => {
+                self.dirty = false;
+            }
+            Err(e) => {
+                log::warn!("[Discord RPC] Failed to set activity: {}", e);
+                self.disconnect();
+                self.schedule_reconnect();
+            }
+        }
+    }
+
+    fn set_track_activity(
+        client: &mut Client,
+        payload: &DiscordPresencePayload,
+    ) -> Result<(), String> {
+        let details = payload
+            .details
+            .clone()
+            .unwrap_or_else(|| "Unknown Track".to_string());
+        let state = payload
+            .state
+            .clone()
+            .unwrap_or_else(|| "Monochrome+".to_string());
+        let large_image = normalize_image_key(payload.large_image_key.as_deref());
+        let large_text = payload
+            .large_image_text
+            .clone()
+            .unwrap_or_else(|| "Monochrome+".to_string());
+        let small_image = payload
+            .small_image_key
+            .clone()
+            .unwrap_or_else(|| "playing_icon".to_string());
+        let small_text = payload
+            .small_image_text
+            .clone()
+            .unwrap_or_else(|| "Playing".to_string());
+
+        let button_url = payload
+            .button_two_url
+            .clone()
+            .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
+        let has_second_button =
+            payload.button_two_label.is_some() && payload.button_two_url.is_some();
+        let btn2_label = payload.button_two_label.clone();
+        let btn2_url = payload.button_two_url.clone();
+
+        let start_ts =
+            payload
+                .start_timestamp
+                .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
+        let end_ts = payload
+            .end_timestamp
+            .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
+
+        client
+            .set_activity(|activity| {
+                let activity = activity
+                    .activity_type(ActivityType::Listening)
+                    .details(&details)
+                    .state(&state)
+                    .assets(|assets| {
+                        assets
+                            .large_image(&large_image)
+                            .large_text(&large_text)
+                            .small_image(&small_image)
+                            .small_text(&small_text)
+                    })
+                    .append_buttons(|button| button.label("Listen to this song").url(&button_url));
+
+                let activity = if has_second_button {
+                    if let (Some(label), Some(url)) = (&btn2_label, &btn2_url) {
+                        activity.append_buttons(|button| button.label(label).url(url))
+                    } else {
+                        activity
+                    }
+                } else {
+                    activity
+                };
+
+                if start_ts.is_some() || end_ts.is_some() {
+                    activity.timestamps(|timestamps| {
+                        let timestamps = if let Some(start) = start_ts {
+                            timestamps.start(start)
+                        } else {
+                            timestamps
+                        };
+                        if let Some(end) = end_ts {
+                            timestamps.end(end)
+                        } else {
+                            timestamps
+                        }
+                    })
+                } else {
+                    activity
+                }
+            })
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+
+    fn discord_ipc_available() -> bool {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            let dirs_to_check: Vec<String> = vec![
+                std::env::var("XDG_RUNTIME_DIR").unwrap_or_default(),
+                std::env::var("TMPDIR").unwrap_or_default(),
+                "/tmp".to_string(),
+                format!("/run/user/{}", unsafe { libc::getuid() }),
+            ];
+
+            for dir in &dirs_to_check {
+                if dir.is_empty() {
+                    continue;
+                }
+                for i in 0..10 {
+                    let path = format!("{}/discord-ipc-{}", dir, i);
+                    if std::path::Path::new(&path).exists() {
+                        return true;
+                    }
+                    let snap_path = format!("{}/snap.discord/discord-ipc-{}", dir, i);
+                    if std::path::Path::new(&snap_path).exists() {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        #[cfg(windows)]
+        {
+            for i in 0..10 {
+                let pipe_name = format!(r"\\.\pipe\discord-ipc-{}", i);
+                if std::path::Path::new(&pipe_name).exists() {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let dirs_to_check: Vec<String> = vec![
+                std::env::var("TMPDIR").unwrap_or_default(),
+                "/tmp".to_string(),
+            ];
+
+            for dir in &dirs_to_check {
+                if dir.is_empty() {
+                    continue;
+                }
+                for i in 0..10 {
+                    let path = format!("{}/discord-ipc-{}", dir, i);
+                    if std::path::Path::new(&path).exists() {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            return true;
+        }
     }
 }
 
-/// Percent-encode a string for use in Discord's mp:external/ format
 fn percent_encode_component(input: &str) -> String {
     let mut encoded = String::with_capacity(input.len() * 3);
     for byte in input.bytes() {
-        let is_unreserved = matches!(byte,
-            b'A'..=b'Z' |
-            b'a'..=b'z' |
-            b'0'..=b'9' |
-            b'-' | b'_' | b'.' | b'~'
+        let is_unreserved = matches!(
+            byte,
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~'
         );
-
         if is_unreserved {
             encoded.push(char::from(byte));
         } else {
@@ -92,7 +382,6 @@ fn percent_encode_component(input: &str) -> String {
     encoded
 }
 
-/// Convert an external URL to Discord's mp:external/ format
 fn external_url_to_discord_format(url: &str) -> String {
     if url.starts_with("mp:external/") {
         return url.to_string();
@@ -100,369 +389,103 @@ fn external_url_to_discord_format(url: &str) -> String {
     format!("mp:external/{}", percent_encode_component(url))
 }
 
-fn normalize_discord_large_image_key(value: &str) -> String {
-    if value.starts_with("http://") || value.starts_with("https://") {
-        return external_url_to_discord_format(value);
-    }
-
-    if value.trim().is_empty() {
-        return "monochrome".to_string();
-    }
-
-    if value.starts_with("mp:external/") {
-        return value.to_string();
-    }
-
-    value.to_string()
-}
-
-fn decode_base64_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'A'..=b'Z' => Some(byte - b'A'),
-        b'a'..=b'z' => Some(byte - b'a' + 26),
-        b'0'..=b'9' => Some(byte - b'0' + 52),
-        b'+' => Some(62),
-        b'/' => Some(63),
-        _ => None,
+fn normalize_image_key(value: Option<&str>) -> String {
+    match value.map(str::trim) {
+        Some(v) if v.starts_with("mp:external/") => v.to_string(),
+        Some(v) if v.starts_with("https://") || v.starts_with("http://") => {
+            external_url_to_discord_format(&v.replace("http://", "https://"))
+        }
+        Some(v) if !v.is_empty() => v.to_string(),
+        _ => "monochrome".to_string(),
     }
 }
 
-fn decode_base64_to_string(input: &str) -> Option<String> {
-    let bytes: Vec<u8> = input.bytes().filter(|b| !b"\r\n\t ".contains(b)).collect();
-    if bytes.is_empty() || bytes.len() % 4 != 0 {
-        return None;
-    }
+fn spawn_discord_rpc_worker() -> DiscordRpcHandle {
+    let (tx, rx) = mpsc::channel::<RpcCommand>();
 
-    let mut decoded = Vec::with_capacity((bytes.len() / 4) * 3);
+    thread::Builder::new()
+        .name("discord-rpc-worker".to_string())
+        .spawn(move || {
+            let mut state = WorkerState::new();
 
-    for chunk in bytes.chunks(4) {
-        let c0 = decode_base64_value(chunk[0])?;
-        let c1 = decode_base64_value(chunk[1])?;
-
-        let pad2 = chunk[2] == b'=';
-        let pad3 = chunk[3] == b'=';
-
-        let c2 = if pad2 {
-            0
-        } else {
-            decode_base64_value(chunk[2])?
-        };
-        let c3 = if pad3 {
-            0
-        } else {
-            decode_base64_value(chunk[3])?
-        };
-
-        decoded.push((c0 << 2) | (c1 >> 4));
-
-        if !pad2 {
-            decoded.push(((c1 & 0x0F) << 4) | (c2 >> 2));
-        }
-
-        if !pad3 {
-            decoded.push(((c2 & 0x03) << 6) | c3);
-        }
-    }
-
-    String::from_utf8(decoded).ok()
-}
-
-fn resolve_discord_large_image_key(
-    large_image_key: &str,
-    large_image_base64: Option<&str>,
-) -> String {
-    if let Some(encoded) = large_image_base64 {
-        if let Some(decoded) = decode_base64_to_string(encoded) {
-            let normalized = normalize_discord_large_image_key(decoded.trim());
-            if normalized != "monochrome" {
-                return normalized;
-            }
-        }
-    }
-
-    normalize_discord_large_image_key(large_image_key)
-}
-
-fn resolve_discord_large_image_candidates(
-    large_image_key: &str,
-    large_image_base64: Option<&str>,
-    large_image_fallback_base64: Option<&Vec<String>>,
-) -> Vec<String> {
-    let mut candidates: Vec<String> = Vec::new();
-
-    let primary = resolve_discord_large_image_key(large_image_key, large_image_base64);
-    if !primary.trim().is_empty() {
-        candidates.push(primary);
-    }
-
-    if let Some(fallbacks) = large_image_fallback_base64 {
-        for encoded in fallbacks {
-            if let Some(decoded) = decode_base64_to_string(encoded) {
-                let normalized = normalize_discord_large_image_key(decoded.trim());
-                if !normalized.trim().is_empty() && !candidates.contains(&normalized) {
-                    candidates.push(normalized);
-                }
-            }
-        }
-    }
-
-    candidates.push("monochrome".to_string());
-
-    candidates
-}
-
-#[tauri::command]
-fn discord_bridge_start(client_id: Option<String>) -> Result<bool, String> {
-    let desired_client_id = parse_client_id(client_id)?;
-
-    // Check if already running with same client ID
-    {
-        let guard = DISCORD_BRIDGE
-            .lock()
-            .map_err(|_| "Bridge lock poisoned".to_string())?;
-
-        if let Some(existing) = guard.as_ref() {
-            if existing.client_id == desired_client_id {
-                return Ok(true);
-            }
-        }
-    }
-
-    // Clean up existing connection
-    {
-        let mut guard = DISCORD_BRIDGE
-            .lock()
-            .map_err(|_| "Bridge lock poisoned".to_string())?;
-        if let Some(mut existing) = guard.take() {
-            let _ = existing.client.clear_activity();
-            let _ = existing.client.shutdown();
-        }
-    }
-
-    // Create client - start in background thread to not block the app
-    let client = Client::new(desired_client_id);
-
-    // Use a channel to communicate result from background thread
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    // Spawn background thread for Discord RPC initialization
-    thread::spawn(move || {
-        let mut client = client;
-        // Always wrap in catch_unwind to avoid panics propagating
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            client.start();
-            set_idle_activity(&mut client)
-        }));
-        match result {
-            Ok(Ok(_)) => {
-                let _ = tx.send(Some(DiscordRpc {
-                    client,
-                    client_id: desired_client_id,
-                }));
-            }
-            Ok(Err(error)) => {
-                eprintln!("[Discord RPC] Startup failed: {}", error);
-                let _ = client.shutdown();
-                let _ = tx.send(None);
-            }
-            Err(_) => {
-                eprintln!("[Discord RPC] Startup panicked");
-                let _ = client.shutdown();
-                let _ = tx.send(None);
-            }
-        }
-    });
-
-    // Wait for initialization with short timeout
-    let start_time = std::time::Instant::now();
-    while start_time.elapsed().as_millis() < RPC_START_TIMEOUT_MS as u128 {
-        if let Ok(result) = rx.try_recv() {
-            if let Some(discord_rpc) = result {
-                let mut guard = DISCORD_BRIDGE
-                    .lock()
-                    .map_err(|_| "Bridge lock poisoned".to_string())?;
-                *guard = Some(discord_rpc);
-                return Ok(true);
-            }
-            // Failed to start, but don't block app
-            return Ok(false);
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-
-    // Timeout - still return true to not block app, Discord will init lazily on next track
-    eprintln!("[Discord RPC] Startup timed out after {}ms", RPC_START_TIMEOUT_MS);
-    Ok(true)
-}
-
-#[tauri::command]
-fn discord_bridge_update(payload: DiscordBridgePayload) -> Result<(), String> {
-    let mut guard = DISCORD_BRIDGE
-        .lock()
-        .map_err(|_| "Bridge lock poisoned".to_string())?;
-    let bridge = guard
-        .as_mut()
-        .ok_or_else(|| "Discord bridge is not running".to_string())?;
-
-    let details = payload
-        .details
-        .unwrap_or_else(|| "Unknown Track".to_string());
-    let state = payload.state.unwrap_or_else(|| "Monochrome+".to_string());
-
-    let large_image_key = payload
-        .large_image_key
-        .unwrap_or_else(|| "monochrome".to_string());
-    let large_image_base64 = payload.large_image_base64;
-    let large_image_fallback_base64 = payload.large_image_fallback_base64;
-    let large_image_text = payload
-        .large_image_text
-        .unwrap_or_else(|| "Monochrome+".to_string());
-
-    let small_image_key = payload
-        .small_image_key
-        .unwrap_or_else(|| "playing_icon".to_string());
-    let small_image_text = payload
-        .small_image_text
-        .unwrap_or_else(|| "Playing".to_string());
-
-    let button_label = "Listen to this song".to_string();
-    let button_url = payload
-        .button_two_url
-        .clone()
-        .unwrap_or_else(|| "https://github.com/itsmeadarsh2008/monochrome-plus".to_string());
-
-    let has_second_button = payload.button_two_label.is_some() && payload.button_two_url.is_some();
-    let button_two_label = payload.button_two_label;
-    let button_two_url = payload.button_two_url;
-
-    let start_timestamp =
-        payload
-            .start_timestamp
-            .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
-    let end_timestamp =
-        payload
-            .end_timestamp
-            .and_then(|ts| if ts >= 0 { Some(ts as u64) } else { None });
-
-    let safe_large_image_candidates = resolve_discord_large_image_candidates(
-        &large_image_key,
-        large_image_base64.as_deref(),
-        large_image_fallback_base64.as_ref(),
-    );
-
-    let mut last_error: Option<String> = None;
-
-    for safe_large_image in safe_large_image_candidates {
-        for _ in 0..3 {
-            let details_value = details.clone();
-            let state_value = state.clone();
-            let large_image_value = safe_large_image.clone();
-            let large_image_text_value = large_image_text.clone();
-            let small_image_value = small_image_key.clone();
-            let small_image_text_value = small_image_text.clone();
-            let button_label_value = button_label.clone();
-            let button_url_value = button_url.clone();
-            let button_two_label_value = button_two_label.clone();
-            let button_two_url_value = button_two_url.clone();
-            let start_value = start_timestamp;
-            let end_value = end_timestamp;
-            let has_second = has_second_button;
-
-            match bridge.client.set_activity(|activity| {
-                let activity = activity
-                    .activity_type(ActivityType::Listening)
-                    .details(&details_value)
-                    .state(&state_value)
-                    .assets(|assets| {
-                        assets
-                            .large_image(&large_image_value)
-                            .large_text(&large_image_text_value)
-                            .small_image(&small_image_value)
-                            .small_text(&small_image_text_value)
-                    })
-                    .append_buttons(|button| {
-                        let button = button.label(&button_label_value).url(&button_url_value);
-                        button
-                    });
-
-                let activity = if has_second {
-                    if let (Some(label), Some(url)) =
-                        (&button_two_label_value, &button_two_url_value)
-                    {
-                        activity.append_buttons(|button| button.label(label).url(url))
-                    } else {
-                        activity
+            loop {
+                match rx.recv_timeout(Duration::from_millis(WORKER_POLL_INTERVAL_MS)) {
+                    Ok(RpcCommand::Shutdown) => {
+                        state.disconnect();
+                        break;
                     }
-                } else {
-                    activity
-                };
+                    Ok(cmd) => state.handle(cmd),
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        state.disconnect();
+                        break;
+                    }
+                }
 
-                if start_value.is_some() || end_value.is_some() {
-                    activity.timestamps(|timestamps| {
-                        let timestamps = if let Some(start) = start_value {
-                            timestamps.start(start)
-                        } else {
-                            timestamps
-                        };
-
-                        if let Some(end) = end_value {
-                            timestamps.end(end)
-                        } else {
-                            timestamps
+                while let Ok(cmd) = rx.try_recv() {
+                    match cmd {
+                        RpcCommand::Shutdown => {
+                            state.disconnect();
+                            return;
                         }
-                    })
-                } else {
-                    activity
+                        other => state.handle(other),
+                    }
                 }
-            }) {
-                Ok(_) => return Ok(()),
-                Err(DiscordError::NotStarted) => {
-                    last_error = Some("Discord RPC not started".to_string());
-                    thread::sleep(Duration::from_millis(50));
-                }
-                Err(err) => {
-                    last_error = Some(err.to_string());
-                    break;
-                }
+
+                state.tick();
             }
-        }
-    }
+        })
+        .expect("Failed to spawn Discord RPC worker thread");
 
-    Err(last_error
-        .unwrap_or_else(|| "Discord RPC update timed out waiting for ready state".to_string()))
+    DiscordRpcHandle { tx }
+}
+
+fn parse_client_id(client_id: Option<String>) -> u64 {
+    client_id
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_DISCORD_CLIENT_ID)
 }
 
 #[tauri::command]
-fn discord_bridge_clear() -> Result<(), String> {
-    let mut guard = DISCORD_BRIDGE
-        .lock()
-        .map_err(|_| "Bridge lock poisoned".to_string())?;
-    let bridge = guard
-        .as_mut()
-        .ok_or_else(|| "Discord bridge is not running".to_string())?;
-
-    bridge
-        .client
-        .clear_activity()
-        .map_err(|err| err.to_string())?;
-    set_idle_activity(&mut bridge.client)
+fn discord_bridge_start(
+    state: tauri::State<'_, DiscordRpcHandle>,
+    client_id: Option<String>,
+) -> Result<(), String> {
+    let id = parse_client_id(client_id);
+    state
+        .tx
+        .send(RpcCommand::Start { client_id: id })
+        .map_err(|_| "Discord RPC worker is not running".to_string())
 }
 
 #[tauri::command]
-fn discord_bridge_stop() -> Result<(), String> {
-    let mut guard = DISCORD_BRIDGE
-        .lock()
-        .map_err(|_| "Bridge lock poisoned".to_string())?;
-    let mut bridge = match guard.take() {
-        Some(bridge) => bridge,
-        None => return Ok(()),
-    };
-
-    let _ = bridge.client.clear_activity();
-    let _ = bridge.client.shutdown();
-    Ok(())
+fn discord_bridge_update(
+    state: tauri::State<'_, DiscordRpcHandle>,
+    payload: DiscordPresencePayload,
+) -> Result<(), String> {
+    state
+        .tx
+        .send(RpcCommand::Update(payload))
+        .map_err(|_| "Discord RPC worker is not running".to_string())
 }
 
+#[tauri::command]
+fn discord_bridge_clear(state: tauri::State<'_, DiscordRpcHandle>) -> Result<(), String> {
+    state
+        .tx
+        .send(RpcCommand::Clear)
+        .map_err(|_| "Discord RPC worker is not running".to_string())
+}
+
+#[tauri::command]
+fn discord_bridge_stop(state: tauri::State<'_, DiscordRpcHandle>) -> Result<(), String> {
+    state
+        .tx
+        .send(RpcCommand::Stop)
+        .map_err(|_| "Discord RPC worker is not running".to_string())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::default().build())
@@ -486,10 +509,11 @@ pub fn run() {
                 )?;
             }
 
-            // Close splash screen and show main window - reduced timeout for faster startup
+            let rpc_handle = spawn_discord_rpc_worker();
+            app.manage(rpc_handle);
+
             let handle_clone = handle.clone();
             std::thread::spawn(move || {
-                // Give the main window minimal time to render
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 if let Some(splash) = handle_clone.get_webview_window("splashscreen") {
                     let _ = splash.close();

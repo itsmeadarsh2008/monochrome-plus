@@ -147,6 +147,10 @@ export class Player {
             this._cancelCrossfade();
         });
 
+        this.audio.addEventListener('ended', () => {
+            this.handleTrackEnded();
+        });
+
         // Re-initialize audio context with new audio element if needed
         if (audioContextManager.isReady()) {
             audioContextManager.init(this.audio);
@@ -244,10 +248,10 @@ export class Player {
                 }
             }
 
-            this._playbackMonitorTimer = setTimeout(run, 120);
+            this._playbackMonitorTimer = setTimeout(run, 80);
         };
 
-        this._playbackMonitorTimer = setTimeout(run, 120);
+        this._playbackMonitorTimer = setTimeout(run, 80);
     }
 
     stopPlaybackMonitor() {
@@ -1330,6 +1334,11 @@ export class Player {
                     }
                 }
 
+                if (audioProcessingSettings.isPure()) {
+                    this.audio.setAttribute('data-pure-mode', 'true');
+                } else {
+                    this.audio.removeAttribute('data-pure-mode');
+                }
                 this.currentRgValues = null;
                 this.applyReplayGain();
                 this.applyAudioEffects();
@@ -1369,6 +1378,11 @@ export class Player {
                     this.dashInitialized = false;
                 }
                 streamUrl = URL.createObjectURL(track.file);
+                if (audioProcessingSettings.isPure()) {
+                    this.audio.setAttribute('data-pure-mode', 'true');
+                } else {
+                    this.audio.removeAttribute('data-pure-mode');
+                }
                 this.currentRgValues = null; // No replaygain for local files yet
                 this.applyReplayGain();
                 this.applyAudioEffects();
@@ -1407,6 +1421,11 @@ export class Player {
 
                 if (isQobuz) {
                     // Qobuz: skip getTrack call, directly fetch stream URL
+                    if (audioProcessingSettings.isPure()) {
+                        this.audio.setAttribute('data-pure-mode', 'true');
+                    } else {
+                        this.audio.removeAttribute('data-pure-mode');
+                    }
                     this.currentRgValues = null;
                     this.applyReplayGain();
 
