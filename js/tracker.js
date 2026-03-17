@@ -9,12 +9,23 @@ let globalPlayer = null;
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
 
-const TRACKER_ENDPOINTS = {
-    artistsNdjson: ['/artistgrid-api/artists.ndjson', 'https://sheets.artistgrid.cx/artists.ndjson'],
-    trends: ['/artistgrid-trends', 'https://trends.artistgrid.cx'],
-    trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
-    assetsBase: ['https://assets.artistgrid.cx', '/artistgrid-assets'],
-};
+// Tauri webview doesn't have a dev proxy or _redirects, so use direct URLs first.
+// Web (dev/prod) uses proxy paths first to avoid CORS.
+const isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__);
+
+const TRACKER_ENDPOINTS = isTauri
+    ? {
+          artistsNdjson: ['https://sheets.artistgrid.cx/artists.ndjson'],
+          trends: ['https://trends.artistgrid.cx'],
+          trackerGet: ['https://tracker.israeli.ovh/get'],
+          assetsBase: ['https://assets.artistgrid.cx'],
+      }
+    : {
+          artistsNdjson: ['/artistgrid-api/artists.ndjson', 'https://sheets.artistgrid.cx/artists.ndjson'],
+          trends: ['/artistgrid-trends', 'https://trends.artistgrid.cx'],
+          trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
+          assetsBase: ['/artistgrid-assets', 'https://assets.artistgrid.cx'],
+      };
 
 async function fetchWithFallback(urls, { responseType = 'json', timeoutMs = 9000 } = {}) {
     let lastError = null;
@@ -52,8 +63,8 @@ function getTrackerAssetUrl(fileName) {
     const safeName = String(fileName || '').trim();
     if (!safeName) return 'assets/logo.svg';
 
-    const [primaryBase, fallbackBase] = TRACKER_ENDPOINTS.assetsBase;
-    return `${fallbackBase}/${safeName}.webp` || `${primaryBase}/${safeName}.webp`;
+    const base = TRACKER_ENDPOINTS.assetsBase[0];
+    return `${base}/${safeName}.webp`;
 }
 
 // Store all songs for search functionality

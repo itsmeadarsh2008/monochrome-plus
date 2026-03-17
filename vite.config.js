@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
+import https from 'node:https';
+
+// Shared agent that ignores self-signed / broken upstream certs for dev proxies
+const insecureAgent = new https.Agent({ rejectUnauthorized: false });
 
 export default defineConfig(() => {
     const hmrHost = process.env.TAURI_DEV_HOST || 'localhost';
@@ -43,24 +47,28 @@ export default defineConfig(() => {
                     target: 'https://sheets.artistgrid.cx',
                     changeOrigin: true,
                     secure: false,
+                    agent: insecureAgent,
                     rewrite: (path) => path.replace(/^\/artistgrid-api/, ''),
                 },
                 '/artistgrid-trends': {
                     target: 'https://trends.artistgrid.cx',
                     changeOrigin: true,
                     secure: false,
+                    agent: insecureAgent,
                     rewrite: (path) => path.replace(/^\/artistgrid-trends/, ''),
                 },
                 '/artistgrid-assets': {
                     target: 'https://assets.artistgrid.cx',
                     changeOrigin: true,
                     secure: false,
+                    agent: insecureAgent,
                     rewrite: (path) => path.replace(/^\/artistgrid-assets/, ''),
                 },
                 '/tracker-api': {
                     target: 'https://tracker.israeli.ovh',
                     changeOrigin: true,
                     secure: false,
+                    agent: insecureAgent,
                     rewrite: (path) => path.replace(/^\/tracker-api/, ''),
                 },
             },

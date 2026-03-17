@@ -1,18 +1,33 @@
-# [3.6.9] - 2026-03-09
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+## [3.6.9] - 2026-03-17
 
 ### Fixed
 
-- Hardened Discord RPC startup and error handling: always returns quickly, logs failures, and never blocks Monochrome+ startup. Ready for retry if Discord is not running.
+- Rebuilt Discord RPC from scratch using a channel-based worker thread — eliminates crashes, lock poisoning, and app hangs when Discord is not running.
+- Fixed continuous playback breaking after AutoMix audio element swap by binding `ended` event on every new audio element.
+- Fixed pure mode (`data-pure-mode`) not being applied for local files, tracker tracks, and Qobuz — now all file types play at bit-perfect raw quality in pure mode.
+- Fixed SSL proxy errors (`EPROTO`) for ArtistGrid endpoints in Vite dev server.
+- Fixed CORS errors for ArtistGrid/tracker endpoints in Tauri by using direct URLs instead of proxy paths.
+- Fixed unreleased music page failing to load artist data due to wrong asset URL fallback order.
 
-# [3.6.8] - 2026-03-09
+### Added
+
+- Enabled RPM and DEB Linux build targets for Tauri.
+- Added Discord community link (discord.gg/dRWde62ADp) to sidebar and redirect page.
+
+### Changed
+
+- Reduced playback monitor interval from 120ms to 80ms for more reliable gapless transitions.
+- Simplified Discord bridge JS frontend from 398 to 222 lines — removed timeout racing, reconnect loops, and base64 encoding.
+
+## [3.6.8] - 2026-03-09
 
 ### Changed
 
 - Bumped version to 3.6.8 across all manifests (package.json, tauri.conf.json, Cargo.toml, Cargo.lock) for maintenance and release consistency. No user-facing changes.
-
-# Changelog
-
-All notable changes to this project are documented in this file.
 
 ## [3.6.6] - 2026-03-06
 
