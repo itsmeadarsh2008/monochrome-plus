@@ -23,24 +23,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux builds
           - platform: ubuntu-22.04
             args: ""
             target: ""
-            arch: "x86_64"
-            name: "Linux"
-          # Windows builds (native Windows runner)
+            arch: x86_64
+            name: Linux
           - platform: windows-latest
             args: ""
             target: ""
-            arch: "x86_64"
-            name: "Windows"
-          # macOS builds
+            arch: x86_64
+            name: Windows
           - platform: macos-latest
             args: "--target universal-apple-darwin"
-            target: "universal-apple-darwin"
-            arch: "universal"
-            name: "macOS"
+            target: universal-apple-darwin
+            arch: universal
+            name: macOS
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
@@ -48,18 +45,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: ''
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          no-cache: true
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -80,7 +77,7 @@ jobs:
             pkg-config
 
       - name: Install frontend dependencies
-        run: bun install --frozen-lockfile --no-cache
+        run: bun install --frozen-lockfile
 
       - name: Sync app version from tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -99,29 +96,26 @@ jobs:
             if (!repoSlug || repoSlug === 'undefined') {
               throw new Error('REPO_SLUG is missing or invalid');
             }
-            
+
             // Update package.json
-            const pkgPath = 'package.json';
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
             pkg.version = version;
-            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 4) + '\n');
-            
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 4) + '\n');
+
             // Update tauri.conf.json
-            const tauriPath = 'src-tauri/tauri.conf.json';
-            const tauri = JSON.parse(fs.readFileSync(tauriPath, 'utf8'));
+            const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
             tauri.version = version;
             const updaterEndpoint = 'https://github.com/' + repoSlug + '/releases/latest/download/latest.json';
             if (!tauri.plugins) tauri.plugins = {};
             if (!tauri.plugins.updater) tauri.plugins.updater = {};
             tauri.plugins.updater.endpoints = [updaterEndpoint];
-            fs.writeFileSync(tauriPath, JSON.stringify(tauri, null, 4) + '\n');
-            
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 4) + '\n');
+
             // Update Cargo.toml
-            const cargoPath = 'src-tauri/Cargo.toml';
-            let cargo = fs.readFileSync(cargoPath, 'utf8');
+            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
             cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + version + '\"');
-            fs.writeFileSync(cargoPath, cargo);
-            
+            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+
             console.log('Version synced to', version);
           "
 
@@ -134,49 +128,104 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Monochrome+ ${{ github.ref_name }}"
-          releaseBody: |
-            ## Monochrome+ ${{ github.ref_name }}
-
-            ### Downloads
-            - **Windows**: Download the `.exe` installer (NSIS) - Portable single-file installer
-            - **macOS**: Download the `.dmg` file (Universal binary for Intel & Apple Silicon)
-            - **Linux**: Download `.AppImage` - Portable single-file executable
-
-            ### Features
-            - High-fidelity music streaming
-            - Privacy-respecting audio playback
-            - Auto-updater built-in
-
-            ### Installation
-            **Windows**: Run the `.exe` installer and follow the prompts. Portable mode available.
-            **macOS**: Open the `.dmg`, drag Monochrome+ to Applications, and launch.
-            **Linux**: Make the `.AppImage` executable (`chmod +x`) and run it directly - no installation needed!
-
-            ### Notes
-            - Auto-updates are built-in. The app will check for updates on startup.
-          releaseDraft: false
+          releaseBody: ""
+          releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
-  # Update release notes after all builds complete
-  update-release-notes:
+  finalize-release:
     needs: publish-tauri
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
+
     steps:
-      - name: Update release with changelog link
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Find the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p')
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, generating notes from all history"
+            RANGE=""
+          else
+            echo "Generating changelog from ${PREV_TAG} to ${TAG}"
+            RANGE="${PREV_TAG}..${TAG}"
+          fi
+
+          {
+            echo "RELEASE_NOTES<<RELEASE_NOTES_EOF"
+            echo "## Monochrome+ ${TAG}"
+            echo ""
+            echo "### What's Changed"
+            echo ""
+
+            # Features
+            FEATURES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^feat" --no-merges 2>/dev/null || true)
+            if [ -n "$FEATURES" ]; then
+              echo "#### ✨ Features"
+              echo "$FEATURES"
+              echo ""
+            fi
+
+            # Fixes
+            FIXES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^fix" --no-merges 2>/dev/null || true)
+            if [ -n "$FIXES" ]; then
+              echo "#### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+
+            # Performance
+            PERF=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^perf" --no-merges 2>/dev/null || true)
+            if [ -n "$PERF" ]; then
+              echo "#### ⚡ Performance"
+              echo "$PERF"
+              echo ""
+            fi
+
+            # Other changes (not feat/fix/perf/style/chore/ci/docs/build/refactor merge commits)
+            OTHER=$(git log $RANGE --pretty=format:"- %s (%h)" --no-merges --invert-grep --grep="^feat" --grep="^fix" --grep="^perf" --grep="^style" --grep="^chore" --grep="^ci" --grep="^docs" --grep="^build" --grep="^refactor" 2>/dev/null || true)
+            if [ -n "$OTHER" ]; then
+              echo "#### 📦 Other Changes"
+              echo "$OTHER"
+              echo ""
+            fi
+
+            echo "### Downloads"
+            echo "- **Windows**: \`.exe\` installer (NSIS)"
+            echo "- **macOS**: \`.dmg\` (Universal binary — Intel & Apple Silicon)"
+            echo "- **Linux**: \`.AppImage\`, \`.deb\`, \`.rpm\`"
+            echo ""
+            echo "### Notes"
+            echo "- Auto-updates are built-in. The app will check for updates on startup."
+            echo ""
+            echo "---"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
+            else
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${TAG}"
+            fi
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish release with generated notes
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Monochrome+ ${{ github.ref_name }}"
-          append_body: |
-
-            ---
-
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
