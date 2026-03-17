@@ -16,10 +16,7 @@ const PROD_PROXY = 'https://monochrome-plus.appwrite.network';
 
 const TRACKER_ENDPOINTS = isTauri
     ? {
-          artistsNdjson: [
-              '/artistgrid-api/artists.ndjson',
-              `${PROD_PROXY}/artistgrid-api/artists.ndjson`,
-          ],
+          artistsNdjson: ['/artistgrid-api/artists.ndjson', `${PROD_PROXY}/artistgrid-api/artists.ndjson`],
           trends: ['/artistgrid-trends', `${PROD_PROXY}/artistgrid-trends`, 'https://trends.artistgrid.cx'],
           trackerGet: ['/tracker-api/get', `${PROD_PROXY}/tracker-api/get`],
           assetsBase: ['https://assets.artistgrid.cx'],
