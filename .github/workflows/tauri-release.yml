@@ -16,7 +16,6 @@ concurrency:
 env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
-  # Hyper-fast compilation settings
   CARGO_PROFILE_RELEASE_LTO: "thin"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
@@ -46,8 +45,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -75,34 +72,38 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      - name: Sync Version from Tag
+      # ✅ CROSS-PLATFORM VERSION SYNC (No more PowerShell errors)
+      - name: Sync Version
+        shell: node {0}
         run: |
-          # Get version from tag (v1.2.3 -> 1.2.3) or fallback to package.json version
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION=$(node -p "require('./package.json').version")
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
-          node -e "
           const fs = require('fs');
-          const v = process.env.VERSION;
+          const ref = process.env.GITHUB_REF;
+          let version;
+
+          if (ref.startsWith('refs/tags/v')) {
+            version = ref.replace('refs/tags/v', '');
+          } else {
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            version = pkg.version;
+          }
+
+          console.log(`Setting version to: ${version}`);
+
+          // Update package.json and tauri.conf.json
           ['package.json', 'src-tauri/tauri.conf.json'].forEach(f => {
             if (fs.existsSync(f)) {
-              const j = JSON.parse(fs.readFileSync(f));
-              j.version = v;
+              const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+              j.version = version;
               fs.writeFileSync(f, JSON.stringify(j, null, 2));
             }
           });
+
+          // Update Cargo.toml
           if (fs.existsSync('src-tauri/Cargo.toml')) {
             let c = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
-            c = c.replace(/^version = \".*\"/m, 'version = \"' + v + '\"');
+            c = c.replace(/^version = \".*\"/m, `version = "${version}"`);
             fs.writeFileSync('src-tauri/Cargo.toml', c);
           }
-          "
-        env:
-          VERSION: ${{ env.VERSION }}
 
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0.6.0
@@ -113,34 +114,40 @@ jobs:
         with:
           tauriScript: "bun run tauri"
           args: ${{ matrix.args }}
-          # Removed the invalid 'uploadWorkflowArtifacts' to fix warnings
-          includeUpdaterJson: true
           tagName: ${{ github.ref_name }}
+          includeUpdaterJson: true
 
   release:
     name: Publish Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Uses the built-in gh CLI to download and upload for maximum speed
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
       - name: Publish to GitHub Release
         run: |
-          # Create the release first if it doesn't exist
           gh release view "${GITHUB_REF_NAME}" || gh release create "${GITHUB_REF_NAME}" --title "Release ${GITHUB_REF_NAME}" --generate-notes
           
-          # Use a single batch upload for speed
-          # Note: tauri-action v0.6.0 uploads assets automatically if tagName is provided,
-          # but we manually ensure latest.json and all linux formats are covered.
+          # Collect all binaries (including deb/rpm) and updater signatures
           shopt -s globstar nullglob
-          files=(src-tauri/target/release/bundle/**/*.{deb,rpm,AppImage,dmg,exe,msi,zip,tar.gz,sig,json})
+          files=(artifacts/**/*.{deb,rpm,AppImage,dmg,exe,msi,zip,tar.gz,sig})
           
           if [ ${#files[@]} -gt 0 ]; then
             gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber
+          fi
+
+          # Merge latest.json fragments if they exist
+          JSON_FILES=(artifacts/**/latest.json)
+          if [ ${#JSON_FILES[@]} -gt 0 ]; then
+            jq -s 'reduce .[] as $item ({}; . * $item)' "${JSON_FILES[@]}" > latest.json
+            gh release upload "${GITHUB_REF_NAME}" latest.json --clobber
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
