@@ -6,49 +6,54 @@ on:
       - "v*"
   workflow_dispatch:
 
-permissions:
-  contents: write
-
+# make releases for a tag -> single concurrency group
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+
+permissions:
+  contents: write
 
 env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
 
 jobs:
-  publish-tauri:
+  build:
+    name: Build (matrix)
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: ubuntu-22.04
+            name: linux
             args: ""
-            target: ""
             arch: x86_64
-            name: Linux
           - platform: windows-latest
+            name: windows
             args: ""
-            target: ""
             arch: x86_64
-            name: Windows
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
-            target: universal-apple-darwin
-            arch: universal
-            name: macOS
+            name: macos-aarch64
+            args: "--target aarch64-apple-darwin"
+            arch: aarch64
+          - platform: macos-latest
+            name: macos-x86_64
+            args: "--target x86_64-apple-darwin"
+            arch: x86_64
 
-    runs-on: ${{ matrix.platform }}
-    timeout-minutes: 60
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js (for tooling)
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -61,9 +66,10 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
+          # only needed on macOS to speed others
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Install Linux dependencies
+      - name: Install Linux packaging deps (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -74,7 +80,11 @@ jobs:
             librsvg2-dev \
             patchelf \
             libssl-dev \
-            pkg-config
+            pkg-config \
+            dpkg-dev \
+            fakeroot \
+            rpm \
+            rpm-build
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -97,63 +107,85 @@ jobs:
               throw new Error('REPO_SLUG is missing or invalid');
             }
 
-            // Update package.json
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = version;
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 4) + '\n');
+            // Update package.json (if exists)
+            if (fs.existsSync('package.json')) {
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              pkg.version = version;
+              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 4) + '\n');
+            }
 
-            // Update tauri.conf.json
-            const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            tauri.version = version;
-            const updaterEndpoint = 'https://github.com/' + repoSlug + '/releases/latest/download/latest.json';
-            if (!tauri.plugins) tauri.plugins = {};
-            if (!tauri.plugins.updater) tauri.plugins.updater = {};
-            tauri.plugins.updater.endpoints = [updaterEndpoint];
-            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 4) + '\n');
+            // Update src-tauri/tauri.conf.json
+            if (fs.existsSync('src-tauri/tauri.conf.json')) {
+              const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+              tauri.version = version;
+              const updaterEndpoint = 'https://github.com/' + repoSlug + '/releases/latest/download/latest.json';
+              if (!tauri.plugins) tauri.plugins = {};
+              if (!tauri.plugins.updater) tauri.plugins.updater = {};
+              tauri.plugins.updater.endpoints = [updaterEndpoint];
+              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 4) + '\n');
+            }
 
-            // Update Cargo.toml
-            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
-            cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + version + '\"');
-            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+            // Update Cargo.toml if present
+            const cargoPath = 'src-tauri/Cargo.toml';
+            if (fs.existsSync(cargoPath)) {
+              let cargo = fs.readFileSync(cargoPath, 'utf8');
+              cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + version + '\"');
+              fs.writeFileSync(cargoPath, cargo);
+            }
 
             console.log('Version synced to', version);
           "
 
-      - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v0.5.16
+      - name: Run Tauri build (produce platform bundles)
+        # We're using the tauri action in "build only" mode and uploading workflow artifacts.
+        uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # optional signing envs passed through
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Monochrome+ ${{ github.ref_name }}"
-          releaseBody: ""
-          releaseDraft: true
-          prerelease: false
-          includeUpdaterJson: true
+          # build only, don't create or upload to a release from each matrix job
+          uploadWorkflowArtifacts: true
+          # pick an artifact naming pattern to download later
+          workflowArtifactNamePattern: "tauri-${{ matrix.name }}-${{ matrix.arch }}"
+          # ensure the action uses Bun to run the Tauri CLI instead of requiring a "tauri" npm script
+          # the action runs: `${tauriScript} <command> <args>`, so set it to "bun run tauri"
+          tauriScript: "bun run tauri"
+          # pass any custom args (matrix)
           args: ${{ matrix.args }}
 
+      - name: Show artifact (debug)
+        run: |
+          echo "Uploaded workflow artifact: tauri-${{ matrix.name }}-${{ matrix.arch }}"
+
   finalize-release:
-    needs: publish-tauri
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Finalize release and upload artifacts
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout (needed for changelog)
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Download all workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # omit `name` to download all artifacts produced by the workflow
+          path: ./dist_artifacts
 
       - name: Generate release notes
         id: notes
         run: |
           TAG="${GITHUB_REF_NAME}"
           # Find the previous tag
-          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p')
+          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p' || true)
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag found, generating notes from all history"
             RANGE=""
@@ -202,7 +234,7 @@ jobs:
             fi
 
             echo "### Downloads"
-            echo "- **Windows**: \`.exe\` installer (NSIS)"
+            echo "- **Windows**: \`.exe\` installer (NSIS) or \`.msi\`"
             echo "- **macOS**: \`.dmg\` (Universal binary — Intel & Apple Silicon)"
             echo "- **Linux**: \`.AppImage\`, \`.deb\`, \`.rpm\`"
             echo ""
@@ -219,8 +251,8 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish release with generated notes
-        uses: softprops/action-gh-release@v2
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.6.1
         with:
           tag_name: ${{ github.ref_name }}
           name: "Monochrome+ ${{ github.ref_name }}"
@@ -229,3 +261,25 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload built bundles to Release (all detected packaging files)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME}"
+          # Authenticate gh CLI with the token so uploads succeed (gh should pick GITHUB_TOKEN in actions, but make explicit)
+          printf '%s' "${GITHUB_TOKEN}" | gh auth login --with-token >/dev/null 2>&1
+
+          # Find and upload relevant artifacts
+          find ./dist_artifacts -type f \( \
+            -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o \
+            -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.msi" \
+          \) -print0 | while IFS= read -r -d '' file; do
+            echo "Uploading $file to release ${TAG}"
+            gh release upload "${TAG}" "$file" --clobber || true
+          done
+
+      - name: Output release link
+        run: |
+          echo "Release published: https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}"
