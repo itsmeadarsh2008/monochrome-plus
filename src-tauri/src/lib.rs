@@ -211,7 +211,7 @@ impl WorkerState {
     fn set_track_activity(
         client: &mut Client,
         payload: &DiscordPresencePayload,
-    ) -> Result<(), String> {
+    ) -> Result<Payload<Activity>, String> {
         let details = payload
             .details
             .clone()
@@ -293,9 +293,7 @@ impl WorkerState {
                     activity
                 }
             })
-            .map_err(|e| e.to_string())?;
-
-        Ok(())
+            .map_err(|e| e.to_string())
     }
 
     fn discord_ipc_available() -> bool {
