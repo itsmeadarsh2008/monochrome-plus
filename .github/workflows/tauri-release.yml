@@ -6,13 +6,12 @@ on:
       - "v*"
   workflow_dispatch:
 
-# make releases for a tag -> single concurrency group
+permissions:
+  contents: write
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
-
-permissions:
-  contents: write
 
 env:
   CARGO_INCREMENTAL: 0
@@ -20,9 +19,10 @@ env:
 
 jobs:
   build:
-    name: Build (matrix)
+    name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
+
     strategy:
       fail-fast: false
       matrix:
@@ -30,46 +30,35 @@ jobs:
           - platform: ubuntu-22.04
             name: linux
             args: ""
-            arch: x86_64
           - platform: windows-latest
             name: windows
             args: ""
-            arch: x86_64
           - platform: macos-latest
             name: macos-aarch64
             args: "--target aarch64-apple-darwin"
-            arch: aarch64
           - platform: macos-latest
             name: macos-x86_64
             args: "--target x86_64-apple-darwin"
-            arch: x86_64
-
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - name: Setup Node.js (for tooling)
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
 
-      - name: Install Rust stable
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          # only needed on macOS to speed others
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Install Linux packaging deps (ubuntu only)
+      # ✅ FIXED LINUX DEPS
+      - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -84,202 +73,89 @@ jobs:
             dpkg-dev \
             fakeroot \
             rpm \
-            rpm-build
+            librpm-dev
 
-      - name: Install frontend dependencies
+      - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      - name: Sync app version from tag
+      # ✅ VERSION SYNC (safe)
+      - name: Sync version
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
         run: |
-          APP_VERSION="${GITHUB_REF_NAME#v}"
-          REPO_SLUG="${GITHUB_REPOSITORY}"
-          echo "Syncing app version to ${APP_VERSION}"
-          APP_VERSION="${APP_VERSION}" REPO_SLUG="${REPO_SLUG}" node -e "
-            const fs = require('fs');
-            const version = process.env.APP_VERSION;
-            const repoSlug = process.env.REPO_SLUG;
-            if (!version || version === 'undefined') {
-              throw new Error('APP_VERSION is missing or invalid');
-            }
-            if (!repoSlug || repoSlug === 'undefined') {
-              throw new Error('REPO_SLUG is missing or invalid');
-            }
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Version: $VERSION"
 
-            // Update package.json (if exists)
-            if (fs.existsSync('package.json')) {
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              pkg.version = version;
-              fs.writeFileSync('package.json', JSON.stringify(pkg, null, 4) + '\n');
-            }
+          node -e "
+          const fs = require('fs');
 
-            // Update src-tauri/tauri.conf.json
-            if (fs.existsSync('src-tauri/tauri.conf.json')) {
-              const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-              tauri.version = version;
-              const updaterEndpoint = 'https://github.com/' + repoSlug + '/releases/latest/download/latest.json';
-              if (!tauri.plugins) tauri.plugins = {};
-              if (!tauri.plugins.updater) tauri.plugins.updater = {};
-              tauri.plugins.updater.endpoints = [updaterEndpoint];
-              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 4) + '\n');
-            }
+          const v = process.env.VERSION;
 
-            // Update Cargo.toml if present
-            const cargoPath = 'src-tauri/Cargo.toml';
-            if (fs.existsSync(cargoPath)) {
-              let cargo = fs.readFileSync(cargoPath, 'utf8');
-              cargo = cargo.replace(/^version\s*=\s*\"[^\"]+\"/m, 'version = \"' + version + '\"');
-              fs.writeFileSync(cargoPath, cargo);
-            }
+          if (fs.existsSync('package.json')) {
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.version = v;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          }
 
-            console.log('Version synced to', version);
-          "
+          if (fs.existsSync('src-tauri/tauri.conf.json')) {
+            const t = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
+            t.version = v;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(t, null, 2));
+          }
 
-      - name: Run Tauri build (produce platform bundles)
-        # We're using the tauri action in "build only" mode and uploading workflow artifacts.
-        uses: tauri-apps/tauri-action@v0.6.2
+          if (fs.existsSync('src-tauri/Cargo.toml')) {
+            let c = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+            c = c.replace(/^version = \".*\"/m, 'version = \"' + v + '\"');
+            fs.writeFileSync('src-tauri/Cargo.toml', c);
+          }
+          " VERSION=$VERSION
+
+      # ✅ BUILD ONLY (NO RELEASE RACE)
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # optional signing envs passed through
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # build only, don't create or upload to a release from each matrix job
-          uploadWorkflowArtifacts: true
-          # pick an artifact naming pattern to download later
-          workflowArtifactNamePattern: "tauri-${{ matrix.name }}-${{ matrix.arch }}"
-          # ensure the action uses Bun to run the Tauri CLI instead of requiring a "tauri" npm script
-          # the action runs: `${tauriScript} <command> <args>`, so set it to "bun run tauri"
           tauriScript: "bun run tauri"
-          # pass any custom args (matrix)
           args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "tauri-${{ matrix.name }}"
 
-      - name: Show artifact (debug)
-        run: |
-          echo "Uploaded workflow artifact: tauri-${{ matrix.name }}-${{ matrix.arch }}"
-
-  finalize-release:
-    name: Finalize release and upload artifacts
+  release:
+    name: Publish Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
+    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Checkout (needed for changelog)
+      - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
-      - name: Download all workflow artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          # omit `name` to download all artifacts produced by the workflow
-          path: ./dist_artifacts
+          path: artifacts
 
-      - name: Generate release notes
-        id: notes
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          # Find the previous tag
-          PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p' || true)
-          if [ -z "$PREV_TAG" ]; then
-            echo "No previous tag found, generating notes from all history"
-            RANGE=""
-          else
-            echo "Generating changelog from ${PREV_TAG} to ${TAG}"
-            RANGE="${PREV_TAG}..${TAG}"
-          fi
-
-          {
-            echo "RELEASE_NOTES<<RELEASE_NOTES_EOF"
-            echo "## Monochrome+ ${TAG}"
-            echo ""
-            echo "### What's Changed"
-            echo ""
-
-            # Features
-            FEATURES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^feat" --no-merges 2>/dev/null || true)
-            if [ -n "$FEATURES" ]; then
-              echo "#### ✨ Features"
-              echo "$FEATURES"
-              echo ""
-            fi
-
-            # Fixes
-            FIXES=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^fix" --no-merges 2>/dev/null || true)
-            if [ -n "$FIXES" ]; then
-              echo "#### 🐛 Bug Fixes"
-              echo "$FIXES"
-              echo ""
-            fi
-
-            # Performance
-            PERF=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^perf" --no-merges 2>/dev/null || true)
-            if [ -n "$PERF" ]; then
-              echo "#### ⚡ Performance"
-              echo "$PERF"
-              echo ""
-            fi
-
-            # Other changes (not feat/fix/perf/style/chore/ci/docs/build/refactor merge commits)
-            OTHER=$(git log $RANGE --pretty=format:"- %s (%h)" --no-merges --invert-grep --grep="^feat" --grep="^fix" --grep="^perf" --grep="^style" --grep="^chore" --grep="^ci" --grep="^docs" --grep="^build" --grep="^refactor" 2>/dev/null || true)
-            if [ -n "$OTHER" ]; then
-              echo "#### 📦 Other Changes"
-              echo "$OTHER"
-              echo ""
-            fi
-
-            echo "### Downloads"
-            echo "- **Windows**: \`.exe\` installer (NSIS) or \`.msi\`"
-            echo "- **macOS**: \`.dmg\` (Universal binary — Intel & Apple Silicon)"
-            echo "- **Linux**: \`.AppImage\`, \`.deb\`, \`.rpm\`"
-            echo ""
-            echo "### Notes"
-            echo "- Auto-updates are built-in. The app will check for updates on startup."
-            echo ""
-            echo "---"
-            echo ""
-            if [ -n "$PREV_TAG" ]; then
-              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}"
-            else
-              echo "**Full Changelog**: https://github.com/${{ github.repository }}/commits/${TAG}"
-            fi
-            echo "RELEASE_NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2.6.1
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Monochrome+ ${{ github.ref_name }}"
-          body: ${{ steps.notes.outputs.RELEASE_NOTES }}
-          draft: false
-          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload built bundles to Release (all detected packaging files)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload all bundles
         run: |
-          set -e
-          TAG="${GITHUB_REF_NAME}"
-          # Authenticate gh CLI with the token so uploads succeed (gh should pick GITHUB_TOKEN in actions, but make explicit)
-          printf '%s' "${GITHUB_TOKEN}" | gh auth login --with-token >/dev/null 2>&1
-
-          # Find and upload relevant artifacts
-          find ./dist_artifacts -type f \( \
-            -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o \
-            -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.msi" \
-          \) -print0 | while IFS= read -r -d '' file; do
-            echo "Uploading $file to release ${TAG}"
-            gh release upload "${TAG}" "$file" --clobber || true
+          for file in $(find artifacts -type f \( \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.rpm" -o \
+            -name "*.dmg" -o \
+            -name "*.exe" -o \
+            -name "*.msi" \
+          \)); do
+            echo "Uploading $file"
+            gh release upload "${GITHUB_REF_NAME}" "$file" --clobber
           done
-
-      - name: Output release link
-        run: |
-          echo "Release published: https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF_NAME}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
