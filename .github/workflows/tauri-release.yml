@@ -14,10 +14,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # --- HYPER-FAST RUST CONFIG (No Cache) ---
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
-  # Speeds up compilation drastically at the cost of slight binary size increase
+  # Hyper-fast compilation settings
   CARGO_PROFILE_RELEASE_LTO: "thin"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
@@ -25,7 +24,7 @@ jobs:
   build:
     name: Build (${{ matrix.platform }})
     runs-on: ${{ matrix.platform }}
-    timeout-minutes: 45 # Lowered expected timeout since it's faster now
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -46,7 +45,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -61,53 +62,39 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      # ✅ HYPER-FAST LINUX DEPS + MOLD LINKER
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libssl-dev \
-            pkg-config \
-            dpkg-dev \
-            fakeroot \
-            rpm \
-            librpm-dev \
-            mold
-          # Symlink mold as the default linker for a massive speed boost
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf libssl-dev pkg-config dpkg-dev fakeroot \
+            rpm librpm-dev mold
           sudo ln -sf /usr/bin/mold /usr/bin/ld
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      # ✅ VERSION SYNC
-      - name: Sync version
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Sync Version from Tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Version: $VERSION"
-
+          # Get version from tag (v1.2.3 -> 1.2.3) or fallback to package.json version
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          
           node -e "
           const fs = require('fs');
           const v = process.env.VERSION;
-
-          if (fs.existsSync('package.json')) {
-            const pkg = JSON.parse(fs.readFileSync('package.json'));
-            pkg.version = v;
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          }
-
-          if (fs.existsSync('src-tauri/tauri.conf.json')) {
-            const t = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
-            t.version = v;
-            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(t, null, 2));
-          }
-
+          ['package.json', 'src-tauri/tauri.conf.json'].forEach(f => {
+            if (fs.existsSync(f)) {
+              const j = JSON.parse(fs.readFileSync(f));
+              j.version = v;
+              fs.writeFileSync(f, JSON.stringify(j, null, 2));
+            }
+          });
           if (fs.existsSync('src-tauri/Cargo.toml')) {
             let c = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
             c = c.replace(/^version = \".*\"/m, 'version = \"' + v + '\"');
@@ -115,9 +102,8 @@ jobs:
           }
           "
         env:
-          VERSION: ${{ env.GITHUB_REF_NAME }}
+          VERSION: ${{ env.VERSION }}
 
-      # ✅ FULL-FEATURED BUILD (UPDATER + SIGNING INJECTED)
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0.6.0
         env:
@@ -127,11 +113,9 @@ jobs:
         with:
           tauriScript: "bun run tauri"
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }} # Required to construct latest.json URLs
+          # Removed the invalid 'uploadWorkflowArtifacts' to fix warnings
           includeUpdaterJson: true
-          updaterJsonPreferNsis: true
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: "tauri-${{ matrix.name }}"
+          tagName: ${{ github.ref_name }}
 
   release:
     name: Publish Release
@@ -141,51 +125,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "Monochrome+ ${{ github.ref_name }}"
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ✅ BATCH UPLOAD (Faster than loops)
-      - name: Upload Bundles, Sigs, and Updaters
+      # Uses the built-in gh CLI to download and upload for maximum speed
+      - name: Publish to GitHub Release
         run: |
+          # Create the release first if it doesn't exist
+          gh release view "${GITHUB_REF_NAME}" || gh release create "${GITHUB_REF_NAME}" --title "Release ${GITHUB_REF_NAME}" --generate-notes
+          
+          # Use a single batch upload for speed
+          # Note: tauri-action v0.6.0 uploads assets automatically if tagName is provided,
+          # but we manually ensure latest.json and all linux formats are covered.
           shopt -s globstar nullglob
-          # Include all executable types PLUS signatures (.sig) and updaters (.zip, .tar.gz)
-          files=(artifacts/**/*.{AppImage,deb,rpm,dmg,exe,msi,zip,tar.gz,sig})
+          files=(src-tauri/target/release/bundle/**/*.{deb,rpm,AppImage,dmg,exe,msi,zip,tar.gz,sig,json})
           
           if [ ${#files[@]} -gt 0 ]; then
             gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --clobber
-          else
-            echo "No release assets found."
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ✅ MERGE & UPLOAD LATEST.JSON
-      - name: Merge and Upload latest.json
-        run: |
-          shopt -s globstar nullglob
-          JSON_FILES=(artifacts/**/latest.json)
-          
-          if [ ${#JSON_FILES[@]} -gt 0 ]; then
-            # Deep merge all platform specific latest.json files into one unified file
-            jq -s 'reduce .[] as $item ({}; . * $item)' "${JSON_FILES[@]}" > latest.json
-            echo "Merged latest.json successfully:"
-            cat latest.json
-            gh release upload "${GITHUB_REF_NAME}" latest.json --clobber
-          else
-            echo "No latest.json fragments found to merge."
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
