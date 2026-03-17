@@ -4,13 +4,22 @@
         "https://us-west.monochrome.tf",
         "https://arran.monochrome.tf",
         "https://api.monochrome.tf/",
-        "https://triton.squid.wtf",
         "https://monochrome-api.samidy.com",
+        "https://triton.squid.wtf",
+        "https://wolf.qqdl.site",
+        "https://maus.qqdl.site",
+        "https://vogel.qqdl.site",
+        "https://hund.qqdl.site",
+        "https://tidal.kinoplus.online"
+    ],
+    "streaming": [
+        "https://arran.monochrome.tf",
+        "https://triton.squid.wtf",
         "https://wolf.qqdl.site",
         "https://maus.qqdl.site",
         "https://vogel.qqdl.site",
         "https://katze.qqdl.site",
-        "https://hund.qqdl.site"
-    ],
-    "streaming": ["https://api.monochrome.tf/", "https://triton.squid.wtf"]
+        "https://hund.qqdl.site",
+        "https://hifi.p1nkhamster.xyz/"
+    ]
 }
