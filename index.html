@@ -2050,6 +2050,61 @@
                             </div>
                             <div class="card-grid" id="home-recent-mixed"></div>
                         </section>
+                        <section class="content-section home-discovery-hub" id="home-discovery-hub-section">
+                            <div class="section-head section-head-compact section-head-discovery">
+                                <div>
+                                    <p class="section-eyebrow">Spotlight + Hot & New</p>
+                                    <h2 class="section-title" style="margin-bottom: 0">Discovery Deck</h2>
+                                    <p class="section-subtitle">
+                                        Live modules from your current region, seamlessly blended into Home.
+                                    </p>
+                                </div>
+                            </div>
+                            <div id="home-discovery-content" class="home-discovery-content">
+                                <section class="home-discovery-module" id="home-spotlight-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>Spotlight</h3>
+                                    </div>
+                                    <div id="home-spotlight-hero" class="home-spotlight-hero"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-hot-tracks-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>Hot Right Now</h3>
+                                    </div>
+                                    <div class="track-list" id="home-hot-tracks"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-new-tracks-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>New Tracks</h3>
+                                    </div>
+                                    <div class="track-list" id="home-new-tracks"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-hot-albums-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>Trending Albums</h3>
+                                    </div>
+                                    <div class="card-grid" id="home-hot-albums"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-new-albums-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>New Albums</h3>
+                                    </div>
+                                    <div class="card-grid" id="home-new-albums"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-featured-playlists-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>Featured Playlists</h3>
+                                    </div>
+                                    <div class="card-grid" id="home-featured-playlists"></div>
+                                </section>
+                                <section class="home-discovery-module" id="home-from-editors-module">
+                                    <div class="home-discovery-module-head">
+                                        <h3>From Editors</h3>
+                                    </div>
+                                    <div class="card-grid" id="home-from-editors"></div>
+                                </section>
+                            </div>
+                        </section>
                         <section class="content-section" id="home-editors-picks-section">
                             <div class="section-head section-head-compact">
                                 <h2 class="section-title" style="margin-bottom: 0">Random Picks</h2>
@@ -4078,6 +4133,15 @@
                             </div>
 
                             <div class="settings-group">
+                                <div class="setting-item">
+                                    <div class="info">
+                                        <span class="label">Home Country</span>
+                                        <span class="description"
+                                            >Choose the country used for Spotlight, Hot, and New modules</span
+                                        >
+                                    </div>
+                                    <select id="home-country-select" aria-label="Select home country"></select>
+                                </div>
                                 <div class="setting-item">
                                     <div class="info">
                                         <span class="label">Shuffle Random Picks</span>

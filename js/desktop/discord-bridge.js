@@ -87,7 +87,10 @@ function resolveTrackCoverCandidates(player, track) {
         }
     }
 
-    return uniqueNonEmptyStrings(candidates).filter((url) => /^https:\/\//i.test(url));
+    return uniqueNonEmptyStrings(candidates)
+        .map((url) => url.replace(/^http:\/\//i, 'https://'))
+        .filter((url) => /^https:\/\//i.test(url))
+        .filter((url) => url.length <= 1800);
 }
 
 function buildPayload(player, track, isPaused = false) {
@@ -166,7 +169,10 @@ export function initializeDiscordBridge(player) {
         if (!track) {
             try {
                 await invokeTauri('discord_bridge_clear');
-            } catch {}
+            } catch (_error) {
+                void _error;
+                // ignore clear failures during teardown
+            }
             return;
         }
 
@@ -208,20 +214,26 @@ export function initializeDiscordBridge(player) {
         for (const fn of cleanups) {
             try {
                 fn();
-            } catch {}
+            } catch (_error) {
+                void _error;
+                // ignore listener cleanup failures
+            }
         }
 
         try {
             await invokeTauri('discord_bridge_stop');
-        } catch {}
+        } catch (_error) {
+            void _error;
+            // ignore stop failures during teardown
+        }
     };
 
     window.__monochromeDiscordBridgeCleanup = cleanup;
 
-    // Heartbeat for timestamp updates
+    // Heartbeat for timestamp/cover refresh
     heartbeatId = window.setInterval(() => {
         void sendCurrent(player.audio.paused);
-    }, 15000);
+    }, 10000);
 
     // Start the bridge (fire and forget - Rust handles connection)
     invokeTauri('discord_bridge_start', { clientId: DISCORD_CLIENT_ID }).catch((error) => {

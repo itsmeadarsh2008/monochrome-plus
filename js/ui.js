@@ -54,6 +54,7 @@ import {
     createTrackFromSong,
 } from './tracker.js';
 import { scrollToTop } from './smooth-scrolling.js';
+import { getHomeSections } from './api/home.js';
 
 fontSettings.applyFont();
 fontSettings.applyFontSize();
@@ -134,6 +135,8 @@ export class UIRenderer {
         this._friendsSuggestionQuery = '';
         this._friendsSuggestionTimer = null;
         this._friendsSuggestionRequestToken = 0;
+        this._homeDiscoveryLastHash = '';
+        this._homeDiscoveryCache = null;
         this.fullscreenDiscScrubCleanup = null;
         this._fullscreenAudioPlayer = null;
         this._fullscreenDiscResizeHandler = null;
@@ -1036,7 +1039,10 @@ export class UIRenderer {
             if (existingVideo) {
                 try {
                     existingVideo.pause();
-                } catch {}
+                } catch (_error) {
+                    void _error;
+                    // ignore if media element is already detached
+                }
                 existingVideo.remove();
             }
             bgElement.classList.remove('has-video');
@@ -2441,6 +2447,235 @@ export class UIRenderer {
         this.renderHomeAlbums();
         this.renderHomeArtists();
         this.renderHomeRecent();
+        this.renderHomeDiscoverySections().catch((error) => {
+            console.warn('[Home] Failed to render discovery sections:', error);
+            const section = document.getElementById('home-discovery-hub-section');
+            if (section) {
+                section.style.display = 'none';
+            }
+        });
+    }
+
+    _extractEntity(item) {
+        if (!item || typeof item !== 'object') return null;
+        if (item.item && typeof item.item === 'object') return item.item;
+        if (item.track && typeof item.track === 'object') return item.track;
+        if (item.album && typeof item.album === 'object' && item.id === undefined) return item.album;
+        if (item.playlist && typeof item.playlist === 'object') return item.playlist;
+        return item;
+    }
+
+    _normalizeDiscoveryList(items = []) {
+        const normalized = [];
+        const seen = new Set();
+        items.forEach((entry) => {
+            const entity = this._extractEntity(entry);
+            if (!entity || typeof entity !== 'object') return;
+            const key = String(entity.uuid || entity.id || entity.title || '');
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            normalized.push(entity);
+        });
+        return normalized;
+    }
+
+    _setDiscoveryModuleVisibility(moduleId, visible) {
+        const module = document.getElementById(moduleId);
+        if (!module) return;
+        module.style.display = visible ? '' : 'none';
+    }
+
+    _renderDiscoveryCardGrid(containerId, items, type) {
+        const container = document.getElementById(containerId);
+        if (!container) return false;
+
+        const normalized = this._normalizeDiscoveryList(items);
+        if (!normalized.length) {
+            container.innerHTML = '';
+            return false;
+        }
+
+        if (type === 'album') {
+            container.innerHTML = normalized
+                .slice(0, 12)
+                .map((album) => this.createAlbumCardHTML(album))
+                .join('');
+            normalized.slice(0, 12).forEach((album) => {
+                const el = container.querySelector(`[data-album-id="${album.id}"]`);
+                if (el) {
+                    trackDataStore.set(el, album);
+                    this.updateLikeState(el, 'album', album.id);
+                }
+            });
+            return true;
+        }
+
+        if (type === 'playlist') {
+            container.innerHTML = normalized
+                .slice(0, 12)
+                .map((playlist) => this.createPlaylistCardHTML(playlist))
+                .join('');
+            normalized.slice(0, 12).forEach((playlist) => {
+                const id = playlist.uuid || playlist.id;
+                const selector = playlist.uuid
+                    ? `[data-playlist-id="${playlist.uuid}"]`
+                    : `[data-playlist-id="${playlist.id}"]`;
+                const el = container.querySelector(selector);
+                if (el) {
+                    trackDataStore.set(el, playlist);
+                    if (id) this.updateLikeState(el, 'playlist', id);
+                }
+            });
+            return true;
+        }
+
+        return false;
+    }
+
+    _renderDiscoveryTrackList(containerId, items) {
+        const container = document.getElementById(containerId);
+        if (!container) return false;
+        const normalized = this._normalizeDiscoveryList(items);
+        if (!normalized.length) {
+            container.innerHTML = '';
+            return false;
+        }
+        this.renderListWithTracks(container, normalized.slice(0, 18), true);
+        return true;
+    }
+
+    _renderSpotlightHero(items) {
+        const container = document.getElementById('home-spotlight-hero');
+        if (!container) return false;
+
+        const normalized = this._normalizeDiscoveryList(items).slice(0, 5);
+        if (!normalized.length) {
+            container.innerHTML = '';
+            return false;
+        }
+
+        const [lead, ...rest] = normalized;
+        const leadImage = this.api.getCoverUrl(lead.album?.cover || lead.cover || lead.image || lead.squareImage, '640');
+        const leadTitle = escapeHtml(getTrackTitle(lead) || lead.title || 'Spotlight');
+        const leadArtist = escapeHtml(getTrackArtists(lead) || lead.artist?.name || lead.artists?.[0]?.name || '');
+
+        container.innerHTML = `
+            <article class="spotlight-lead card" data-spotlight-id="${lead.id || lead.uuid || ''}">
+                <div class="spotlight-lead-media">
+                    <img src="${leadImage}" alt="${leadTitle}" loading="lazy" />
+                </div>
+                <div class="spotlight-lead-content">
+                    <p class="spotlight-kicker">Featured right now</p>
+                    <h3>${leadTitle}</h3>
+                    <p>${leadArtist}</p>
+                </div>
+            </article>
+            <div class="spotlight-subgrid">
+                ${rest
+                    .map((item) => {
+                        const itemTitle = escapeHtml(getTrackTitle(item) || item.title || 'Untitled');
+                        const itemArtist = escapeHtml(
+                            getTrackArtists(item) || item.artist?.name || item.artists?.[0]?.name || ''
+                        );
+                        const itemImage = this.api.getCoverUrl(
+                            item.album?.cover || item.cover || item.image || item.squareImage,
+                            '320'
+                        );
+                        return `
+                            <article class="spotlight-chip card" data-spotlight-id="${item.id || item.uuid || ''}">
+                                <img src="${itemImage}" alt="${itemTitle}" loading="lazy" />
+                                <div>
+                                    <h4>${itemTitle}</h4>
+                                    <p>${itemArtist}</p>
+                                </div>
+                            </article>
+                        `;
+                    })
+                    .join('')}
+            </div>
+        `;
+
+        const playItem = (item) => {
+            const list = this._normalizeDiscoveryList(normalized);
+            const startIndex = list.findIndex((entry) => String(entry.id) === String(item.id));
+            this.player.setQueue(list, Math.max(0, startIndex));
+            this.player.playTrackFromQueue();
+        };
+
+        const leadEl = container.querySelector('.spotlight-lead');
+        if (leadEl) {
+            trackDataStore.set(leadEl, lead);
+            leadEl.addEventListener('click', () => playItem(lead));
+        }
+
+        container.querySelectorAll('.spotlight-chip').forEach((chip) => {
+            const chipId = chip.getAttribute('data-spotlight-id');
+            const item = rest.find((entry) => String(entry.id) === String(chipId));
+            if (!item) return;
+            trackDataStore.set(chip, item);
+            chip.addEventListener('click', () => playItem(item));
+        });
+
+        return true;
+    }
+
+    async renderHomeDiscoverySections(forceRefresh = false) {
+        const section = document.getElementById('home-discovery-hub-section');
+        if (!section) return;
+
+        const content = document.getElementById('home-content');
+        if (!content || content.style.display === 'none') {
+            section.style.display = 'none';
+            return;
+        }
+
+        let data = this._homeDiscoveryCache;
+        if (!data || forceRefresh) {
+            data = await getHomeSections();
+            this._homeDiscoveryCache = data;
+        }
+
+        const listHash = JSON.stringify({
+            spotlightedUploads: data.spotlightedUploads?.length || 0,
+            trendingTracks: data.trendingTracks?.length || 0,
+            newTracks: data.newTracks?.length || 0,
+            trendingAlbums: data.trendingAlbums?.length || 0,
+            newAlbums: data.newAlbums?.length || 0,
+            featuredPlaylists: data.featuredPlaylists?.length || 0,
+            fromEditors: data.fromEditors?.length || 0,
+        });
+
+        if (!forceRefresh && this._homeDiscoveryLastHash === listHash) {
+            section.style.display = '';
+            return;
+        }
+        this._homeDiscoveryLastHash = listHash;
+
+        const spotlightItems =
+            data.spotlightedUploads?.length > 0 ? data.spotlightedUploads : data.trendingTracks || data.newTracks || [];
+
+        const hasSpotlight = this._renderSpotlightHero(spotlightItems);
+        const hasHotTracks = this._renderDiscoveryTrackList('home-hot-tracks', data.trendingTracks || []);
+        const hasNewTracks = this._renderDiscoveryTrackList('home-new-tracks', data.newTracks || []);
+        const hasHotAlbums = this._renderDiscoveryCardGrid('home-hot-albums', data.trendingAlbums || [], 'album');
+        const hasNewAlbums = this._renderDiscoveryCardGrid('home-new-albums', data.newAlbums || [], 'album');
+        const hasFeatured = this._renderDiscoveryCardGrid(
+            'home-featured-playlists',
+            data.featuredPlaylists || [],
+            'playlist'
+        );
+        const hasEditors = this._renderDiscoveryCardGrid('home-from-editors', data.fromEditors || [], 'playlist');
+
+        this._setDiscoveryModuleVisibility('home-spotlight-module', hasSpotlight);
+        this._setDiscoveryModuleVisibility('home-hot-tracks-module', hasHotTracks);
+        this._setDiscoveryModuleVisibility('home-new-tracks-module', hasNewTracks);
+        this._setDiscoveryModuleVisibility('home-hot-albums-module', hasHotAlbums);
+        this._setDiscoveryModuleVisibility('home-new-albums-module', hasNewAlbums);
+        this._setDiscoveryModuleVisibility('home-featured-playlists-module', hasFeatured);
+        this._setDiscoveryModuleVisibility('home-from-editors-module', hasEditors);
+
+        const hasAny = hasSpotlight || hasHotTracks || hasNewTracks || hasHotAlbums || hasNewAlbums || hasFeatured || hasEditors;
+        section.style.display = hasAny ? '' : 'none';
     }
 
     async renderProfilePage() {

@@ -3026,9 +3026,9 @@ export const audioProcessingSettings = {
 
     getMode() {
         try {
-            return localStorage.getItem(this.STORAGE_KEY) || 'normalized';
+            return localStorage.getItem(this.STORAGE_KEY) || 'pure';
         } catch {
-            return 'normalized';
+            return 'pure';
         }
     },
 

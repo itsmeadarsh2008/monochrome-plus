@@ -11400,6 +11400,151 @@ textarea:focus {
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
+.home-discovery-hub {
+    position: relative;
+    padding: 1.2rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background:
+        radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--primary) 22%, transparent) 0%, transparent 52%),
+        radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
+        linear-gradient(
+            152deg,
+            color-mix(in srgb, var(--card) 87%, transparent) 0%,
+            color-mix(in srgb, var(--background) 94%, transparent) 100%
+        );
+    box-shadow: 0 10px 28px rgb(0, 0, 0, 0.2);
+    overflow: clip;
+}
+
+.home-discovery-content {
+    display: grid;
+    gap: 1rem;
+}
+
+.home-discovery-module {
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: color-mix(in srgb, var(--card) 84%, transparent);
+    border-radius: 0.9rem;
+    padding: 0.9rem;
+}
+
+.home-discovery-module-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.65rem;
+}
+
+.home-discovery-module-head h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--muted-foreground) 92%, transparent);
+}
+
+.home-spotlight-hero {
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+}
+
+.spotlight-lead {
+    display: flex;
+    gap: 0.85rem;
+    border-radius: 1rem;
+    overflow: hidden;
+    min-height: 180px;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--card) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.spotlight-lead-media {
+    flex: 0 0 38%;
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+    border-radius: 0.85rem;
+    overflow: hidden;
+}
+
+.spotlight-lead-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0.85rem;
+}
+
+.spotlight-lead-content {
+    padding: 0.85rem 0.95rem 0.85rem 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.spotlight-kicker {
+    margin: 0;
+    font-size: 0.73rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
+}
+
+.spotlight-lead-content h3 {
+    margin: 0;
+    font-size: 1.16rem;
+    line-height: 1.25;
+}
+
+.spotlight-lead-content p {
+    margin: 0;
+    font-size: 0.92rem;
+    color: color-mix(in srgb, var(--muted-foreground) 90%, transparent);
+}
+
+.spotlight-subgrid {
+    display: grid;
+    gap: 0.6rem;
+    align-content: start;
+}
+
+.spotlight-chip {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 0.75rem;
+    cursor: pointer;
+}
+
+.spotlight-chip img {
+    width: 58px;
+    height: 58px;
+    border-radius: 0.6rem;
+    object-fit: cover;
+}
+
+.spotlight-chip h4 {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.25;
+}
+
+.spotlight-chip p {
+    margin: 0.2rem 0 0;
+    font-size: 0.79rem;
+    color: color-mix(in srgb, var(--muted-foreground) 90%, transparent);
+}
+
+@media (width <= 980px) {
+    .home-spotlight-hero {
+        grid-template-columns: 1fr;
+    }
+}
+
 .recommended-artists-grid,
 #home-recommended-artists.card-grid {
     grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));

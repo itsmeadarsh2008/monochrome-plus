@@ -22,7 +22,17 @@ import {
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
 import { AutoMixEngine, checkKeyCompatibility } from './automix.js';
-import { AutoMixEngineHowler, AutoMixController } from './automix-howler.js';
+import { AutoMixController } from './automix-howler.js';
+import {
+    isLinuxTauri,
+    audioEngineInit,
+    audioEngineLoad,
+    audioEnginePause,
+    audioEnginePlay,
+    audioEngineSeek,
+    audioEngineSetVolume,
+    blobUrlToMpdXml,
+} from './desktop/tauri-audio-engine.js';
 
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
@@ -48,6 +58,10 @@ export class Player {
         this._autoMixRequest = null;
         this._autoMixLastPopulateAt = 0;
         this._autoMixLastSeedSignature = '';
+        this._transitionState = 'idle';
+        this._preloadFailureCounts = new Map();
+        this._linuxRustAudioActive = false;
+        this._linuxRustAudioEligible = false;
 
         // AutoMix DJ transition state
         this._mixAudio = document.createElement('audio');
@@ -125,6 +139,14 @@ export class Player {
 
         // Set up initial audio event listeners
         this._setupAudioEventListeners();
+
+        isLinuxTauri()
+            .then((isLinux) => {
+                this._linuxRustAudioEligible = isLinux;
+            })
+            .catch(() => {
+                this._linuxRustAudioEligible = false;
+            });
     }
 
     /**
@@ -181,7 +203,8 @@ export class Player {
                 this.repeatMode !== REPEAT_MODE.ONE &&
                 !this._crossfadeInProgress &&
                 !this._gaplessTransitionInProgress &&
-                !this._autoMixTransitionActive
+                !this._autoMixTransitionActive &&
+                this._canStartTransition()
             ) {
                 // Use new Howler-based AutoMix if available
                 if (this._useHowlerAutoMix && this.autoMixController) {
@@ -199,6 +222,7 @@ export class Player {
                         // This ensures the song plays almost to the very end
                         const triggerPoint = 2; // Start transition 2 seconds before end
                         if (remaining <= triggerPoint && remaining > 0 && !this._crossfadeInProgress) {
+                            this._setTransitionState('preparing');
                             this._crossfadeInProgress = true;
                             this._startAutoMixTransition(crossfadeDuration);
                         }
@@ -214,7 +238,8 @@ export class Player {
                 playbackBehaviorSettings.isCrossfadeEnabled() &&
                 this.repeatMode !== REPEAT_MODE.ONE &&
                 !this._crossfadeInProgress &&
-                !this._gaplessTransitionInProgress
+                !this._gaplessTransitionInProgress &&
+                this._canStartTransition()
             ) {
                 const duration = this.audio.duration;
                 const crossfadeDuration = playbackBehaviorSettings.getCrossfadeDuration();
@@ -223,6 +248,7 @@ export class Player {
                     // Trigger transition only in the last 2 seconds - play song to the end
                     const triggerPoint = 2;
                     if (remaining <= triggerPoint && remaining > 0 && !this._crossfadeInProgress) {
+                        this._setTransitionState('preparing');
                         this._crossfadeInProgress = true;
                         this._startCrossfadeOut(crossfadeDuration);
                     }
@@ -232,7 +258,8 @@ export class Player {
             const shouldAdvanceGapless =
                 playbackBehaviorSettings.isGaplessEnabled() &&
                 this.repeatMode !== REPEAT_MODE.ONE &&
-                !this._gaplessTransitionInProgress;
+                !this._gaplessTransitionInProgress &&
+                this._canStartTransition();
 
             if (shouldAdvanceGapless) {
                 const duration = this.audio.duration;
@@ -241,6 +268,7 @@ export class Player {
                 if (hasDuration) {
                     const remaining = duration - this.audio.currentTime;
                     if (remaining <= 0.2 && remaining >= -0.08) {
+                        this._setTransitionState('preparing');
                         this._gaplessTransitionInProgress = true;
                         this.playNext();
                         return;
@@ -258,6 +286,84 @@ export class Player {
         if (!this._playbackMonitorTimer) return;
         clearTimeout(this._playbackMonitorTimer);
         this._playbackMonitorTimer = null;
+    }
+
+    _setTransitionState(nextState) {
+        this._transitionState = nextState;
+    }
+
+    _canStartTransition() {
+        return this._transitionState === 'idle';
+    }
+
+    async _resolveStreamUrlWithRetry(track, maxAttempts = 3, initialDelayMs = 220) {
+        if (!track || track.id === undefined || track.id === null) return null;
+        if (this.preloadCache.has(track.id)) {
+            return this.preloadCache.get(track.id);
+        }
+
+        let lastError = null;
+        let delayMs = initialDelayMs;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const streamUrl = await this.api.getStreamUrl(track.id, this.quality);
+                if (streamUrl) {
+                    this.preloadCache.set(track.id, streamUrl);
+                    this._preloadFailureCounts.delete(String(track.id));
+                    return streamUrl;
+                }
+                lastError = new Error('Empty stream URL');
+            } catch (error) {
+                lastError = error;
+            }
+
+            if (attempt < maxAttempts) {
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+                delayMs = Math.min(1300, Math.round(delayMs * 2));
+            }
+        }
+
+        const failureKey = String(track.id);
+        this._preloadFailureCounts.set(failureKey, (this._preloadFailureCounts.get(failureKey) || 0) + 1);
+        throw lastError || new Error(`Failed to resolve stream URL for track ${track.id}`);
+    }
+
+    async _tryStartLinuxRustAudio(track, streamUrl, startTime = 0) {
+        if (!this._linuxRustAudioEligible || !streamUrl) return false;
+
+        try {
+            await audioEngineInit();
+            const descriptor = {
+                sourceType: 'direct_url',
+                url: streamUrl,
+                startPositionMs: Math.max(0, Math.floor((startTime || 0) * 1000)),
+            };
+
+            if (streamUrl.startsWith('blob:') && !track?.isLocal) {
+                const mpdXml = await blobUrlToMpdXml(streamUrl);
+                if (mpdXml && mpdXml.includes('<MPD')) {
+                    descriptor.sourceType = 'dash_mpd';
+                    descriptor.mpdXml = mpdXml;
+                    delete descriptor.url;
+                } else {
+                    return false;
+                }
+            } else if (track?.isLocal && track?.file?.path) {
+                descriptor.sourceType = 'local_file';
+                descriptor.localPath = track.file.path;
+                delete descriptor.url;
+            }
+
+            await audioEngineLoad(descriptor);
+            await audioEngineSetVolume(this.userVolume);
+            this._linuxRustAudioActive = true;
+            return true;
+        } catch (error) {
+            console.warn('[LinuxAudio] Rust engine load failed, falling back to web audio:', error);
+            this._linuxRustAudioActive = false;
+            return false;
+        }
     }
 
     /**
@@ -432,6 +538,7 @@ export class Player {
     }
 
     _startCrossfadeOut(duration) {
+        this._setTransitionState('crossfading');
         const startVolume = this.audio.volume;
         const fadeInterval = 50;
         const steps = (duration * 1000) / fadeInterval;
@@ -451,8 +558,9 @@ export class Player {
         setTimeout(() => {
             this._crossfadeInProgress = false;
             this._gaplessTransitionInProgress = true;
+            this._setTransitionState('swap');
             this.playNext();
-        }, 300);
+        }, Math.min(1400, Math.max(480, Math.round(duration * 180))));
     }
 
     _cancelCrossfade() {
@@ -461,6 +569,7 @@ export class Player {
             this._crossfadeFadeTimer = null;
         }
         this._crossfadeInProgress = false;
+        this._setTransitionState('idle');
 
         // Cancel AutoMix transition
         if (this._autoMixTransitionActive) {
@@ -556,6 +665,7 @@ export class Player {
         if (this._autoMixTransitionActive) return;
         this._autoMixTransitionActive = true;
         this._autoMixAborted = false;
+        this._setTransitionState('preparing');
         this._showMixingIndicator();
 
         const currentQueue = this.getCurrentQueue();
@@ -564,6 +674,7 @@ export class Player {
         if (nextIndex >= currentQueue.length) {
             this._autoMixTransitionActive = false;
             this._crossfadeInProgress = false;
+            this._setTransitionState('idle');
             this._hideMixingIndicator();
             return;
         }
@@ -579,15 +690,12 @@ export class Player {
 
             // Get stream URL for next track
             let streamUrl;
-            if (this.preloadCache.has(nextTrack.id)) {
-                streamUrl = this.preloadCache.get(nextTrack.id);
-            } else {
-                streamUrl = await this.api.getStreamUrl(nextTrack.id, this.quality);
-            }
+            streamUrl = await this._resolveStreamUrlWithRetry(nextTrack, 3, 220);
             if (this._autoMixAborted) return;
 
             if (!streamUrl || streamUrl.startsWith('blob:')) {
                 this._autoMixTransitionActive = false;
+                this._setTransitionState('crossfading');
                 this._hideMixingIndicator();
                 this._startCrossfadeOut(duration);
                 return;
@@ -685,12 +793,15 @@ export class Player {
                     await this.autoMixEngine.startTransition(primaryGain, mixGain, timing, {
                         applyEQ: true,
                     });
+                    this._setTransitionState('crossfading');
                 } else {
                     // Fallback to basic crossfade
+                    this._setTransitionState('crossfading');
                     audioContextManager.scheduleCrossfade(duration);
                 }
             } else {
                 // Fallback to basic crossfade
+                this._setTransitionState('crossfading');
                 if (this._mixSourceReady) {
                     audioContextManager.setMixGain(0);
                 } else {
@@ -732,6 +843,7 @@ export class Player {
 
             // TRUE GAPLESS: Swap audio element references instead of reloading
             // This ensures continuous playback without any loading gap
+            this._setTransitionState('swap');
             const oldAudio = this.audio;
             const newAudio = this._mixAudio;
 
@@ -782,6 +894,7 @@ export class Player {
             this._estimatedBPM = nextBPM || 0;
             this._silenceStart = 0;
             this._silenceDetected = false;
+            this._setTransitionState('settled');
 
             this._updateTrackInfoUI(nextTrack);
             this.updateMediaSession(nextTrack);
@@ -791,6 +904,7 @@ export class Player {
             this.saveQueueState();
             this.preloadNextTracks();
             this.ensureAutoMixQueue().catch(() => {});
+            this._setTransitionState('idle');
         } catch (error) {
             console.warn('[AutoMix] Transition failed, falling back:', error);
             this._mixAudio.pause();
@@ -805,9 +919,13 @@ export class Player {
             }
             this._crossfadeInProgress = false;
             this._gaplessTransitionInProgress = true;
+            this._setTransitionState('swap');
             this.playNext();
         } finally {
             this._autoMixTransitionActive = false;
+            if (this._transitionState !== 'swap') {
+                this._setTransitionState('idle');
+            }
             this._hideMixingIndicator();
         }
     }
@@ -908,6 +1026,7 @@ export class Player {
         if (this._gaplessTransitionInProgress) {
             return;
         }
+        this._setTransitionState('swap');
         this.playNext();
     }
 
@@ -961,6 +1080,10 @@ export class Player {
             audioContextManager.setVolume(effectiveVolume);
         } else {
             this.audio.volume = Math.max(0, Math.min(1, effectiveVolume));
+        }
+
+        if (this._linuxRustAudioActive) {
+            audioEngineSetVolume(this.userVolume).catch(() => {});
         }
     }
 
@@ -1113,11 +1236,17 @@ export class Player {
         navigator.mediaSession.setActionHandler('seekto', (details) => {
             if (details.seekTime !== undefined) {
                 this.audio.currentTime = Math.max(0, details.seekTime);
+                if (this._linuxRustAudioActive) {
+                    audioEngineSeek(Math.floor(this.audio.currentTime * 1000)).catch(() => {});
+                }
                 this.updateMediaSessionPositionState();
             }
         });
 
         navigator.mediaSession.setActionHandler('stop', () => {
+            if (this._linuxRustAudioActive) {
+                audioEnginePause().catch(() => {});
+            }
             this.audio.pause();
             this.audio.currentTime = 0;
             this.updateMediaSessionPlaybackState();
@@ -1152,7 +1281,7 @@ export class Player {
             const isTracker = track.isTracker || (track.id && String(track.id).startsWith('tracker-'));
             if (track.isLocal || isTracker || (track.audioUrl && !track.isLocal)) continue;
             try {
-                const streamUrl = await this.api.getStreamUrl(track.id, this.quality);
+                const streamUrl = await this._resolveStreamUrlWithRetry(track, 3, 160);
 
                 if (this.preloadAbortController.signal.aborted) break;
 
@@ -1167,7 +1296,10 @@ export class Player {
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
-                    // console.debug('Failed to get stream URL for preload:', trackTitle);
+                    const failureCount = this._preloadFailureCounts.get(String(track.id)) || 0;
+                    if (failureCount > 3) {
+                        track.isUnavailable = true;
+                    }
                 }
             }
         }
@@ -1231,6 +1363,7 @@ export class Player {
         }
 
         this._gaplessTransitionInProgress = false;
+        this._setTransitionState('idle');
 
         const track = currentQueue[this.currentQueueIndex];
         if (track.isUnavailable) {
@@ -1372,6 +1505,8 @@ export class Player {
                     this.audio.currentTime = startTime;
                 }
                 await this.audio.play();
+                const rustOk = await this._tryStartLinuxRustAudio(track, streamUrl, startTime);
+                this.audio.muted = rustOk;
             } else if (track.isLocal && track.file) {
                 if (this.dashInitialized) {
                     this.dashPlayer.reset(); // Ensure dash is off
@@ -1416,6 +1551,8 @@ export class Player {
                     this.audio.currentTime = startTime;
                 }
                 await this.audio.play();
+                const rustOk = await this._tryStartLinuxRustAudio(track, streamUrl, startTime);
+                this.audio.muted = rustOk;
             } else {
                 const isQobuz = String(track.id).startsWith('q:');
 
@@ -1432,7 +1569,7 @@ export class Player {
                     if (this.preloadCache.has(track.id)) {
                         streamUrl = this.preloadCache.get(track.id);
                     } else {
-                        streamUrl = await this.api.getStreamUrl(track.id, this.quality);
+                        streamUrl = await this._resolveStreamUrlWithRetry(track, 3, 220);
                     }
                 } else {
                     // Tidal: Get track data for ReplayGain (should be cached by API)
@@ -1472,7 +1609,7 @@ export class Player {
                     } else if (trackData.info?.manifest) {
                         streamUrl = this.api.extractStreamUrlFromManifest(trackData.info.manifest);
                     } else {
-                        streamUrl = await this.api.getStreamUrl(track.id, this.quality);
+                        streamUrl = await this._resolveStreamUrlWithRetry(track, 3, 220);
                     }
                 }
 
@@ -1489,6 +1626,8 @@ export class Player {
                     if (startTime > 0) {
                         this.dashPlayer.seek(startTime);
                     }
+                    const rustOk = await this._tryStartLinuxRustAudio(track, streamUrl, startTime);
+                    this.audio.muted = rustOk;
                 } else {
                     if (this.dashInitialized) {
                         this.dashPlayer.reset();
@@ -1523,6 +1662,8 @@ export class Player {
                         this.audio.currentTime = startTime;
                     }
                     await this.audio.play();
+                    const rustOk = await this._tryStartLinuxRustAudio(track, streamUrl, startTime);
+                    this.audio.muted = rustOk;
                 }
             }
 
@@ -1592,17 +1733,21 @@ export class Player {
                                 return;
                             }
                             this._gaplessTransitionInProgress = false;
+                            this._setTransitionState('idle');
                         })
                         .catch(() => {
                             this._gaplessTransitionInProgress = false;
+                            this._setTransitionState('idle');
                         });
                 } else {
                     this._gaplessTransitionInProgress = false;
+                    this._setTransitionState('idle');
                 }
                 return;
             }
 
             this._gaplessTransitionInProgress = false;
+            this._setTransitionState('idle');
             this.playTrackFromQueue(0, recursiveCount);
         });
     }
@@ -1642,6 +1787,9 @@ export class Player {
         }
 
         if (this.audio.paused) {
+            if (this._linuxRustAudioActive) {
+                audioEnginePlay().catch(() => {});
+            }
             this.audio.play().catch((e) => {
                 if (e.name === 'NotAllowedError' || e.name === 'AbortError') return;
                 console.error('Play failed, reloading track:', e);
@@ -1650,6 +1798,9 @@ export class Player {
                 }
             });
         } else {
+            if (this._linuxRustAudioActive) {
+                audioEnginePause().catch(() => {});
+            }
             this.audio.pause();
             this.saveQueueState();
         }
@@ -1658,6 +1809,9 @@ export class Player {
     seekBackward(seconds = 10) {
         const newTime = Math.max(0, this.audio.currentTime - seconds);
         this.audio.currentTime = newTime;
+        if (this._linuxRustAudioActive) {
+            audioEngineSeek(Math.floor(newTime * 1000)).catch(() => {});
+        }
         this.updateMediaSessionPositionState();
     }
 
@@ -1665,6 +1819,9 @@ export class Player {
         const duration = this.audio.duration || 0;
         const newTime = Math.min(duration, this.audio.currentTime + seconds);
         this.audio.currentTime = newTime;
+        if (this._linuxRustAudioActive) {
+            audioEngineSeek(Math.floor(newTime * 1000)).catch(() => {});
+        }
         this.updateMediaSessionPositionState();
     }
 

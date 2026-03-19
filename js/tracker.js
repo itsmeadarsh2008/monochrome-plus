@@ -181,7 +181,7 @@ function getDirectUrl(rawUrl) {
     }
 
     // For other URLs, check if they look like direct audio files
-    const audioExtensions = ['.mp3', '.m4a', '.flac', '.wav', '.ogg', '.aac'];
+    const audioExtensions = ['.mp3', '.m4a', '.flac', '.wav', '.ogg', '.aac', '.opus', '.webm', '.aif', '.aiff'];
     const hasAudioExt = audioExtensions.some((ext) => rawUrl.toLowerCase().includes(ext));
 
     if (hasAudioExt) {

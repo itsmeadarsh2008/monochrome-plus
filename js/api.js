@@ -49,6 +49,29 @@ export class LosslessAPI {
         return url;
     }
 
+    _shouldSkipInstanceForCors(baseUrl) {
+        if (typeof window === 'undefined') return false;
+        if (proxySettings.isEnabled()) return false;
+        if (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__) return false;
+
+        const host = (() => {
+            try {
+                return new URL(baseUrl).hostname.toLowerCase();
+            } catch {
+                return '';
+            }
+        })();
+        if (!host) return false;
+
+        // Known browser-hostile CORS/redirect behavior for general API calls.
+        if (host === 'streamex.sh') return true;
+
+        // Never call upstream TIDAL endpoints directly from browser API rotation.
+        if (host.endsWith('tidal.com')) return true;
+
+        return false;
+    }
+
     async fetchWithRetry(relativePath, options = {}) {
         const type = options.type || 'api';
         let instances = await this.settings.getInstances(type);
@@ -89,6 +112,10 @@ export class LosslessAPI {
         for (let attempt = 1; attempt <= maxTotalAttempts; attempt++) {
             const instance = instances[instanceIndex % instances.length];
             const baseUrl = typeof instance === 'string' ? instance : instance.url;
+            if (this._shouldSkipInstanceForCors(baseUrl)) {
+                instanceIndex++;
+                continue;
+            }
             const url = this._buildFetchUrl(baseUrl, relativePath, activeProxy);
 
             try {

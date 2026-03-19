@@ -96,10 +96,6 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         player.updateMediaSessionPositionState();
     });
 
-    audioPlayer.addEventListener('ended', () => {
-        player.handleTrackEnded();
-    });
-
     audioPlayer.addEventListener('timeupdate', async () => {
         const { currentTime, duration } = audioPlayer;
         if (duration) {
@@ -130,6 +126,11 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
     audioPlayer.addEventListener('error', async (e) => {
         console.error('Audio playback error:', e);
         playPauseBtn.innerHTML = SVG_PLAY;
+
+        if (player._linuxRustAudioActive) {
+            // Rust engine is handling playback on Linux Tauri. Ignore web audio errors.
+            return;
+        }
 
         const currentQuality = player.quality;
 

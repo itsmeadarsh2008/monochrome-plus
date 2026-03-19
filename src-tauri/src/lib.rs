@@ -1,10 +1,18 @@
 use discord_presence::models::ActivityType;
 use discord_presence::Client;
+use quick_xml::events::Event;
+use quick_xml::Reader;
+use rodio::{Decoder, OutputStream, OutputStreamBuilder, Sink, Source};
 use serde::Deserialize;
+use serde::Serialize;
+use std::fs::File;
+use std::io::{BufReader, Cursor, Read};
+use std::path::PathBuf;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const DEFAULT_DISCORD_CLIENT_ID: u64 = 1478608904609857576;
 const WORKER_POLL_INTERVAL_MS: u64 = 500;
@@ -24,6 +32,84 @@ struct DiscordPresencePayload {
     button_two_url: Option<String>,
     start_timestamp: Option<i64>,
     end_timestamp: Option<i64>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AudioSourceDescriptor {
+    source_type: String,
+    url: Option<String>,
+    local_path: Option<String>,
+    mpd_xml: Option<String>,
+    start_position_ms: Option<u64>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AudioEngineState {
+    initialized: bool,
+    playing: bool,
+    position_ms: u64,
+    duration_ms: u64,
+    volume: f32,
+    source_type: Option<String>,
+    last_error: Option<String>,
+}
+
+struct AudioEngineInner {
+    stream: Option<OutputStream>,
+    sink: Option<Sink>,
+    source_type: Option<String>,
+    start_at: Option<Instant>,
+    paused_at_ms: u64,
+    duration_ms: u64,
+    volume: f32,
+    last_error: Option<String>,
+}
+
+impl AudioEngineInner {
+    fn new() -> Self {
+        Self {
+            stream: None,
+            sink: None,
+            source_type: None,
+            start_at: None,
+            paused_at_ms: 0,
+            duration_ms: 0,
+            volume: 1.0,
+            last_error: None,
+        }
+    }
+
+    fn is_playing(&self) -> bool {
+        self.sink
+            .as_ref()
+            .map(|sink| !sink.is_paused())
+            .unwrap_or(false)
+    }
+
+    fn current_position_ms(&self) -> u64 {
+        if let Some(sink) = &self.sink {
+            return sink.get_pos().as_millis() as u64;
+        }
+        self.paused_at_ms
+    }
+
+    fn to_state(&self) -> AudioEngineState {
+        AudioEngineState {
+            initialized: self.stream.is_some(),
+            playing: self.is_playing(),
+            position_ms: self.current_position_ms(),
+            duration_ms: self.duration_ms,
+            volume: self.volume,
+            source_type: self.source_type.clone(),
+            last_error: self.last_error.clone(),
+        }
+    }
+}
+
+struct AudioEngineHandle {
+    inner: Arc<Mutex<AudioEngineInner>>,
 }
 
 enum RpcCommand {
@@ -172,7 +258,10 @@ impl WorkerState {
         };
 
         let result = match &self.desired {
-            DesiredPresence::None => client.clear_activity().map(|_| ()).map_err(|e| e.to_string()),
+            DesiredPresence::None => client
+                .clear_activity()
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             DesiredPresence::Idle => client
                 .set_activity(|activity| {
                     activity
@@ -440,6 +529,177 @@ fn spawn_discord_rpc_worker() -> DiscordRpcHandle {
     DiscordRpcHandle { tx }
 }
 
+fn emit_audio_state(app: &tauri::AppHandle, inner: &AudioEngineInner) {
+    let _ = app.emit("audio-engine-state", inner.to_state());
+}
+
+fn ensure_audio_output(inner: &mut AudioEngineInner) -> Result<(), String> {
+    if inner.stream.is_some() {
+        return Ok(());
+    }
+    let stream = OutputStreamBuilder::open_default_stream().map_err(|e| e.to_string())?;
+    inner.stream = Some(stream);
+    Ok(())
+}
+
+fn read_local_file_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let resolved = PathBuf::from(path);
+    let mut file = File::open(&resolved).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes)
+}
+
+fn parse_mpd_urls(mpd_xml: &str) -> Result<Vec<String>, String> {
+    let mut reader = Reader::from_str(mpd_xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    let mut init_url: Option<String> = None;
+    let mut media_tpl: Option<String> = None;
+    let mut start_number: u64 = 1;
+    let mut total_segments: u64 = 0;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
+                if name == "SegmentTemplate" {
+                    for attr in e.attributes().flatten() {
+                        let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
+                        let value = String::from_utf8_lossy(attr.value.as_ref()).to_string();
+                        if key == "initialization" {
+                            init_url = Some(value);
+                        } else if key == "media" {
+                            media_tpl = Some(value);
+                        } else if key == "startNumber" {
+                            start_number = value.parse::<u64>().unwrap_or(1);
+                        }
+                    }
+                }
+                if name == "S" {
+                    let mut repeat = 0_i64;
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"r" {
+                            repeat = String::from_utf8_lossy(attr.value.as_ref())
+                                .parse::<i64>()
+                                .unwrap_or(0);
+                        }
+                    }
+                    total_segments += 1 + u64::try_from(repeat.max(0)).unwrap_or(0);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(e.to_string()),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    let init = init_url.ok_or_else(|| "MPD initialization URL missing".to_string())?;
+    let media = media_tpl.ok_or_else(|| "MPD media template missing".to_string())?;
+    let segment_count = if total_segments > 0 {
+        total_segments
+    } else {
+        160
+    };
+
+    let mut urls = Vec::new();
+    urls.push(init);
+    for n in start_number..(start_number + segment_count) {
+        urls.push(media.replace("$Number$", &n.to_string()));
+    }
+    Ok(urls)
+}
+
+fn download_audio_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let response = reqwest::blocking::get(url).map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    response
+        .bytes()
+        .map(|b| b.to_vec())
+        .map_err(|e| e.to_string())
+}
+
+fn download_mpd_audio_bytes(mpd_xml: &str) -> Result<Vec<u8>, String> {
+    let urls = parse_mpd_urls(mpd_xml)?;
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("MonochromePlus/AudioEngine")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut merged = Vec::new();
+    for url in urls {
+        let response = client.get(url).send().map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(format!("MPD segment HTTP {}", response.status()));
+        }
+        let bytes = response.bytes().map_err(|e| e.to_string())?;
+        merged.extend_from_slice(&bytes);
+    }
+
+    Ok(merged)
+}
+
+fn resolve_source_bytes(desc: &AudioSourceDescriptor) -> Result<Vec<u8>, String> {
+    if let Some(local_path) = &desc.local_path {
+        return read_local_file_bytes(local_path);
+    }
+
+    if let Some(mpd_xml) = &desc.mpd_xml {
+        return download_mpd_audio_bytes(mpd_xml);
+    }
+
+    if let Some(url) = &desc.url {
+        return download_audio_bytes(url);
+    }
+
+    Err("No playable source in descriptor".to_string())
+}
+
+fn load_into_sink(
+    inner: &mut AudioEngineInner,
+    desc: &AudioSourceDescriptor,
+) -> Result<(), String> {
+    ensure_audio_output(inner)?;
+    if let Some(existing) = inner.sink.take() {
+        existing.stop();
+    }
+
+    let stream = inner
+        .stream
+        .as_ref()
+        .ok_or_else(|| "Output stream not initialized".to_string())?;
+    let sink = Sink::connect_new(stream.mixer());
+    sink.set_volume(inner.volume);
+
+    let bytes = resolve_source_bytes(desc)?;
+    let cursor = Cursor::new(bytes);
+    let decoder = Decoder::new(BufReader::new(cursor)).map_err(|e| e.to_string())?;
+    let duration_ms = decoder
+        .total_duration()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default();
+
+    let start_position_ms = desc.start_position_ms.unwrap_or(0);
+    if start_position_ms > 0 {
+        sink.append(decoder.skip_duration(Duration::from_millis(start_position_ms)));
+    } else {
+        sink.append(decoder);
+    }
+
+    sink.play();
+    inner.duration_ms = duration_ms;
+    inner.paused_at_ms = start_position_ms;
+    inner.start_at = Some(Instant::now());
+    inner.source_type = Some(desc.source_type.clone());
+    inner.last_error = None;
+    inner.sink = Some(sink);
+    Ok(())
+}
+
 fn parse_client_id(client_id: Option<String>) -> u64 {
     client_id
         .and_then(|s| s.parse::<u64>().ok())
@@ -485,6 +745,156 @@ fn discord_bridge_stop(state: tauri::State<'_, DiscordRpcHandle>) -> Result<(), 
         .map_err(|_| "Discord RPC worker is not running".to_string())
 }
 
+#[tauri::command]
+fn audio_engine_init(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    ensure_audio_output(&mut inner)?;
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_load(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+    source_descriptor: AudioSourceDescriptor,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    match load_into_sink(&mut inner, &source_descriptor) {
+        Ok(_) => {
+            let snapshot = inner.to_state();
+            emit_audio_state(&app, &inner);
+            Ok(snapshot)
+        }
+        Err(e) => {
+            inner.last_error = Some(e.clone());
+            emit_audio_state(&app, &inner);
+            Err(e)
+        }
+    }
+}
+
+#[tauri::command]
+fn audio_engine_play(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    if let Some(sink) = inner.sink.as_ref() {
+        sink.play();
+        let current_pos = sink.get_pos().as_millis() as u64;
+        inner.paused_at_ms = current_pos;
+        inner.start_at = Some(Instant::now() - Duration::from_millis(current_pos));
+    }
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_pause(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    if let Some(sink) = inner.sink.as_ref() {
+        inner.paused_at_ms = sink.get_pos().as_millis() as u64;
+        sink.pause();
+    }
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_stop(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    if let Some(existing) = inner.sink.take() {
+        existing.stop();
+    }
+    inner.start_at = None;
+    inner.paused_at_ms = 0;
+    inner.duration_ms = 0;
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_seek(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+    position_ms: u64,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    if let Some(sink) = inner.sink.as_ref() {
+        let _ = sink.try_seek(Duration::from_millis(position_ms));
+        inner.paused_at_ms = position_ms;
+        if !sink.is_paused() {
+            inner.start_at = Some(Instant::now() - Duration::from_millis(position_ms));
+        }
+    }
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_set_volume(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AudioEngineHandle>,
+    volume: f32,
+) -> Result<AudioEngineState, String> {
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    let normalized = volume.clamp(0.0, 1.0);
+    inner.volume = normalized;
+    if let Some(sink) = inner.sink.as_ref() {
+        sink.set_volume(normalized);
+    }
+    let snapshot = inner.to_state();
+    emit_audio_state(&app, &inner);
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn audio_engine_get_state(
+    state: tauri::State<'_, AudioEngineHandle>,
+) -> Result<AudioEngineState, String> {
+    let inner = state
+        .inner
+        .lock()
+        .map_err(|_| "Audio engine lock poisoned".to_string())?;
+    Ok(inner.to_state())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -498,6 +908,14 @@ pub fn run() {
             discord_bridge_update,
             discord_bridge_clear,
             discord_bridge_stop,
+            audio_engine_init,
+            audio_engine_load,
+            audio_engine_play,
+            audio_engine_pause,
+            audio_engine_stop,
+            audio_engine_seek,
+            audio_engine_set_volume,
+            audio_engine_get_state,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -511,6 +929,9 @@ pub fn run() {
 
             let rpc_handle = spawn_discord_rpc_worker();
             app.manage(rpc_handle);
+            app.manage(AudioEngineHandle {
+                inner: Arc::new(Mutex::new(AudioEngineInner::new())),
+            });
 
             let handle_clone = handle.clone();
             std::thread::spawn(move || {
