@@ -734,7 +734,7 @@ export async function handleTrackAction(
     if (!item) return;
 
     // Actions not allowed for unavailable tracks
-    const forbiddenForUnavailable = ['add-to-queue', 'play-next', 'track-mix', 'download'];
+    const forbiddenForUnavailable = ['add-to-queue', 'play-next', 'track-mix', 'download', 'start-infinite-radio'];
     if (item.isUnavailable && forbiddenForUnavailable.includes(action)) {
         showNotification('This track is unavailable.');
         return;
@@ -749,7 +749,15 @@ export async function handleTrackAction(
 
     // Collection Actions (Album, Playlist, Mix)
     const isCollection = ['album', 'playlist', 'user-playlist', 'mix'].includes(type);
-    const collectionActions = ['play-card', 'shuffle-play-card', 'add-to-queue', 'play-next', 'download', 'start-mix'];
+    const collectionActions = [
+        'play-card',
+        'shuffle-play-card',
+        'add-to-queue',
+        'play-next',
+        'download',
+        'start-mix',
+        'start-infinite-radio',
+    ];
 
     if (isCollection && collectionActions.includes(action)) {
         try {
@@ -848,6 +856,27 @@ export async function handleTrackAction(
                 return;
             }
 
+            if (action === 'start-infinite-radio') {
+                const seeds = tracks.slice(0, 10);
+                const recommended = await api.getRecommendedTracksForPlaylist(seeds, 50);
+                const merged = [...seeds, ...recommended];
+                const seen = new Set();
+                const queue = merged.filter((track) => {
+                    const key = String(track?.id || '');
+                    if (!key || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+                if (!queue.length) {
+                    showNotification('No recommendations available for Infinite Radio');
+                    return;
+                }
+                player.setQueue(queue, 0);
+                player.playAtIndex(0);
+                showNotification(`Infinite Radio started from ${queue.length} tracks`);
+                return;
+            }
+
             // play-card and shuffle-play-card
             if (action === 'shuffle-play-card') {
                 player.shuffleActive = true;
@@ -906,6 +935,20 @@ export async function handleTrackAction(
         } else {
             showNotification('No mix available for this track');
         }
+    } else if (action === 'start-infinite-radio') {
+        const recommendationData = await api.getRecommendations(item.id);
+        const recommended = Array.isArray(recommendationData?.items) ? recommendationData.items : [];
+        const queue = [item, ...recommended].filter((track, index, list) => {
+            const trackId = String(track?.id || '');
+            return trackId && list.findIndex((other) => String(other?.id || '') === trackId) === index;
+        });
+        if (!queue.length) {
+            showNotification('No recommendations available for Infinite Radio');
+            return;
+        }
+        player.setQueue(queue, 0);
+        player.playAtIndex(0);
+        showNotification('Infinite Radio started');
     } else if (action === 'download') {
         await downloadTrackWithMetadata(item, downloadQualitySettings.getQuality(), api, lyricsManager);
     } else if (action === 'toggle-like') {

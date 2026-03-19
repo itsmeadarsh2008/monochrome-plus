@@ -1604,6 +1604,23 @@ export const playbackBehaviorSettings = {
     },
 };
 
+export const importMatchSettings = {
+    STRICT_ALBUM_MATCH_KEY: 'import-strict-album-match',
+
+    isStrictAlbumMatchEnabled() {
+        try {
+            const value = localStorage.getItem(this.STRICT_ALBUM_MATCH_KEY);
+            return value === null ? true : value === 'true';
+        } catch {
+            return true;
+        }
+    },
+
+    setStrictAlbumMatchEnabled(enabled) {
+        localStorage.setItem(this.STRICT_ALBUM_MATCH_KEY, enabled ? 'true' : 'false');
+    },
+};
+
 export const settingsUiState = {
     ACTIVE_TAB_KEY: 'settings-active-tab',
 

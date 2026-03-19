@@ -7239,6 +7239,49 @@ input:checked + .slider::before {
     border-bottom: none;
 }
 
+.command-palette-results {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-height: 46vh;
+    overflow: auto;
+}
+
+.command-palette-item {
+    width: 100%;
+    border: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+    background: transparent;
+    color: var(--foreground);
+    text-align: left;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    cursor: pointer;
+}
+
+.command-palette-item:last-child {
+    border-bottom: none;
+}
+
+.command-palette-item:hover,
+.command-palette-item.selected {
+    background: color-mix(in srgb, var(--secondary) 72%, transparent);
+}
+
+.command-palette-item .name {
+    font-weight: 600;
+}
+
+.command-palette-item .desc {
+    font-size: 0.84rem;
+    color: var(--muted-foreground);
+}
+
+.command-palette-item.empty {
+    cursor: default;
+}
+
 #playlist-detail-description,
 #mix-detail-description {
     color: var(--foreground);

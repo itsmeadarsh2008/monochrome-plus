@@ -72,6 +72,17 @@ export async function getHomeSections(countryCode, locale) {
     if (!countryCode) countryCode = getUserCountryCode();
     if (!locale) locale = getUserLocale();
 
+    // Preferred source first: Legacy Monochrome hot endpoint.
+    // If unavailable/empty, continue with normal fallback chain.
+    try {
+        const legacy = await getHomeSectionsLegacyHot();
+        if (hasAnyHomeContent(legacy)) {
+            return legacy;
+        }
+    } catch (error) {
+        console.warn('[Home] Preferred hot source failed, trying other sources:', error?.message || error);
+    }
+
     // Get API instances
     const apiInstances = await apiSettings.getInstances('api');
     if (apiInstances.length === 0) {
@@ -231,7 +242,7 @@ function normalizeHomeData(data) {
     const rows = data?.rows ?? data?.data?.rows ?? [];
     const modules = rows.flatMap((r) => r?.modules ?? []);
 
-    return {
+    return ensureDistinctDiscoveryBuckets({
         genres: extractModule(modules, 'genres'),
         trendingAlbums: extractModule(modules, 'trending albums'),
         trendingTracks: extractModule(modules, 'trending tracks'),
@@ -240,7 +251,7 @@ function normalizeHomeData(data) {
         newAlbums: extractModule(modules, 'new albums'),
         spotlightedUploads: extractModule(modules, 'spotlighted uploads'),
         fromEditors: extractModule(modules, 'from our editors'),
-    };
+    });
 }
 
 function normalizeLegacyHotData(data) {
@@ -251,7 +262,7 @@ function normalizeLegacyHotData(data) {
         return Array.isArray(section?.items) ? section.items : [];
     };
 
-    return {
+    return ensureDistinctDiscoveryBuckets({
         genres: [],
         trendingAlbums: Array.isArray(data?.top_albums) ? data.top_albums : findSectionItems((title, type) => {
             return type === 'ALBUM_LIST' && title.includes('trend');
@@ -276,7 +287,33 @@ function normalizeLegacyHotData(data) {
         fromEditors: findSectionItems((title, type) => {
             return type === 'PLAYLIST_LIST' && (title.includes('editor') || title.includes('curated'));
         }),
-    };
+    });
+}
+
+function getEntityKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    const entity = item.item && typeof item.item === 'object' ? item.item : item;
+    return String(entity.uuid || entity.id || '').trim();
+}
+
+function removeOverlaps(primary = [], secondary = []) {
+    const primaryKeys = new Set(primary.map((entry) => getEntityKey(entry)).filter(Boolean));
+    return secondary.filter((entry) => {
+        const key = getEntityKey(entry);
+        return !key || !primaryKeys.has(key);
+    });
+}
+
+function ensureDistinctDiscoveryBuckets(homeData) {
+    if (!homeData || typeof homeData !== 'object') return homeData;
+    const normalized = { ...homeData };
+
+    // Keep "New" sections semantically distinct from "Trending/Hot" sections.
+    // Some upstream fallbacks currently return overlapping (or identical) lists.
+    normalized.newTracks = removeOverlaps(normalized.trendingTracks || [], normalized.newTracks || []);
+    normalized.newAlbums = removeOverlaps(normalized.trendingAlbums || [], normalized.newAlbums || []);
+
+    return normalized;
 }
 
 function hasAnyHomeContent(homeData) {

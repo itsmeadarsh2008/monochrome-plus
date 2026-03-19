@@ -29,6 +29,7 @@ import {
     exponentialVolumeSettings,
     audioEffectsSettings,
     playbackBehaviorSettings,
+    importMatchSettings,
     settingsUiState,
     pwaUpdateSettings,
     contentBlockingSettings,
@@ -3612,6 +3613,79 @@ export function initializeSettings(scrobbler, player, api, ui) {
             pwaUpdateSettings.setAutoUpdateEnabled(e.target.checked);
         });
     }
+
+    const strictAlbumMatchToggle = document.getElementById('strict-album-match-toggle');
+    if (strictAlbumMatchToggle) {
+        strictAlbumMatchToggle.checked = importMatchSettings.isStrictAlbumMatchEnabled();
+        strictAlbumMatchToggle.addEventListener('change', (e) => {
+            importMatchSettings.setStrictAlbumMatchEnabled(e.target.checked);
+        });
+    }
+
+    // Settings export/import (local settings only)
+    const settingsImportInput = document.getElementById('import-settings-input');
+    document.getElementById('export-settings-btn')?.addEventListener('click', () => {
+        try {
+            const payload = {
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                app: 'monochrome-plus',
+                localStorage: Object.fromEntries(Object.entries(localStorage)),
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `monochrome-plus-settings-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to export settings:', error);
+            alert('Failed to export settings.');
+        }
+    });
+
+    document.getElementById('import-settings-btn')?.addEventListener('click', () => {
+        settingsImportInput?.click();
+    });
+
+    settingsImportInput?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                const data = parsed?.localStorage && typeof parsed.localStorage === 'object' ? parsed.localStorage : null;
+                if (!data) {
+                    throw new Error('Invalid settings backup format.');
+                }
+
+                if (
+                    !confirm(
+                        'This will replace current local settings and reload the app. Continue?'
+                    )
+                ) {
+                    return;
+                }
+
+                Object.entries(data).forEach(([key, value]) => {
+                    if (typeof value === 'string') {
+                        localStorage.setItem(key, value);
+                    }
+                });
+
+                alert('Settings imported successfully. Reloading now.');
+                window.location.reload();
+            } catch (error) {
+                console.error('Failed to import settings:', error);
+                alert('Failed to import settings. Please check the file format.');
+            } finally {
+                e.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    });
 
     // Reset Local Data Button
     const resetLocalDataBtn = document.getElementById('reset-local-data-btn');

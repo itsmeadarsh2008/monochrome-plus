@@ -117,6 +117,8 @@ const FALLBACK_RECOMMENDED_ARTISTS = Object.freeze([
     { id: 439890147, name: 'JPEGMAFIA' },
     { id: 51427239, name: 'Westside Cowboy' },
 ]);
+const FALLBACK_COLLAB_PLAYLIST_COVER =
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 640'><rect width='640' height='640' fill='%2303050f'/><rect x='110' y='110' width='280' height='280' fill='%23f2f2f2' rx='8'/><rect x='250' y='250' width='280' height='280' fill='%23f2f2f2' rx='8'/><rect x='250' y='250' width='140' height='140' fill='%2303050f' rx='6'/></svg>";
 
 export class UIRenderer {
     constructor(api, player) {
@@ -807,6 +809,44 @@ export class UIRenderer {
             extraAttributes: 'draggable="true"',
             extraClasses: 'user-playlist',
         });
+    }
+
+    createCollaborativePlaylistImageHTML(playlist) {
+        if (playlist?.cover) {
+            return `<img src="${playlist.cover}" alt="${escapeHtml(playlist.name || 'Collaborative Playlist')}" class="card-image" loading="lazy">`;
+        }
+
+        const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks : [];
+        let uniqueCovers = Array.isArray(playlist?.images) ? [...playlist.images] : [];
+        const seenCovers = new Set(uniqueCovers);
+
+        if (uniqueCovers.length === 0) {
+            for (const track of tracks) {
+                const cover = track?.album?.cover || track?.cover || '';
+                if (cover && !seenCovers.has(cover)) {
+                    seenCovers.add(cover);
+                    uniqueCovers.push(cover);
+                    if (uniqueCovers.length >= 4) break;
+                }
+            }
+        }
+
+        if (uniqueCovers.length >= 2) {
+            const count = Math.min(uniqueCovers.length, 4);
+            const itemsClass = count < 4 ? `items-${count}` : '';
+            const covers = uniqueCovers.slice(0, 4);
+            return `
+                <div class="card-image card-collage ${itemsClass}">
+                    ${covers.map((cover) => `<img src="${this.api.getCoverUrl(cover)}" alt="" loading="lazy">`).join('')}
+                </div>
+            `;
+        }
+
+        if (uniqueCovers.length === 1) {
+            return `<img src="${this.api.getCoverUrl(uniqueCovers[0])}" alt="${escapeHtml(playlist?.name || 'Collaborative Playlist')}" class="card-image" loading="lazy">`;
+        }
+
+        return `<img src="${FALLBACK_COLLAB_PLAYLIST_COVER}" alt="${escapeHtml(playlist?.name || 'Collaborative Playlist')}" class="card-image" loading="lazy">`;
     }
 
     createAlbumCardHTML(album) {
@@ -2445,6 +2485,7 @@ export class UIRenderer {
 
         this.renderHomeSongs();
         this.renderHomeAlbums();
+        this.renderHomeCollaborativePlaylists();
         this.renderHomeArtists();
         this.renderHomeRecent();
         this.renderHomeDiscoverySections().catch((error) => {
@@ -3240,6 +3281,88 @@ export class UIRenderer {
                 console.error(e);
                 albumsContainer.innerHTML = createPlaceholder('Failed to load album recommendations.');
             }
+        }
+    }
+
+    async renderHomeCollaborativePlaylists(forceRefresh = false) {
+        const section = document.getElementById('home-collab-playlists-section');
+        const grid = document.getElementById('home-collab-playlists-grid');
+        const empty = document.getElementById('home-collab-playlists-empty');
+        if (!section || !grid || !empty) return;
+
+        if (forceRefresh || grid.children.length === 0) {
+            grid.innerHTML = this.createSkeletonCards(2);
+        }
+
+        try {
+            const playlists = await db.getCollaborativePlaylists();
+            const list = Array.isArray(playlists) ? playlists : [];
+
+            if (!list.length) {
+                section.style.display = '';
+                grid.innerHTML = '';
+                empty.style.display = '';
+                return;
+            }
+
+            const top = list.slice(0, 8);
+            grid.innerHTML = top
+                .map((playlist) => {
+                    const trackCount = Array.isArray(playlist.tracks) ? playlist.tracks.length : 0;
+                    const memberCount = Array.isArray(playlist.members) ? playlist.members.length : 0;
+                    const totalDuration = calculateTotalDuration(playlist.tracks || []);
+                    const meta = `${trackCount} tracks • ${memberCount} members${totalDuration ? ` • ${formatDuration(totalDuration)}` : ''}`;
+                    const coverHtml = this.createCollaborativePlaylistImageHTML(playlist);
+                    return `
+                        <div class="card collab-playlist-card" data-id="${playlist.id}">
+                            <div class="card-image-wrapper">
+                                ${coverHtml}
+                                <button class="card-play-btn" title="Play">
+                                    ${SVG_PLAY}
+                                </button>
+                            </div>
+                            <div class="card-info">
+                                <div class="card-title">${escapeHtml(playlist.name || 'Collaborative Playlist')}</div>
+                                <div class="card-meta">${escapeHtml(meta)}</div>
+                            </div>
+                        </div>
+                    `;
+                })
+                .join('');
+
+            grid.querySelectorAll('.collab-playlist-card').forEach((card, index) => {
+                const playlist = top[index];
+                if (!playlist) return;
+
+                trackDataStore.set(card, playlist);
+
+                card.addEventListener('click', () => {
+                    navigate(`/collabplaylist/${playlist.id}`);
+                });
+
+                const playBtn = card.querySelector('.card-play-btn');
+                if (playBtn) {
+                    playBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const tracks = Array.isArray(playlist.tracks) ? playlist.tracks : [];
+                        if (tracks.length > 0) {
+                            this.player.setQueue(tracks, 0);
+                            this.player.playTrackFromQueue();
+                        } else {
+                            navigate(`/collabplaylist/${playlist.id}`);
+                        }
+                    });
+                }
+            });
+
+            empty.style.display = 'none';
+            section.style.display = '';
+        } catch (error) {
+            console.error('[Home] Failed to load collaborative playlists:', error);
+            section.style.display = '';
+            grid.innerHTML = '';
+            empty.innerHTML = '<p>Failed to load collaborative playlists.</p>';
+            empty.style.display = '';
         }
     }
 
@@ -6012,6 +6135,36 @@ export class UIRenderer {
         const shuffleBtn = document.getElementById('collab-shuffle-btn');
         const editBtn = document.getElementById('collab-edit-btn');
         const deleteBtn = document.getElementById('collab-delete-btn');
+        const editModal = document.getElementById('edit-collab-playlist-modal');
+        const editModalOverlay = editModal?.querySelector('.modal-overlay');
+        const editNameInput = document.getElementById('edit-collab-playlist-name');
+        const editDescriptionInput = document.getElementById('edit-collab-playlist-description');
+        const editCoverInput = document.getElementById('edit-collab-playlist-cover');
+        const saveEditBtn = document.getElementById('save-edit-collab-playlist-btn');
+        const cancelEditBtn = document.getElementById('cancel-edit-collab-playlist-btn');
+        const deleteInPanelBtn = document.getElementById('delete-collab-playlist-in-panel-btn');
+
+        const openEditPanel = () => {
+            if (!editModal) return;
+            if (editNameInput) editNameInput.value = playlist.name || '';
+            if (editDescriptionInput) editDescriptionInput.value = playlist.description || '';
+            if (editCoverInput) editCoverInput.value = playlist.cover || '';
+            if (deleteInPanelBtn) {
+                deleteInPanelBtn.dataset.armed = 'false';
+                deleteInPanelBtn.textContent = 'Delete';
+            }
+            editModal.classList.add('active');
+            editNameInput?.focus();
+        };
+
+        const closeEditPanel = () => {
+            if (!editModal) return;
+            editModal.classList.remove('active');
+            if (deleteInPanelBtn) {
+                deleteInPanelBtn.dataset.armed = 'false';
+                deleteInPanelBtn.textContent = 'Delete';
+            }
+        };
 
         // Set loading state
         if (imageEl) {
@@ -6191,42 +6344,72 @@ export class UIRenderer {
 
         if (editBtn) {
             editBtn.onclick = async () => {
-                const nameInput = prompt('Playlist name', playlist.name || '');
-                if (nameInput === null) return;
+                openEditPanel();
+            };
+        }
 
-                const trimmedName = nameInput.trim();
+        if (cancelEditBtn) {
+            cancelEditBtn.onclick = () => closeEditPanel();
+        }
+
+        if (editModalOverlay) {
+            editModalOverlay.onclick = () => closeEditPanel();
+        }
+
+        if (saveEditBtn) {
+            saveEditBtn.onclick = async () => {
+                const trimmedName = String(editNameInput?.value || '').trim();
                 if (!trimmedName) {
-                    alert('Playlist name is required.');
+                    showNotification('Playlist name is required');
+                    editNameInput?.focus();
                     return;
                 }
-
-                const descriptionInput = prompt('Playlist description (optional)', playlist.description || '');
-                if (descriptionInput === null) return;
-
-                const coverInput = prompt('Cover image URL (optional)', playlist.cover || '');
-                if (coverInput === null) return;
 
                 try {
                     await db.updateCollaborativePlaylist({
                         ...playlist,
                         name: trimmedName,
-                        description: descriptionInput.trim(),
-                        cover: coverInput.trim(),
+                        description: String(editDescriptionInput?.value || '').trim(),
+                        cover: String(editCoverInput?.value || '').trim(),
                     });
+                    closeEditPanel();
+                    showNotification('Collaborative playlist updated');
                     this.renderCollabPlaylistPage(playlistId);
                     this.renderFriendsPage(this._getFriendsRouteParam());
                 } catch (error) {
                     console.error('Failed to update collaborative playlist:', error);
-                    alert('Failed to update playlist.');
+                    showNotification('Failed to update playlist');
+                }
+            };
+        }
+
+        if (deleteInPanelBtn) {
+            deleteInPanelBtn.onclick = async () => {
+                const armed = deleteInPanelBtn.dataset.armed === 'true';
+                if (!armed) {
+                    deleteInPanelBtn.dataset.armed = 'true';
+                    deleteInPanelBtn.textContent = 'Confirm Delete';
+                    return;
+                }
+
+                try {
+                    await db.deleteCollaborativePlaylist(playlistId);
+                    closeEditPanel();
+                    showNotification('Collaborative playlist deleted');
+                    navigate('/friends');
+                } catch (error) {
+                    console.error('Failed to delete collaborative playlist:', error);
+                    showNotification('Failed to delete playlist');
                 }
             };
         }
 
         if (deleteBtn) {
-            deleteBtn.onclick = async () => {
-                if (confirm(`Delete "${playlist.name}"? This cannot be undone.`)) {
-                    await db.deleteCollaborativePlaylist(playlistId);
-                    navigate('/friends');
+            deleteBtn.onclick = () => {
+                openEditPanel();
+                if (deleteInPanelBtn) {
+                    deleteInPanelBtn.dataset.armed = 'true';
+                    deleteInPanelBtn.textContent = 'Confirm Delete';
                 }
             };
         }

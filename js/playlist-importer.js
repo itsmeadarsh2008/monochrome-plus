@@ -41,6 +41,7 @@ function resolveImportOptions(options = {}) {
 
     return {
         mode: mode === 'lenient' ? 'lenient' : 'strict',
+        strictAlbumMatch: options?.strictAlbumMatch !== false,
         parallelism:
             Number.isFinite(parsedParallelism) && parsedParallelism > 0
                 ? Math.min(Math.floor(parsedParallelism), IMPORT_MAX_PARALLELISM)
@@ -231,7 +232,7 @@ async function findBestTrackMatch(api, metadata, options = {}) {
         artist: sanitizeImportValue(metadata.artist),
         album: sanitizeImportValue(metadata.album),
     };
-    const { mode } = resolveImportOptions(options);
+    const { mode, strictAlbumMatch } = resolveImportOptions(options);
     const profile = IMPORT_MATCH_PROFILES[mode];
 
     if (!expected.title) return null;
@@ -281,6 +282,7 @@ async function findBestTrackMatch(api, metadata, options = {}) {
 
     if (bestMetrics.titleScore < profile.minTitleScore) return null;
     if (hasExpectedArtist && bestMetrics.artistScore < profile.minArtistScore) return null;
+    if (strictAlbumMatch && requiresAlbumCheck && bestMetrics.albumScore < profile.minAlbumScore) return null;
     if (
         requiresAlbumCheck &&
         bestMetrics.albumScore < profile.minAlbumScore &&
@@ -354,7 +356,7 @@ async function importTracksFromMetadata(entries, api, onProgress, options = {}) 
                 continue;
             }
 
-            const lookupKey = `${foldForCompare(entry.title)}|${foldForCompare(entry.artist)}|${foldForCompare(entry.album)}|${importOptions.mode}`;
+            const lookupKey = `${foldForCompare(entry.title)}|${foldForCompare(entry.artist)}|${foldForCompare(entry.album)}|${importOptions.mode}|${importOptions.strictAlbumMatch ? 'strict-album' : 'loose-album'}`;
             let lookupPromise = inFlightLookupByKey.get(lookupKey);
             if (!lookupPromise) {
                 lookupPromise = findBestTrackMatch(api, entry, importOptions).catch(() => null);

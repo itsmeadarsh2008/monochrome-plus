@@ -178,6 +178,24 @@ export class MusicAPI {
         return this.tidalAPI.getRecommendedTracksForPlaylist(tracks, limit, options);
     }
 
+    async getRecommendations(trackId, options = {}) {
+        const cleanId = this.stripProviderPrefix(trackId);
+        if (!cleanId) return { items: [], limit: 0, offset: 0, totalNumberOfItems: 0 };
+
+        if (typeof this.tidalAPI.getRecommendations === 'function') {
+            return this.tidalAPI.getRecommendations(cleanId, options);
+        }
+
+        // Compatibility fallback if a custom API build omits getRecommendations.
+        const tracks = await this.getRecommendedTracksForPlaylist([{ id: cleanId }], 20, options);
+        return {
+            items: Array.isArray(tracks) ? tracks : [],
+            limit: Array.isArray(tracks) ? tracks.length : 0,
+            offset: 0,
+            totalNumberOfItems: Array.isArray(tracks) ? tracks.length : 0,
+        };
+    }
+
     // Cache methods
     async clearCache() {
         await this.tidalAPI.clearCache();

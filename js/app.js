@@ -9,6 +9,7 @@ import {
     pwaUpdateSettings,
     modalSettings,
     rotatingCoverSettings,
+    importMatchSettings,
 } from './storage.js';
 import { UIRenderer } from './ui.js';
 import { Player } from './player.js';
@@ -137,6 +138,12 @@ function initializeCasting(audioPlayer, castBtn) {
 
 function initializeKeyboardShortcuts(player, audioPlayer) {
     document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('open-command-palette'));
+            return;
+        }
+
         if (e.target.matches('input, textarea')) return;
 
         switch (e.key.toLowerCase()) {
@@ -191,6 +198,154 @@ function initializeKeyboardShortcuts(player, audioPlayer) {
                 document.querySelector('.now-playing-bar .cover')?.click();
                 break;
         }
+    });
+}
+
+async function startInfiniteRadioFromSeeds(player, api, seeds = [], limit = 40) {
+    const seedTracks = Array.isArray(seeds) ? seeds.filter(Boolean) : [];
+    let recommendations = [];
+
+    if (seedTracks.length === 1 && seedTracks[0]?.id) {
+        const data = await api.getRecommendations(seedTracks[0].id);
+        recommendations = Array.isArray(data?.items) ? data.items : [];
+    } else if (seedTracks.length > 0) {
+        recommendations = await api.getRecommendedTracksForPlaylist(seedTracks, limit);
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const track of [...seedTracks, ...recommendations]) {
+        const id = String(track?.id || '');
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        deduped.push(track);
+        if (deduped.length >= limit) break;
+    }
+
+    if (!deduped.length) return false;
+
+    player.setQueue(deduped, 0);
+    player.shuffleActive = false;
+    document.getElementById('shuffle-btn')?.classList.remove('active');
+    player.playTrackFromQueue();
+    return true;
+}
+
+function initializeCommandPalette(player, api) {
+    const overlay = document.getElementById('command-palette-overlay');
+    const input = document.getElementById('command-palette-input');
+    const results = document.getElementById('command-palette-results');
+    const closeBtn = document.getElementById('close-command-palette-btn');
+    if (!overlay || !input || !results) return;
+
+    const commands = [
+        { key: 'home', desc: 'Go to Home', run: () => navigate('/') },
+        { key: 'library', desc: 'Go to Library', run: () => navigate('/library') },
+        { key: 'settings', desc: 'Go to Settings', run: () => navigate('/settings') },
+        { key: 'recent', desc: 'Go to Recent', run: () => navigate('/recent') },
+        { key: 'queue', desc: 'Open queue panel', run: () => document.getElementById('queue-btn')?.click() },
+        { key: 'play', desc: 'Play/Pause', run: () => player.handlePlayPause() },
+        { key: 'next', desc: 'Next track', run: () => player.playNext() },
+        { key: 'previous', desc: 'Previous track', run: () => player.playPrev() },
+        { key: 'shuffle', desc: 'Toggle shuffle', run: () => document.getElementById('shuffle-btn')?.click() },
+        { key: 'repeat', desc: 'Toggle repeat mode', run: () => document.getElementById('repeat-btn')?.click() },
+        {
+            key: 'lyrics',
+            desc: 'Toggle lyrics panel',
+            run: () => document.querySelector('.now-playing-bar .cover')?.click(),
+        },
+        {
+            key: 'infinite radio',
+            desc: 'Start Infinite Radio from current track/history',
+            run: async () => {
+                const { showNotification } = await loadDownloadsModule();
+                const history = await db.getHistory();
+                const seeds = player.currentTrack ? [player.currentTrack] : history.slice(0, 5);
+                const ok = await startInfiniteRadioFromSeeds(player, api, seeds, 40);
+                showNotification(ok ? 'Infinite Radio started' : 'No recommendations available right now');
+            },
+        },
+    ];
+
+    let selectedIndex = 0;
+    let visibleCommands = [...commands];
+
+    const close = () => {
+        overlay.style.display = 'none';
+        selectedIndex = 0;
+    };
+
+    const open = () => {
+        overlay.style.display = 'flex';
+        input.value = '';
+        selectedIndex = 0;
+        render();
+        input.focus();
+    };
+
+    const render = () => {
+        const q = input.value.trim().toLowerCase();
+        visibleCommands = q
+            ? commands.filter((c) => c.key.includes(q) || c.desc.toLowerCase().includes(q))
+            : [...commands];
+        if (selectedIndex >= visibleCommands.length) selectedIndex = 0;
+
+        if (!visibleCommands.length) {
+            results.innerHTML = `<div class="command-palette-item empty">No commands found</div>`;
+            return;
+        }
+
+        results.innerHTML = visibleCommands
+            .map((command, index) => {
+                const selected = index === selectedIndex ? 'selected' : '';
+                return `<button class="command-palette-item ${selected}" data-index="${index}" type="button"><span class="name">${command.key}</span><span class="desc">${command.desc}</span></button>`;
+            })
+            .join('');
+    };
+
+    const execute = async () => {
+        const command = visibleCommands[selectedIndex];
+        if (!command) return;
+        await command.run();
+        close();
+    };
+
+    window.addEventListener('open-command-palette', open);
+    closeBtn?.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay')) close();
+    });
+    input.addEventListener('input', () => {
+        selectedIndex = 0;
+        render();
+    });
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, Math.max(visibleCommands.length - 1, 0));
+            render();
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+            render();
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await execute();
+            return;
+        }
+        if (e.key === 'Escape') {
+            close();
+        }
+    });
+    results.addEventListener('click', async (e) => {
+        const button = e.target.closest('.command-palette-item[data-index]');
+        if (!button) return;
+        selectedIndex = Number.parseInt(button.dataset.index, 10) || 0;
+        await execute();
     });
 }
 
@@ -500,6 +655,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     initializeUIInteractions(player, api, ui);
     initializeKeyboardShortcuts(player, audioPlayer);
+    initializeCommandPalette(player, api);
+
+    document.getElementById('home-start-infinite-radio-btn')?.addEventListener('click', async () => {
+        const { showNotification } = await loadDownloadsModule();
+        try {
+            const history = await db.getHistory();
+            const seeds = player.currentTrack ? [player.currentTrack] : history.slice(0, 6);
+            const started = await startInfiniteRadioFromSeeds(player, api, seeds, 40);
+            showNotification(started ? 'Infinite Radio started' : 'No recommendations available right now');
+        } catch (error) {
+            console.error('Failed to start Infinite Radio from Home:', error);
+            showNotification('Failed to start Infinite Radio');
+        }
+    });
 
     // Restore UI state for the current track (like button, theme)
     if (player.currentTrack) {
@@ -842,11 +1011,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const getImportOptions = () => ({
         matchMode: lenientImportModeBtn?.classList.contains('btn-primary') ? 'lenient' : 'strict',
+        strictAlbumMatch: importMatchSettings.isStrictAlbumMatchEnabled(),
     });
 
-    strictImportModeBtn?.addEventListener('click', () => setImportMode('strict'));
-    lenientImportModeBtn?.addEventListener('click', () => setImportMode('lenient'));
-    setImportMode('strict');
+    strictImportModeBtn?.addEventListener('click', () => {
+        setImportMode('strict');
+        importMatchSettings.setStrictAlbumMatchEnabled(true);
+    });
+    lenientImportModeBtn?.addEventListener('click', () => {
+        setImportMode('lenient');
+        importMatchSettings.setStrictAlbumMatchEnabled(false);
+    });
+    setImportMode(importMatchSettings.isStrictAlbumMatchEnabled() ? 'strict' : 'lenient');
 
     if (spotifyBtn && appleBtn && ytmBtn) {
         spotifyBtn.addEventListener('click', () => {
@@ -1246,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('xspf-file-input').value = '';
             document.getElementById('xml-file-input').value = '';
             document.getElementById('m3u-file-input').value = '';
-            setImportMode('strict');
+            setImportMode(importMatchSettings.isStrictAlbumMatchEnabled() ? 'strict' : 'lenient');
 
             // Reset import tabs to CSV
             document.querySelectorAll('.import-tab').forEach((tab) => {

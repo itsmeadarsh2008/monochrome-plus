@@ -89,6 +89,9 @@
                 <li data-action="shuffle-play-card" data-type-filter="album,playlist,mix,user-playlist">
                     Shuffle play
                 </li>
+                <li data-action="start-infinite-radio" data-type-filter="track,album,playlist,mix,user-playlist">
+                    Start Infinite Radio
+                </li>
                 <li data-action="start-mix" data-type-filter="album,track">Start mix</li>
                 <li data-action="play-next">Play next</li>
                 <li data-action="add-to-queue">Add to queue</li>
@@ -1174,8 +1177,29 @@
                     <div class="shortcut-item"><kbd>R</kbd><span>Toggle repeat</span></div>
                     <div class="shortcut-item"><kbd>Q</kbd><span>Open queue</span></div>
                     <div class="shortcut-item"><kbd>L</kbd><span>Toggle lyrics</span></div>
+                    <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>K</kbd><span>Open command palette</span></div>
                     <div class="shortcut-item"><kbd>/</kbd><span>Focus search</span></div>
                     <div class="shortcut-item"><kbd>Esc</kbd><span>Close modals</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="command-palette-overlay" class="modal" style="display: none">
+            <div class="modal-overlay"></div>
+            <div class="modal-content medium">
+                <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between">
+                    <h3 style="margin: 0">Command Palette</h3>
+                    <button id="close-command-palette-btn" class="close-modal-btn">&times;</button>
+                </div>
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem">
+                    <input
+                        id="command-palette-input"
+                        type="text"
+                        class="template-input"
+                        placeholder="Type a command (home, queue, play, infinite radio...)"
+                        autocomplete="off"
+                    />
+                    <div id="command-palette-results" class="command-palette-results"></div>
                 </div>
             </div>
         </div>
@@ -1430,6 +1454,50 @@
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
                     <button class="btn-secondary" id="cancel-collab-playlist-btn">Cancel</button>
                     <button class="btn-primary" id="confirm-collab-playlist-btn">Create</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Collaborative Playlist Modal -->
+        <div id="edit-collab-playlist-modal" class="modal">
+            <div class="modal-overlay"></div>
+            <div class="modal-content">
+                <h3>Edit Collaborative Playlist</h3>
+                <p style="margin: 0.5rem 0 1rem; color: var(--muted-foreground)">
+                    Update the playlist details and cover
+                </p>
+
+                <div style="display: flex; flex-direction: column; gap: 0.75rem">
+                    <div>
+                        <label class="label" for="edit-collab-playlist-name">Playlist Name</label>
+                        <input type="text" id="edit-collab-playlist-name" class="input" placeholder="Playlist Name" />
+                    </div>
+                    <div>
+                        <label class="label" for="edit-collab-playlist-description">Description</label>
+                        <textarea
+                            id="edit-collab-playlist-description"
+                            class="input"
+                            rows="3"
+                            placeholder="Optional description"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label class="label" for="edit-collab-playlist-cover">Cover URL</label>
+                        <input
+                            type="url"
+                            id="edit-collab-playlist-cover"
+                            class="input"
+                            placeholder="https://example.com/cover.jpg"
+                        />
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; justify-content: space-between; margin-top: 1rem">
+                    <button class="btn-secondary danger" id="delete-collab-playlist-in-panel-btn">Delete</button>
+                    <div style="display: flex; gap: 0.5rem">
+                        <button class="btn-secondary" id="cancel-edit-collab-playlist-btn">Cancel</button>
+                        <button class="btn-primary" id="save-edit-collab-playlist-btn">Save Changes</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2000,6 +2068,22 @@
                                 Refresh with new tracks
                             </button>
                         </section>
+                        <section class="content-section" id="home-collab-playlists-section">
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    margin-bottom: 1rem;
+                                "
+                            >
+                                <h2 class="section-title" style="margin-bottom: 0">Collaborative Playlists</h2>
+                            </div>
+                            <div class="card-grid" id="home-collab-playlists-grid"></div>
+                            <div id="home-collab-playlists-empty" class="empty-state" style="display: none">
+                                <p>No collaborative playlists yet. Create one from Friends.</p>
+                            </div>
+                        </section>
                         <section class="content-section home-recommended-artists-section">
                             <div class="section-head section-head-compact section-head-discovery">
                                 <div>
@@ -2059,6 +2143,9 @@
                                         Live modules from your current region, seamlessly blended into Home.
                                     </p>
                                 </div>
+                                <button id="home-start-infinite-radio-btn" class="btn-secondary">
+                                    Start Infinite Radio
+                                </button>
                             </div>
                             <div id="home-discovery-content" class="home-discovery-content">
                                 <section class="home-discovery-module" id="home-spotlight-module">
@@ -5403,6 +5490,34 @@
                                         <span class="description">View available keyboard shortcuts</span>
                                     </div>
                                     <button id="show-shortcuts-btn" class="btn-secondary">Show Shortcuts</button>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="info">
+                                        <span class="label">Strict Album Match</span>
+                                        <span class="description"
+                                            >Prefer album-title-accurate matches during playlist imports</span
+                                        >
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="strict-album-match-toggle" checked />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item">
+                                    <div class="info">
+                                        <span class="label">Settings Backup</span>
+                                        <span class="description">Export or import app settings as JSON</span>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem">
+                                        <button id="export-settings-btn" class="btn-secondary">Export</button>
+                                        <button id="import-settings-btn" class="btn-secondary">Import</button>
+                                        <input
+                                            type="file"
+                                            id="import-settings-input"
+                                            accept=".json,application/json"
+                                            style="display: none"
+                                        />
+                                    </div>
                                 </div>
                                 <div class="setting-item">
                                     <div class="info">
