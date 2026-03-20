@@ -2142,6 +2142,7 @@ export class UIRenderer {
     showPage(pageId) {
         const didPageChange = this._activePageId !== pageId;
         this._activePageId = pageId;
+        document.body.classList.toggle('artist-page-active', pageId === 'artist');
 
         document.querySelectorAll('.page').forEach((page) => {
             page.classList.toggle('active', page.id === `page-${pageId}`);
@@ -3267,6 +3268,7 @@ export class UIRenderer {
                         .slice(0, 12)
                         .map((album) => this.createAlbumCardHTML(album))
                         .join('');
+                    albumsContainer.classList.add('home-panel-carousel');
                     filteredAlbums.slice(0, 12).forEach((album) => {
                         const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
                         if (el) {
@@ -3274,12 +3276,15 @@ export class UIRenderer {
                             this.updateLikeState(el, 'album', album.id);
                         }
                     });
+                    this.applyHomePanelSlideFx(albumsContainer);
                 } else {
                     albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('No album recommendations found from your recent tracks yet.')}</div>`;
+                    this.resetHomePanelSlideFx(albumsContainer);
                 }
             } catch (e) {
                 console.error(e);
                 albumsContainer.innerHTML = createPlaceholder('Failed to load album recommendations.');
+                this.resetHomePanelSlideFx(albumsContainer);
             }
         }
     }
@@ -3302,6 +3307,7 @@ export class UIRenderer {
                 section.style.display = '';
                 grid.innerHTML = '';
                 empty.style.display = '';
+                this.resetHomePanelSlideFx(grid);
                 return;
             }
 
@@ -3329,6 +3335,7 @@ export class UIRenderer {
                     `;
                 })
                 .join('');
+            grid.classList.add('home-panel-carousel');
 
             grid.querySelectorAll('.collab-playlist-card').forEach((card, index) => {
                 const playlist = top[index];
@@ -3357,13 +3364,75 @@ export class UIRenderer {
 
             empty.style.display = 'none';
             section.style.display = '';
+            this.applyHomePanelSlideFx(grid);
         } catch (error) {
             console.error('[Home] Failed to load collaborative playlists:', error);
             section.style.display = '';
             grid.innerHTML = '';
             empty.innerHTML = '<p>Failed to load collaborative playlists.</p>';
             empty.style.display = '';
+            this.resetHomePanelSlideFx(grid);
         }
+    }
+
+    resetHomePanelSlideFx(container) {
+        if (!container) return;
+        container.classList.remove('home-panel-carousel');
+        container.querySelectorAll(':scope > .card').forEach((card) => {
+            card.style.removeProperty('--slide-card-opacity');
+            card.style.removeProperty('--slide-card-scale');
+            card.style.removeProperty('--slide-card-raise');
+        });
+    }
+
+    applyHomePanelSlideFx(container) {
+        if (!container) return;
+        if (!this._homePanelFxHandlers) this._homePanelFxHandlers = new WeakMap();
+
+        const update = () => {
+            const cards = container.querySelectorAll(':scope > .card');
+            if (!cards.length) return;
+
+            const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+            if (!isDesktop) {
+                cards.forEach((card) => {
+                    card.style.setProperty('--slide-card-opacity', '1');
+                    card.style.setProperty('--slide-card-scale', '1');
+                    card.style.setProperty('--slide-card-raise', '0px');
+                });
+                return;
+            }
+
+            const viewport = container.getBoundingClientRect();
+            const center = viewport.left + viewport.width / 2;
+            const span = viewport.width / 2;
+
+            cards.forEach((card) => {
+                const rect = card.getBoundingClientRect();
+                const visible = Math.max(0, Math.min(rect.right, viewport.right) - Math.max(rect.left, viewport.left));
+                const visibleRatio = Math.max(0, Math.min(1, visible / Math.max(rect.width, 1)));
+                const cardCenter = rect.left + rect.width / 2;
+                const distanceRatio = Math.min(1, Math.abs(cardCenter - center) / Math.max(span, 1));
+                const focus = 1 - distanceRatio;
+                const emphasis = Math.max(visibleRatio, focus * 0.94);
+                const opacity = 0.42 + emphasis * 0.58;
+                const scale = 0.972 + emphasis * 0.028;
+                const rise = (1 - emphasis) * 6;
+
+                card.style.setProperty('--slide-card-opacity', opacity.toFixed(3));
+                card.style.setProperty('--slide-card-scale', scale.toFixed(3));
+                card.style.setProperty('--slide-card-raise', `${rise.toFixed(2)}px`);
+            });
+        };
+
+        const rafUpdate = () => requestAnimationFrame(update);
+        if (!this._homePanelFxHandlers.get(container)) {
+            container.addEventListener('scroll', rafUpdate, { passive: true });
+            window.addEventListener('resize', rafUpdate);
+            this._homePanelFxHandlers.set(container, rafUpdate);
+        }
+
+        rafUpdate();
     }
 
     createTrackCardHTML(track) {
@@ -3692,6 +3761,7 @@ export class UIRenderer {
 
     renderHomeRecent() {
         const recentContainer = document.getElementById('home-recent-mixed');
+        const recentMeta = document.getElementById('home-recent-smart-meta');
         const section = recentContainer?.closest('.content-section');
 
         if (!homePageSettings.shouldShowJumpBackIn()) {
@@ -3703,15 +3773,32 @@ export class UIRenderer {
 
         if (recentContainer) {
             const recents = recentActivityManager.getRecents();
-            const items = [];
+            const albums = (recents.albums || []).slice(0, 6).map((i) => ({ ...i, _kind: 'album' }));
+            const playlists = (recents.playlists || []).slice(0, 6).map((i) => ({ ...i, _kind: 'playlist' }));
+            const mixes = (recents.mixes || []).slice(0, 6).map((i) => ({ ...i, _kind: 'mix' }));
 
-            if (recents.albums) items.push(...recents.albums.slice(0, 4).map((i) => ({ ...i, _kind: 'album' })));
-            if (recents.playlists)
-                items.push(...recents.playlists.slice(0, 4).map((i) => ({ ...i, _kind: 'playlist' })));
-            if (recents.mixes) items.push(...recents.mixes.slice(0, 4).map((i) => ({ ...i, _kind: 'mix' })));
+            // Smart blend: prioritize recency order while ensuring variety between types.
+            const buckets = [albums, playlists, mixes].map((list) => [...list]);
+            const displayItems = [];
+            let cursor = 0;
+            while (displayItems.length < 8) {
+                const bucket = buckets[cursor % buckets.length];
+                if (bucket.length > 0) displayItems.push(bucket.shift());
+                if (buckets.every((list) => list.length === 0)) break;
+                cursor += 1;
+            }
 
-            items.sort(() => Math.random() - 0.5);
-            const displayItems = items.slice(0, 6);
+            if (recentMeta) {
+                const segments = [];
+                if (albums.length > 0) segments.push(`${albums.length} album${albums.length === 1 ? '' : 's'}`);
+                if (playlists.length > 0)
+                    segments.push(`${playlists.length} playlist${playlists.length === 1 ? '' : 's'}`);
+                if (mixes.length > 0) segments.push(`${mixes.length} mix${mixes.length === 1 ? '' : 'es'}`);
+                recentMeta.textContent =
+                    displayItems.length > 0
+                        ? `${displayItems.length} smart picks • ${segments.join(' • ')}`
+                        : 'Smart picks blended from albums, playlists, and mixes.';
+            }
 
             if (displayItems.length > 0) {
                 recentContainer.innerHTML = displayItems
@@ -3738,6 +3825,16 @@ export class UIRenderer {
                     const el = recentContainer.querySelector(selector);
                     if (el) {
                         trackDataStore.set(el, item);
+                        el.classList.add('home-recent-card', `home-recent-${item._kind}`);
+                        el.dataset.recentKind = item._kind;
+                        const imageWrapper = el.querySelector('.card-image-wrapper');
+                        if (imageWrapper) {
+                            const badge = document.createElement('span');
+                            badge.className = 'home-recent-kind-badge';
+                            badge.textContent =
+                                item._kind === 'album' ? 'Album' : item._kind === 'playlist' ? 'Playlist' : 'Mix';
+                            imageWrapper.appendChild(badge);
+                        }
                         if (item._kind === 'album') this.updateLikeState(el, 'album', item.id);
                         if (item._kind === 'playlist' && !item.isUserPlaylist)
                             this.updateLikeState(el, 'playlist', item.uuid);
@@ -3746,6 +3843,9 @@ export class UIRenderer {
                 });
             } else {
                 recentContainer.innerHTML = createPlaceholder('No recent items yet...');
+                if (recentMeta) {
+                    recentMeta.textContent = 'Play music to build a smart jump-back deck.';
+                }
             }
         }
     }
@@ -5352,6 +5452,7 @@ export class UIRenderer {
         this.showPage('recent');
         const container = document.getElementById('recent-tracks-container');
         const clearBtn = document.getElementById('clear-history-btn');
+        const subtitle = document.getElementById('recent-page-subtitle');
         container.innerHTML = this.createSkeletonTracks(10, true);
 
         try {
@@ -5402,6 +5503,7 @@ export class UIRenderer {
 
             if (collapsedHistory.length === 0) {
                 container.innerHTML = createPlaceholder("You haven't played any tracks yet.");
+                if (subtitle) subtitle.textContent = 'No listening history yet.';
                 return;
             }
 
@@ -5430,18 +5532,17 @@ export class UIRenderer {
             });
 
             container.innerHTML = '';
+            if (subtitle) {
+                subtitle.textContent = `${collapsedHistory.length} tracks across ${Object.keys(groups).length} day${Object.keys(groups).length === 1 ? '' : 's'}.`;
+            }
 
             for (const [label, tracks] of Object.entries(groups)) {
-                const header = document.createElement('h3');
-                header.className = 'track-list-header-group';
-                header.textContent = label;
-                header.style.margin = '1.5rem 0 0.5rem 0';
-                header.style.fontSize = '1.1rem';
-                header.style.fontWeight = '600';
-                header.style.color = 'var(--foreground)';
-                header.style.paddingLeft = '0.5rem';
-
-                container.appendChild(header);
+                const groupEl = document.createElement('section');
+                groupEl.className = 'recent-day-group';
+                const header = document.createElement('div');
+                header.className = 'recent-day-head';
+                header.innerHTML = `<h3>${escapeHtml(label)}</h3><span>${tracks.length} track${tracks.length === 1 ? '' : 's'}</span>`;
+                groupEl.appendChild(header);
 
                 // Use a temporary container to render tracks and then move them
                 const tempContainer = document.createElement('div');
@@ -5449,8 +5550,24 @@ export class UIRenderer {
 
                 // Move children to main container
                 while (tempContainer.firstChild) {
-                    container.appendChild(tempContainer.firstChild);
+                    const node = tempContainer.firstChild;
+                    if (node.nodeType === 1 && node.classList.contains('track-item')) {
+                        const ts = tracks[groupEl.querySelectorAll('.track-item').length]?.timestamp;
+                        if (ts) {
+                            const when = new Date(ts);
+                            const playedText = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const artistLine = node.querySelector('.track-item-details .artist');
+                            if (artistLine) {
+                                const playedMeta = document.createElement('span');
+                                playedMeta.className = 'recent-played-at';
+                                playedMeta.textContent = ` • Played ${playedText}`;
+                                artistLine.appendChild(playedMeta);
+                            }
+                        }
+                    }
+                    groupEl.appendChild(node);
                 }
+                container.appendChild(groupEl);
             }
 
             // Setup clear button handler
@@ -5460,6 +5577,7 @@ export class UIRenderer {
                         try {
                             await db.clearHistory();
                             container.innerHTML = createPlaceholder("You haven't played any tracks yet.");
+                            if (subtitle) subtitle.textContent = 'No listening history yet.';
                             clearBtn.style.display = 'none';
                         } catch (err) {
                             console.error('Failed to clear history:', err);
@@ -5471,6 +5589,7 @@ export class UIRenderer {
         } catch (error) {
             console.error('Failed to load history:', error);
             container.innerHTML = createPlaceholder('Failed to load history.');
+            if (subtitle) subtitle.textContent = 'Failed to load listening history.';
             if (clearBtn) clearBtn.style.display = 'none';
         }
     }
@@ -5740,6 +5859,26 @@ export class UIRenderer {
                       db.getCollaborativePlaylists(),
                   ]);
 
+            const hero = document.getElementById('friends-greeting');
+            if (hero) {
+                let stats = document.getElementById('friends-hero-stats');
+                if (!stats) {
+                    stats = document.createElement('div');
+                    stats.id = 'friends-hero-stats';
+                    stats.className = 'friends-hero-stats';
+                    hero.appendChild(stats);
+                }
+                const incomingCount = incomingRequests?.length || 0;
+                const sharedCount = sharedTracks?.length || 0;
+                const collabCount = collabPlaylists?.length || 0;
+                stats.innerHTML = `
+                    <div class="friends-hero-stat"><span class="value">${friends.length}</span><span class="label">Friends</span></div>
+                    <div class="friends-hero-stat"><span class="value">${incomingCount}</span><span class="label">Incoming</span></div>
+                    <div class="friends-hero-stat"><span class="value">${sharedCount}</span><span class="label">Shared</span></div>
+                    <div class="friends-hero-stat"><span class="value">${collabCount}</span><span class="label">Collabs</span></div>
+                `;
+            }
+
             // Enrich friends with status from their profiles
             if (useCloudSocial && friends.length > 0) {
                 await Promise.allSettled(
@@ -5765,16 +5904,18 @@ export class UIRenderer {
                         const staggerClass = index < 10 ? `stagger-item` : '';
                         return `
                             <div class="friend-card ${staggerClass}" data-uid="${friend.uid}" data-username="${safeUsername}" style="animation-delay: ${Math.min(index * 0.05, 0.5)}s">
-                                <div class="friend-avatar">
-                                    <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}" loading="lazy">
-                                </div>
-                                <div class="friend-card-body">
-                                    <div class="friend-name">${safeDisplayName}</div>
-                                    <div class="friend-username">@${safeUsername}</div>
-                                    ${safeStatus ? `<div class="friend-status">${safeStatus}</div>` : ''}
-                                </div>
-                                <div class="friend-card-actions">
-                                    <button class="btn-secondary friend-open-profile-btn" data-username="${safeUsername}">Profile</button>
+                                <div class="friend-card-shell">
+                                    <div class="friend-avatar">
+                                        <img src="${friend.avatarUrl || '/assets/appicon.png'}" alt="${safeDisplayName}" loading="lazy">
+                                    </div>
+                                    <div class="friend-card-body">
+                                        <div class="friend-name">${safeDisplayName}</div>
+                                        <div class="friend-username">@${safeUsername}</div>
+                                        ${safeStatus ? `<div class="friend-status">${safeStatus}</div>` : '<div class="friend-status muted">No status set</div>'}
+                                    </div>
+                                    <div class="friend-card-actions">
+                                        <button class="btn-secondary friend-open-profile-btn" data-username="${safeUsername}">Profile</button>
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -5798,16 +5939,18 @@ export class UIRenderer {
                           .map(
                               (request, index) => `
                             <div class="friend-request-item stagger-item" data-uid="${request.uid}" style="animation-delay: ${index * 0.1}s">
-                                <div class="friend-request-avatar">
-                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
-                                </div>
-                                <div class="friend-request-info">
-                                    <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
-                                    <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
-                                </div>
-                                <div class="friend-request-actions">
-                                    <button class="btn-primary accept-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Accept</button>
-                                    <button class="btn-secondary reject-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Reject</button>
+                                <div class="friend-request-shell">
+                                    <div class="friend-request-avatar">
+                                        <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
+                                    </div>
+                                    <div class="friend-request-info">
+                                        <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
+                                        <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
+                                    </div>
+                                    <div class="friend-request-actions">
+                                        <button class="btn-primary accept-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Accept</button>
+                                        <button class="btn-secondary reject-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Reject</button>
+                                    </div>
                                 </div>
                             </div>
                         `
@@ -5822,15 +5965,17 @@ export class UIRenderer {
                             .map(
                                 (request, index) => `
                             <div class="friend-request-item pending stagger-item" data-uid="${request.uid}" style="animation-delay: ${(incomingRequests.length + index) * 0.1}s">
-                                <div class="friend-request-avatar">
-                                    <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
-                                </div>
-                                <div class="friend-request-info">
-                                    <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
-                                    <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
-                                </div>
-                                <div class="friend-request-actions">
-                                    <button class="btn-secondary cancel-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Cancel</button>
+                                <div class="friend-request-shell">
+                                    <div class="friend-request-avatar">
+                                        <img src="${request.avatarUrl || '/assets/appicon.png'}" alt="${escapeHtml(request.displayName || request.username || 'User')}" loading="lazy">
+                                    </div>
+                                    <div class="friend-request-info">
+                                        <div class="friend-request-name">${escapeHtml(request.displayName || request.username || 'User')}</div>
+                                        <div class="friend-request-username">@${escapeHtml(request.username || '')}</div>
+                                    </div>
+                                    <div class="friend-request-actions">
+                                        <button class="btn-secondary cancel-friend-btn" data-request-id="${request.requestId || ''}" data-uid="${request.uid}">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                         `

@@ -2011,8 +2011,21 @@ export class Player {
 
     updatePlayingTrackIndicator() {
         const currentTrack = this.getCurrentQueue()[this.currentQueueIndex];
+        let activeTrackElement = this._activeTrackElement || null;
+        if (activeTrackElement) {
+            const stillInDom = document.body.contains(activeTrackElement);
+            const sameTrack = currentTrack && activeTrackElement.dataset.trackId == currentTrack.id;
+            if (!stillInDom || !sameTrack) {
+                activeTrackElement = null;
+                this._activeTrackElement = null;
+            }
+        }
+
         document.querySelectorAll('.track-item').forEach((item) => {
-            item.classList.toggle('playing', currentTrack && item.dataset.trackId == currentTrack.id);
+            const isPlaying = activeTrackElement
+                ? item === activeTrackElement
+                : currentTrack && item.dataset.trackId == currentTrack.id;
+            item.classList.toggle('playing', Boolean(isPlaying));
         });
 
         document.querySelectorAll('.queue-track-item').forEach((item) => {

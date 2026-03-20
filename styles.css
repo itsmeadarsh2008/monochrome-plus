@@ -8244,6 +8244,17 @@ img[src=''] {
     gap: 0.85rem;
 }
 
+.account-community-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.75rem;
+}
+
+.account-discord-link {
+    min-width: 220px;
+    justify-content: center;
+}
+
 .auth-mark {
     display: flex;
     align-items: center;
@@ -11443,6 +11454,146 @@ textarea:focus {
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
+#home-reco-collab-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.7rem;
+    margin-bottom: 0.7rem;
+}
+
+#home-recommended-albums-section,
+#home-collab-playlists-section {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.9rem 0.9rem 0.72rem;
+    margin-bottom: 0;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    background:
+        radial-gradient(120% 110% at 100% 0%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 58%),
+        linear-gradient(
+            152deg,
+            color-mix(in srgb, var(--card) 86%, transparent) 0%,
+            color-mix(in srgb, var(--background) 94%, transparent) 100%
+        );
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+
+#home-recommended-albums-section #home-recommended-albums,
+#home-collab-playlists-section #home-collab-playlists-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.72rem;
+}
+
+#home-recommended-albums-section #refresh-albums-btn {
+    margin-top: 0.32rem !important;
+    align-self: flex-start;
+}
+
+#home-reco-collab-row + .home-recommended-artists-section {
+    margin-top: 0 !important;
+}
+
+#home-collab-playlists-section .empty-state {
+    margin-top: 0.32rem;
+    padding: 1rem 0.4rem 0.25rem;
+    text-align: left;
+}
+
+@media (min-width: 1024px) {
+    #home-collab-playlists-section::after {
+        content: '';
+        display: block;
+        height: 1.9rem;
+        margin-top: 0.32rem;
+    }
+}
+
+@media (max-width: 768px) {
+    #home-reco-collab-row {
+        gap: var(--spacing-md);
+    }
+
+    #home-recommended-albums-section,
+    #home-collab-playlists-section {
+        padding: 0.88rem;
+        border-radius: 0.88rem;
+    }
+
+    #home-recommended-albums-section #home-recommended-albums,
+    #home-collab-playlists-section #home-collab-playlists-grid {
+        grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+    }
+}
+
+@media (min-width: 1024px) {
+    #home-reco-collab-row {
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: start;
+    }
+}
+
+@media (min-width: 1440px) {
+    #home-reco-collab-row {
+        grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
+        gap: 0.85rem;
+        align-items: start;
+    }
+}
+
+/* Desktop panel carousels with explicit spacing */
+@media (min-width: 1024px) {
+    #home-recommended-albums-section #home-recommended-albums,
+    #home-collab-playlists-section #home-collab-playlists-grid,
+    html.carousel-mode #home-recommended-albums,
+    html.carousel-mode #home-collab-playlists-grid,
+    .carousel-mode #home-recommended-albums,
+    .carousel-mode #home-collab-playlists-grid {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 0.7rem !important;
+        margin: 0 !important;
+        padding: 0.1rem 0.1rem 0.22rem;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        scroll-padding-left: 0.15rem;
+        scroll-padding-right: 0.15rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    #home-recommended-albums-section #home-recommended-albums::-webkit-scrollbar,
+    #home-collab-playlists-section #home-collab-playlists-grid::-webkit-scrollbar {
+        display: none;
+    }
+
+    #home-recommended-albums-section #home-recommended-albums > .card,
+    #home-collab-playlists-section #home-collab-playlists-grid > .card {
+        flex: 0 0 clamp(180px, 20vw, 255px);
+        min-width: clamp(180px, 20vw, 255px);
+        max-width: clamp(180px, 20vw, 255px);
+    }
+}
+
+#home-recommended-albums.home-panel-carousel > .card,
+#home-collab-playlists-grid.home-panel-carousel > .card {
+    opacity: var(--slide-card-opacity, 1);
+    transform: translateY(var(--slide-card-raise, 0px)) scale(var(--slide-card-scale, 1));
+    transition:
+        opacity 180ms ease,
+        transform 220ms ease;
+}
+
+#home-recommended-albums.home-panel-carousel > .card:hover,
+#home-collab-playlists-grid.home-panel-carousel > .card:hover {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
 .home-discovery-hub {
     position: relative;
     padding: 1.2rem;
@@ -13574,24 +13725,29 @@ input[type='search']::-webkit-search-results-decoration {
 .friend-card::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid transparent;
     background: linear-gradient(90deg, var(--primary) 0%, transparent 100%);
-    opacity: 0;
-    transition: opacity 0.3s var(--ease-out);
+    opacity: 0.08;
+    transition:
+        opacity 0.25s var(--ease-out),
+        border-color 0.25s var(--ease-out);
+    pointer-events: none;
 }
 
 .friend-card:hover {
-    transform: translateY(-3px) scale(1.008);
+    transform: translateY(-1px);
     background: var(--glass-bg-hover);
     border-color: var(--glass-border-hover);
-    box-shadow: var(--shadow-card-hover);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent),
+        0 12px 28px rgb(0 0 0 / 0.22);
 }
 
 .friend-card:hover::before {
-    opacity: 0.6;
+    opacity: 0.16;
+    border-color: color-mix(in srgb, var(--primary) 26%, transparent);
 }
 
 .friend-card:active {
@@ -13793,6 +13949,12 @@ input[type='search']::-webkit-search-results-decoration {
     padding: 1.5rem;
     backdrop-filter: blur(var(--glass-blur));
     box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 1025px) {
+    #friends-discover-section .friends-discover-panel {
+        max-width: 760px;
+    }
 }
 
 #friends-discover-input {
@@ -14203,6 +14365,456 @@ input[type='search']::-webkit-search-results-decoration {
 
 .stagger-item:nth-child(6) {
     animation-delay: 0.3s;
+}
+
+/* -------------------------------------------------------------------------
+   HOME RECENT + FRIENDS REDESIGN OVERRIDES
+   ------------------------------------------------------------------------- */
+
+/* Keep card border visually continuous during hover transforms */
+#page-home .card:not(.artist-circular) {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.7rem;
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+    background: linear-gradient(
+        170deg,
+        color-mix(in srgb, var(--card) 88%, transparent) 0%,
+        color-mix(in srgb, var(--background) 94%, transparent) 100%
+    );
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.2);
+}
+
+#page-home .card:not(.artist-circular)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    pointer-events: none;
+    transition: border-color var(--transition-fast);
+}
+
+#page-home .card:not(.artist-circular):hover::after {
+    border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
+}
+
+#page-home .card:not(.artist-circular) .card-image-wrapper {
+    border-radius: 1.55rem 1.55rem 0.95rem 0.95rem;
+    margin: 0;
+}
+
+#page-home .card:not(.artist-circular) .card-image {
+    border-radius: 1.5rem 1.5rem 0.9rem 0.9rem;
+}
+
+.home-recent-smart-section {
+    position: relative;
+    padding: 1.2rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background:
+        radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 54%),
+        linear-gradient(
+            158deg,
+            color-mix(in srgb, var(--card) 88%, transparent) 0%,
+            color-mix(in srgb, var(--background) 95%, transparent) 100%
+        );
+    overflow: visible;
+}
+
+.home-recent-smart-head .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+#home-recent-mixed {
+    gap: 1rem;
+    overflow: visible;
+    padding-right: 0.35rem;
+}
+
+#home-recent-mixed > .card {
+    overflow: visible;
+}
+
+html.carousel-mode #home-recent-mixed,
+.carousel-mode #home-recent-mixed {
+    margin: 0;
+    padding: 0.25rem 1.75rem 0.35rem 0.25rem;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    scroll-padding-right: 1.75rem;
+}
+
+html.carousel-mode #home-recent-mixed > .card,
+.carousel-mode #home-recent-mixed > .card {
+    margin-right: 0.05rem;
+}
+
+.home-recent-card {
+    transition:
+        transform 0.25s var(--ease-spring-soft),
+        box-shadow 0.25s var(--ease-out);
+}
+
+.home-recent-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 18px 34px rgb(0 0 0 / 0.26);
+}
+
+.home-recent-kind-badge {
+    position: absolute;
+    top: 0.62rem;
+    left: 0.62rem;
+    z-index: 5;
+    padding: 0.26rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    background: rgb(8 10 20 / 0.72);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    color: color-mix(in srgb, var(--foreground) 92%, transparent);
+    backdrop-filter: blur(6px);
+}
+
+.home-recent-album .home-recent-kind-badge {
+    color: color-mix(in srgb, #9dd6ff 74%, white);
+}
+
+.home-recent-playlist .home-recent-kind-badge {
+    color: color-mix(in srgb, #9df0c8 74%, white);
+}
+
+.home-recent-mix .home-recent-kind-badge {
+    color: color-mix(in srgb, #ffc990 74%, white);
+}
+
+/* Friends redesign */
+#page-friends.page.active {
+    gap: 1rem;
+}
+
+.friends-hero {
+    border-radius: 1.15rem;
+    padding: 2.1rem 1.7rem;
+}
+
+.friends-hero-stats {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1.15rem;
+}
+
+.friends-hero-stat {
+    padding: 0.65rem 0.7rem 0.62rem;
+    border-radius: 0.8rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--card) 72%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+}
+
+.friends-hero-stat .value {
+    font-size: 1.03rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.friends-hero-stat .label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: color-mix(in srgb, var(--muted-foreground) 90%, transparent);
+}
+
+.friend-card {
+    padding: 0;
+    overflow: hidden;
+    border-radius: 1rem;
+}
+
+.friend-card-shell {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    padding: 1rem;
+    background:
+        radial-gradient(120% 120% at 0% 100%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 50%),
+        color-mix(in srgb, var(--card) 88%, transparent);
+}
+
+.friend-card .friend-status.muted {
+    color: var(--muted-foreground);
+}
+
+.friend-request-item {
+    padding: 0;
+}
+
+.friend-request-shell {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.95rem 1rem;
+}
+
+.friend-request-item.pending .friend-request-shell {
+    background: color-mix(in srgb, var(--secondary) 26%, transparent);
+}
+
+@media (max-width: 860px) {
+    .friends-hero-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .friend-card-shell,
+    .friend-request-shell {
+        flex-wrap: wrap;
+    }
+
+    .friend-card .friend-card-actions,
+    .friend-request-item .friend-request-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
+
+/* Recently Played Page redesign */
+.recent-page-shell {
+    padding: 0.25rem 0.25rem 1rem;
+}
+
+.recent-page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.recent-page-body {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.recent-day-group {
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 1rem;
+    background:
+        radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--primary) 8%, transparent) 0%, transparent 55%),
+        linear-gradient(
+            160deg,
+            color-mix(in srgb, var(--card) 90%, transparent) 0%,
+            color-mix(in srgb, var(--background) 96%, transparent) 100%
+        );
+    padding: 0.7rem;
+}
+
+.recent-day-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0.15rem 0.2rem 0.55rem;
+}
+
+.recent-day-head h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.recent-day-head span {
+    font-size: 0.78rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}
+
+#recent-tracks-container .track-item {
+    border-radius: 0.78rem;
+}
+
+.recent-played-at {
+    font-size: 0.77rem;
+    color: color-mix(in srgb, var(--muted-foreground) 86%, transparent);
+}
+
+@media (max-width: 720px) {
+    .recent-page-head {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .recent-page-head .btn-secondary {
+        align-self: flex-start;
+    }
+}
+
+/* Artist Page redesign */
+#page-artist.page.active {
+    display: grid;
+    gap: 0.95rem;
+}
+
+#page-artist .detail-header {
+    position: relative;
+    align-items: center;
+    gap: 1.2rem;
+    margin-bottom: 0.2rem;
+    padding: 1.2rem;
+    border-radius: 1.2rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    background:
+        radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 58%),
+        linear-gradient(
+            155deg,
+            color-mix(in srgb, var(--card) 88%, transparent) 0%,
+            color-mix(in srgb, var(--background) 95%, transparent) 100%
+        );
+    box-shadow: 0 14px 30px rgb(0 0 0 / 0.2);
+}
+
+#page-artist .detail-header-image.artist {
+    width: clamp(178px, 22vw, 236px);
+    height: clamp(178px, 22vw, 236px);
+    border-radius: 1.05rem;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    box-shadow:
+        0 18px 34px rgb(0 0 0 / 0.28),
+        0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+#page-artist .detail-header-info .type {
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 0.73rem;
+    color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
+}
+
+#page-artist .detail-header-info .title {
+    font-size: clamp(2rem, 4.2vw, 3.25rem);
+    line-height: 1.03;
+}
+
+#page-artist .detail-header-info .meta {
+    margin-top: 0.8rem;
+    gap: 0.42rem;
+}
+
+#page-artist .artist-tags {
+    margin-left: 0;
+    gap: 0.4rem;
+}
+
+#page-artist .artist-tag {
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    color: color-mix(in srgb, var(--foreground) 84%, transparent);
+    font-size: 0.71rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+#page-artist .artist-bio {
+    margin-top: 0.8rem;
+    max-width: 78ch;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 0.9rem;
+    background: color-mix(in srgb, var(--card) 78%, transparent);
+    padding: 0.72rem 0.82rem;
+    line-height: 1.55;
+}
+
+#page-artist .detail-header-actions {
+    margin-top: 1rem;
+    gap: 0.55rem;
+}
+
+#page-artist .content-section {
+    margin-bottom: 0.75rem;
+    padding: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: 1rem;
+    background:
+        radial-gradient(140% 120% at 100% 0%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 60%),
+        linear-gradient(
+            160deg,
+            color-mix(in srgb, var(--card) 88%, transparent) 0%,
+            color-mix(in srgb, var(--background) 95%, transparent) 100%
+        );
+}
+
+body.artist-page-active #page-artist .detail-header {
+    background:
+        radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--primary) 22%, transparent) 0%, transparent 58%),
+        linear-gradient(
+            155deg,
+            color-mix(in srgb, var(--card) 52%, transparent) 0%,
+            color-mix(in srgb, var(--background) 68%, transparent) 100%
+        );
+    backdrop-filter: blur(14px) saturate(1.06);
+}
+
+body.artist-page-active #page-artist .content-section {
+    background:
+        radial-gradient(140% 120% at 100% 0%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 62%),
+        linear-gradient(
+            160deg,
+            color-mix(in srgb, var(--card) 50%, transparent) 0%,
+            color-mix(in srgb, var(--background) 64%, transparent) 100%
+        );
+    backdrop-filter: blur(12px) saturate(1.04);
+}
+
+#page-artist .content-section .section-title {
+    margin-bottom: 0.8rem;
+    font-size: clamp(1.26rem, 2.2vw, 1.75rem);
+}
+
+#artist-detail-tracks {
+    gap: 0.5rem var(--spacing-md);
+}
+
+#artist-detail-tracks .track-item {
+    border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--card) 78%, transparent);
+}
+
+#artist-detail-albums,
+#artist-detail-eps,
+#artist-detail-unreleased,
+#artist-detail-similar {
+    gap: 0.78rem;
+}
+
+@media (max-width: 980px) {
+    #page-artist .detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1rem;
+        gap: 0.92rem;
+    }
+
+    #page-artist .detail-header-image.artist {
+        width: min(72vw, 220px);
+        height: min(72vw, 220px);
+    }
+
+    #page-artist .content-section {
+        padding: 0.82rem;
+    }
 }
 
 /* stylelint-enable no-descending-specificity */

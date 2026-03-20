@@ -1906,7 +1906,6 @@ export const sidebarSectionSettings = {
     SHOW_SETTINGS_KEY: 'sidebar-show-settings',
     SHOW_ABOUT_KEY: 'sidebar-show-about',
     SHOW_DOWNLOAD_KEY: 'sidebar-show-download',
-    SHOW_DISCORD_KEY: 'sidebar-show-discord',
     ORDER_KEY: 'sidebar-menu-order',
     DEFAULT_ORDER: [
         'sidebar-nav-home',
@@ -1917,7 +1916,6 @@ export const sidebarSectionSettings = {
         'sidebar-nav-settings',
         'sidebar-nav-about-bottom',
         'sidebar-nav-download-bottom',
-        'sidebar-nav-discordbtn',
     ],
 
     getBottomNavIds() {
@@ -2029,19 +2027,6 @@ export const sidebarSectionSettings = {
         localStorage.setItem(this.SHOW_DOWNLOAD_KEY, enabled ? 'true' : 'false');
     },
 
-    shouldShowDiscord() {
-        try {
-            const val = localStorage.getItem(this.SHOW_DISCORD_KEY);
-            return val === null ? true : val === 'true';
-        } catch {
-            return true;
-        }
-    },
-
-    setShowDiscord(enabled) {
-        localStorage.setItem(this.SHOW_DISCORD_KEY, enabled ? 'true' : 'false');
-    },
-
     normalizeOrder(order) {
         const baseOrder = this.DEFAULT_ORDER;
         const safeOrder = Array.isArray(order) ? order.filter((id) => baseOrder.includes(id)) : [];
@@ -2101,7 +2086,6 @@ export const sidebarSectionSettings = {
             { id: 'sidebar-nav-settings', check: this.shouldShowSettings() },
             { id: 'sidebar-nav-about-bottom', check: this.shouldShowAbout() },
             { id: 'sidebar-nav-download-bottom', check: this.shouldShowDownload() },
-            { id: 'sidebar-nav-discordbtn', check: this.shouldShowDiscord() },
         ];
 
         items.forEach(({ id, check }) => {

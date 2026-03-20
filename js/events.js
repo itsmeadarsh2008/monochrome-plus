@@ -1745,12 +1745,18 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
         ) {
             const parentList = trackItem.closest('.track-list');
             const allTrackElements = Array.from(parentList.querySelectorAll('.track-item'));
-            const trackList = allTrackElements.map((el) => trackDataStore.get(el)).filter(Boolean);
+            const indexedTracks = allTrackElements
+                .map((el, index) => ({ el, index, track: trackDataStore.get(el) }))
+                .filter((entry) => Boolean(entry.track));
+            const trackList = indexedTracks.map((entry) => entry.track);
 
             if (trackList.length > 0) {
-                const clickedTrackId = trackItem.dataset.trackId;
-                const startIndex = trackList.findIndex((t) => t.id == clickedTrackId);
+                // Use the clicked row position, not just track id, so duplicate songs
+                // in history/lists don't all resolve to the first occurrence.
+                const clickedEntry = indexedTracks.find((entry) => entry.el === trackItem);
+                const startIndex = clickedEntry ? indexedTracks.indexOf(clickedEntry) : 0;
 
+                player._activeTrackElement = trackItem;
                 player.setQueue(trackList, startIndex);
                 document.getElementById('shuffle-btn').classList.remove('active');
                 player.playTrackFromQueue();

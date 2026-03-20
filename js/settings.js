@@ -3254,15 +3254,6 @@ export function initializeSettings(scrobbler, player, api, ui) {
         });
     }
 
-    const sidebarShowDiscordToggle = document.getElementById('sidebar-show-discordbtn-toggle');
-    if (sidebarShowDiscordToggle) {
-        sidebarShowDiscordToggle.checked = sidebarSectionSettings.shouldShowDiscord();
-        sidebarShowDiscordToggle.addEventListener('change', (e) => {
-            sidebarSectionSettings.setShowDiscord(e.target.checked);
-            sidebarSectionSettings.applySidebarVisibility();
-        });
-    }
-
     // Apply sidebar visibility on initialization
     sidebarSectionSettings.applySidebarVisibility();
 
