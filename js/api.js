@@ -916,7 +916,8 @@ export class LosslessAPI {
 
         const artist = {
             ...this.prepareArtist(rawArtist),
-            picture: rawArtist.picture || primaryData.cover || null,
+            picture: rawArtist.picture || rawArtist.selectedAlbumCoverFallback || primaryData.cover || null,
+            selectedAlbumCoverFallback: rawArtist.selectedAlbumCoverFallback || null,
             name: rawArtist.name || 'Unknown Artist',
         };
 
@@ -1448,11 +1449,46 @@ export class LosslessAPI {
             return 'assets/appicon.png';
         }
 
-        if (
-            typeof id === 'string' &&
-            (id.startsWith('blob:') || id.startsWith('assets/') || id.startsWith('http') || id.startsWith('data:'))
-        ) {
+        if (id && typeof id === 'object') {
+            if (Array.isArray(id)) {
+                const firstUrl = id.find((entry) => typeof entry === 'string' && entry.trim());
+                return firstUrl || 'assets/appicon.png';
+            }
+
+            if (typeof id.url === 'string' && id.url.trim()) {
+                return this.getArtistPictureUrl(id.url, size);
+            }
+
+            const stringEntries = Object.entries(id).filter(([, value]) => typeof value === 'string' && value.trim());
+            if (stringEntries.length > 0) {
+                const normalizedSize = String(size);
+                const preferredKeys = [normalizedSize, `${normalizedSize}x${normalizedSize}`, '1280', '1024', '750', '640', '320', '160', '80'];
+                for (const key of preferredKeys) {
+                    const hit = stringEntries.find(([entryKey]) => entryKey === key);
+                    if (hit) return hit[1];
+                }
+
+                // Fall back to the highest numeric key if present (e.g. {"80": "...", "640": "...", "750": "..."}).
+                const numeric = stringEntries
+                    .map(([entryKey, value]) => ({ size: Number.parseInt(entryKey, 10), value }))
+                    .filter((item) => Number.isFinite(item.size))
+                    .sort((a, b) => b.size - a.size);
+                if (numeric.length > 0) return numeric[0].value;
+
+                return stringEntries[0][1];
+            }
+        }
+
+        if (typeof id === 'string' && (id.startsWith('blob:') || id.startsWith('assets/') || id.startsWith('data:'))) {
             return id;
+        }
+
+        if (typeof id === 'string' && id.startsWith('http')) {
+            return id;
+        }
+
+        if (typeof id !== 'string') {
+            return 'assets/appicon.png';
         }
 
         const formattedId = id.replace(/-/g, '/');

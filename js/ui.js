@@ -5280,15 +5280,66 @@ export class UIRenderer {
                     });
             }
 
-            imageEl.src = this.api.getArtistPictureUrl(artist.picture);
+            const heroCandidates = [];
+            const seenHeroUrls = new Set();
+            const addHeroCandidate = (url) => {
+                if (typeof url !== 'string') return;
+                const trimmed = url.trim();
+                if (!trimmed || seenHeroUrls.has(trimmed)) return;
+                seenHeroUrls.add(trimmed);
+                heroCandidates.push(trimmed);
+            };
+            const addArtistSourceCandidates = (source) => {
+                if (!source) return;
+                ['1280', '750', '640', '320', '160'].forEach((size) => {
+                    addHeroCandidate(this.api.getArtistPictureUrl(source, size));
+                });
+            };
+
+            addArtistSourceCandidates(artist.picture);
+            addArtistSourceCandidates(artist.selectedAlbumCoverFallback);
+            addArtistSourceCandidates(artist.image);
+            addArtistSourceCandidates(artist.cover);
+
+            if (Array.isArray(artist.albums)) {
+                artist.albums.slice(0, 6).forEach((album) => {
+                    if (album?.cover) {
+                        addHeroCandidate(this.api.getCoverUrl(album.cover, '1280'));
+                        addHeroCandidate(this.api.getCoverUrl(album.cover, '640'));
+                    }
+                });
+            }
+
+            if (Array.isArray(artist.tracks)) {
+                artist.tracks.slice(0, 8).forEach((track) => {
+                    const cover = track?.album?.cover || track?.cover;
+                    if (cover) {
+                        addHeroCandidate(this.api.getCoverUrl(cover, '1280'));
+                        addHeroCandidate(this.api.getCoverUrl(cover, '640'));
+                    }
+                });
+            }
+
+            addHeroCandidate('assets/appicon.png');
+
+            let heroIndex = 0;
+            const loadHeroCandidate = () => {
+                if (heroIndex >= heroCandidates.length) return;
+                const nextSrc = heroCandidates[heroIndex++];
+                imageEl.src = nextSrc;
+            };
+            imageEl.onerror = () => {
+                loadHeroCandidate();
+            };
+            imageEl.onload = () => {
+                this.setPageBackground(imageEl.src);
+            };
+            loadHeroCandidate();
             imageEl.style.backgroundColor = '';
             nameEl.textContent = artist.name;
 
-            // Set background
-            this.setPageBackground(imageEl.src);
-
             // Extract vibrant color using robust image extraction (160x160 for speed/accuracy balance)
-            const artistPic160 = this.api.getArtistPictureUrl(artist.picture, '160');
+            const artistPic160 = heroCandidates.find((url) => !url.includes('assets/appicon.png')) || heroCandidates[0];
             this.extractAndApplyColor(artistPic160);
 
             this.adjustTitleFontSize(nameEl, artist.name);
