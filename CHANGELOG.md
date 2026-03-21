@@ -8,6 +8,7 @@ All notable changes to this project are documented in this file.
 
 - Fixed Recently Played history rendering and live refresh: use pathname-based route check and dispatch a `history-changed` event on local updates.
 - Rewrote Recently Played history logging to record instantly on playback start, with track key dedupe (`id|trackId|uuid|isrc|meta`), and made the remote `/recent` view update immediately.
+- Fixed Appwrite history sync truncation for long history payloads by adding chunked history fields (`history_chunk_{n}` + `history_chunk_count`) and restoring full history on pull.
 - Rebuilt Discord RPC from scratch using a channel-based worker thread — eliminates crashes, lock poisoning, and app hangs when Discord is not running.
 - Fixed continuous playback breaking after AutoMix audio element swap by binding `ended` event on every new audio element.
 - Fixed pure mode (`data-pure-mode`) not being applied for local files, tracker tracks, and Qobuz — now all file types play at bit-perfect raw quality in pure mode.

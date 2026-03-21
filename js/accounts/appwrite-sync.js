@@ -14,6 +14,7 @@ const CHAT_MESSAGES_COLLECTION = 'DB_chat_messages';
 
 const DEFAULT_PRIVACY = { playlists: 'public', lastfm: 'public' };
 const MAX_HISTORY_STRING_LENGTH = 65000; // Appwrite limit is 65535 chars
+const MAX_HISTORY_CHUNK_SIZE = 60000; // safe per-chunk payload for history chunks
 const MAX_TRACK_SYNC = 1500;
 const MAX_ALBUM_SYNC = 1000;
 const MAX_ARTIST_SYNC = 1000;
@@ -76,9 +77,93 @@ const syncManager = {
     },
 
     _truncateHistoryToFit(history) {
-        // No forced truncation. Keep the full history on the client side.
-        // Appwrite payload limit must be handled elsewhere if needed.
+        // No forced truncation: on-cloud chunked storage handles size constraints.
         return history;
+    },
+
+    _buildHistorySyncPayload(history) {
+        const normalizedHistory = Array.isArray(history) ? history : [];
+        const { direct, chunks } = this._splitHistoryChunks(normalizedHistory);
+
+        const payload = {};
+        if (chunks.length === 0) {
+            payload.history = JSON.stringify(direct);
+            payload.history_chunk_count = 0;
+            return payload;
+        }
+
+        const firstChunk = chunks[0] || [];
+        const overflowChunks = chunks.slice(1);
+
+        payload.history = JSON.stringify(firstChunk);
+        payload.history_chunk_count = overflowChunks.length;
+
+        overflowChunks.forEach((chunk, index) => {
+            payload[`history_chunk_${index}`] = JSON.stringify(chunk);
+        });
+
+        return payload;
+    },
+
+    _collectHistoryFromRecord(record) {
+        if (!record || typeof record !== 'object') return [];
+
+        let history = this._safeArray(record.history, []);
+        const rawChunkCount = record.history_chunk_count;
+        const chunkCount = Number.isFinite(Number(rawChunkCount)) ? Number(rawChunkCount) : 0;
+
+        if (chunkCount > 0) {
+            for (let i = 0; i < chunkCount; i++) {
+                history = history.concat(this._safeArray(record[`history_chunk_${i}`], []));
+            }
+            return history;
+        }
+
+        // Backward compatibility: if no explicit chunk count was present,
+        // pick legacy chunk fields (e.g. from older versions that used history_chunk_<n> only).
+        if (rawChunkCount === undefined || rawChunkCount === null) {
+            const backwardChunks = Object.keys(record)
+                .filter((key) => /^history_chunk_\d+$/.test(key))
+                .sort((a, b) => Number(a.replace('history_chunk_', '')) - Number(b.replace('history_chunk_', '')));
+
+            for (const key of backwardChunks) {
+                history = history.concat(this._safeArray(record[key], []));
+            }
+        }
+
+        return history;
+    },
+
+    _splitHistoryChunks(entries) {
+        if (!Array.isArray(entries)) return { direct: [], chunks: [] };
+
+        const serialized = JSON.stringify(entries);
+        if (serialized.length <= MAX_HISTORY_STRING_LENGTH) {
+            return { direct: entries, chunks: [] };
+        }
+
+        const chunks = [];
+        let chunk = [];
+        let chunkSize = 0;
+
+        for (const item of entries) {
+            const itemStr = JSON.stringify(item);
+            const itemSize = itemStr.length;
+            if (chunkSize + itemSize > MAX_HISTORY_CHUNK_SIZE && chunk.length > 0) {
+                chunks.push(chunk);
+                chunk = [];
+                chunkSize = 0;
+            }
+
+            chunk.push(item);
+            chunkSize += itemSize;
+        }
+
+        if (chunk.length > 0) {
+            chunks.push(chunk);
+        }
+
+        return { direct: [], chunks };
     },
 
     _normalizeFavoriteAlbums(value) {
@@ -131,7 +216,7 @@ const syncManager = {
         if (!nextRecord) return false;
         if (!previousRecord) return true;
 
-        const keys = ['library', 'history', 'user_playlists', 'user_folders', 'favorite_albums', 'statistics_summary'];
+        const keys = ['library', 'history', 'history_chunk_count', 'user_playlists', 'user_folders', 'favorite_albums', 'statistics_summary'];
         return keys.some((key) => String(previousRecord[key] ?? '') !== String(nextRecord[key] ?? ''));
     },
 
@@ -741,19 +826,35 @@ const syncManager = {
         }
     },
 
+    async _updateUserHistory(history) {
+        const record = await this._getUserRecord();
+        if (!record) return null;
+
+        const payload = this._buildHistorySyncPayload(history);
+
+        try {
+            const updated = await this._withRetry(
+                () => databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, payload),
+                { label: 'update history' }
+            );
+            this._userRecordCache = updated;
+            return updated;
+        } catch (error) {
+            console.error('[Appwrite Sync] Failed to update chunked history:', error);
+            throw error;
+        }
+    },
+
     async _updateUserJSON(_uidIgnored, field, data) {
         const record = await this._getUserRecord();
         if (!record) return null;
 
+        if (field === 'history') {
+            return this._updateUserHistory(data);
+        }
+
         try {
-            let serializedData = typeof data === 'string' ? data : JSON.stringify(data);
-
-            // Check if the serialized data exceeds Appwrite's 65535 char limit for strings
-            if (field === 'history' && serializedData.length > MAX_HISTORY_STRING_LENGTH) {
-                const truncatedData = this._truncateHistoryToFit(data);
-                serializedData = JSON.stringify(truncatedData);
-            }
-
+            const serializedData = typeof data === 'string' ? data : JSON.stringify(data);
             const payload = { [field]: serializedData };
             const updated = await this._withRetry(
                 () => databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, payload),
@@ -782,7 +883,7 @@ const syncManager = {
         console.log('[Appwrite Sync] User record found:', record.$id, { username: record.username });
 
         const library = this._safeObject(record.library, {});
-        const history = this._safeArray(record.history, []);
+        const history = this._collectHistoryFromRecord(record);
         const userPlaylists = this._safeObject(record.user_playlists, {});
         const userFolders = this._safeObject(record.user_folders, {});
 
@@ -1077,9 +1178,8 @@ const syncManager = {
             nextHistory.unshift(minified);
             nextHistory.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            const truncatedHistory = this._truncateHistoryToFit(nextHistory);
-            await this._updateUserJSON(null, 'history', truncatedHistory);
-            await this.syncListeningStats(truncatedHistory);
+            await this._updateUserHistory(nextHistory);
+            await this.syncListeningStats(nextHistory);
             window.dispatchEvent(new CustomEvent('history-changed'));
         } catch (error) {
             console.warn('[Appwrite Sync] Failed to sync history item:', error);
@@ -2540,14 +2640,15 @@ const syncManager = {
                     };
                 }
 
+                const historyPayload = this._buildHistorySyncPayload(history);
                 const updated = await this._withRetry(
                     () =>
                         databases.updateDocument(DATABASE_ID, USERS_COLLECTION, record.$id, {
                             library: JSON.stringify(library),
-                            history: JSON.stringify(history),
                             user_playlists: JSON.stringify(cloudPlaylistMetadata),
                             user_folders: JSON.stringify(cloudFolderMetadata),
                             statistics_summary: JSON.stringify(statisticsSummary),
+                            ...historyPayload,
                         }),
                     { label: 'periodic sync' }
                 );
