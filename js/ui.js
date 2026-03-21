@@ -105,6 +105,22 @@ function getPlaylistTrackCount(playlist = null, tracks = null) {
     return tracksCount;
 }
 
+function getDisplayStatusText(status) {
+    if (!status) return '';
+    if (typeof status !== 'string') return String(status);
+
+    try {
+        const parsed = JSON.parse(status);
+        if (parsed && typeof parsed === 'object' && parsed.text) {
+            return String(parsed.text);
+        }
+    } catch (_error) {
+        // Not JSON, fall back to raw text.
+    }
+
+    return status;
+}
+
 const FALLBACK_RECOMMENDED_ARTISTS = Object.freeze([
     { id: 1003, name: 'Nas' },
     { id: 3654061, name: 'Waka Flocka Flame' },
@@ -5912,7 +5928,7 @@ export class UIRenderer {
                         const username = friend.username || '';
                         const safeDisplayName = escapeHtml(friend.displayName || username || 'Friend');
                         const safeUsername = escapeHtml(username);
-                        const statusText = friend.status || '';
+                        const statusText = getDisplayStatusText(friend.status);
                         const safeStatus = statusText ? escapeHtml(statusText) : '';
                         const staggerClass = index < 10 ? `stagger-item` : '';
                         return `

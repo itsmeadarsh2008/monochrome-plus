@@ -61,6 +61,10 @@ It provides a clean, minimalist interface for streaming high-quality music witho
 - Support for local music files
 - Intelligent API caching for improved performance
 
+### Integrations
+
+- [Integrate Tambo (React / Next.js / Vite / Expo)](docs/GETTING_STARTED_INTEGRATE.md)
+
 ### Interface
 
 - Modern, minimalist interface with glassmorphism
