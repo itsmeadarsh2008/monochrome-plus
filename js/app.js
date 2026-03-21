@@ -10,6 +10,7 @@ import {
     modalSettings,
     rotatingCoverSettings,
     importMatchSettings,
+    recentActivityManager,
 } from './storage.js';
 import { UIRenderer } from './ui.js';
 import { Player } from './player.js';
@@ -1250,6 +1251,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (shuffleBtn) shuffleBtn.classList.remove('active');
                     player.shuffleActive = false;
                     player.playTrackFromQueue();
+
+                    if (ui._currentAlbumForRecent) {
+                        recentActivityManager.addAlbum(ui._currentAlbumForRecent);
+                    }
                 }
             } catch (error) {
                 console.error('Failed to play album:', error);
@@ -1281,6 +1286,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (shuffleBtn) shuffleBtn.classList.remove('active');
                     player.shuffleActive = false;
                     player.playTrackFromQueue();
+
+                    if (ui._currentAlbumForRecent) {
+                        recentActivityManager.addAlbum(ui._currentAlbumForRecent);
+                    }
 
                     const { showNotification } = await loadDownloadsModule();
                     showNotification('Shuffling album');

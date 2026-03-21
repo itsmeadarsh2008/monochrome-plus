@@ -4247,7 +4247,8 @@ export class UIRenderer {
             });
             this.renderListWithTracks(tracklistContainer, tracks, false, true);
 
-            recentActivityManager.addAlbum(album);
+            // Store album data for play-time recent activity tracking
+            this._currentAlbumForRecent = album;
 
             // Update header like button
             const albumLikeBtn = document.getElementById('like-album-btn');
@@ -4754,11 +4755,6 @@ export class UIRenderer {
                     () => currentSort
                 );
 
-                playBtn.onclick = () => {
-                    this.player.setQueue(currentTracks, 0);
-                    this.player.playTrackFromQueue();
-                };
-
                 const uniqueCovers = [];
                 const seenCovers = new Set();
                 const trackList = playlistData.tracks || [];
@@ -4771,7 +4767,7 @@ export class UIRenderer {
                     }
                 }
 
-                recentActivityManager.addPlaylist({
+                const userPlaylistRecentData = {
                     id: playlistData.id || playlistData.uuid,
                     name: playlistData.name || playlistData.title,
                     title: playlistData.title || playlistData.name,
@@ -4780,7 +4776,14 @@ export class UIRenderer {
                     images: uniqueCovers,
                     numberOfTracks: playlistData.tracks ? playlistData.tracks.length : 0,
                     isUserPlaylist: true,
-                });
+                };
+
+                playBtn.onclick = () => {
+                    this.player.setQueue(currentTracks, 0);
+                    this.player.playTrackFromQueue();
+                    recentActivityManager.addPlaylist(userPlaylistRecentData);
+                };
+
                 document.title = `${playlistData.name || playlistData.title} - Monochrome+`;
 
                 // Setup playlist search
@@ -4860,6 +4863,7 @@ export class UIRenderer {
                 playBtn.onclick = () => {
                     this.player.setQueue(currentTracks, 0);
                     this.player.playTrackFromQueue();
+                    recentActivityManager.addPlaylist(playlist);
                 };
 
                 // Update header like button
@@ -4885,8 +4889,6 @@ export class UIRenderer {
 
                 // Render Actions (Shuffle + Sort + Share)
                 this.updatePlaylistHeaderActions(playlist, false, currentTracks, false, applySort, () => currentSort);
-
-                recentActivityManager.addPlaylist(playlist);
                 document.title = playlist.title || 'Artist Mix';
             }
 
@@ -5024,9 +5026,8 @@ export class UIRenderer {
             playBtn.onclick = () => {
                 this.player.setQueue(tracks, 0);
                 this.player.playTrackFromQueue();
+                recentActivityManager.addMix(mix);
             };
-
-            recentActivityManager.addMix(mix);
 
             // Update header like button
             const mixLikeBtn = document.getElementById('like-mix-btn');
@@ -6650,6 +6651,7 @@ export class UIRenderer {
                 const shuffledTracks = [...tracks].sort(() => Math.random() - 0.5);
                 this.player.setQueue(shuffledTracks, 0);
                 this.player.playTrackFromQueue();
+                recentActivityManager.addPlaylist(playlist);
             };
         }
 
