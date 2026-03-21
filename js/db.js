@@ -120,20 +120,19 @@ export class MusicDatabase {
             const store = transaction.objectStore(storeName);
             const index = store.index('timestamp');
 
-            // Check the most recent entry
+            // Remove ALL older entries for the same track (not just the most recent)
             const cursorReq = index.openCursor(null, 'prev');
-
             cursorReq.onsuccess = (e) => {
                 const cursor = e.target.result;
                 if (cursor) {
-                    const lastTrack = cursor.value;
-                    if (lastTrack.id === track.id) {
-                        // If same track, delete the old entry so we just update the timestamp
+                    if (cursor.value.id === track.id) {
                         store.delete(cursor.primaryKey);
                     }
+                    cursor.continue();
+                } else {
+                    // Cursor exhausted – add the new entry
+                    store.put(entry);
                 }
-                // Add the new entry
-                store.put(entry);
             };
 
             cursorReq.onerror = (_e) => {
@@ -190,6 +189,40 @@ export class MusicDatabase {
 
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
+        });
+    }
+
+    async deduplicateHistory() {
+        const storeName = 'history_tracks';
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(storeName, 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const index = store.index('timestamp');
+            const cursorReq = index.openCursor(null, 'prev');
+
+            // Keep only the newest entry per track id
+            const seen = new Set();
+            let removed = 0;
+
+            cursorReq.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (!cursor) return;
+                const trackId = cursor.value.id;
+                if (seen.has(trackId)) {
+                    store.delete(cursor.primaryKey);
+                    removed++;
+                } else {
+                    seen.add(trackId);
+                }
+                cursor.continue();
+            };
+
+            transaction.oncomplete = () => {
+                if (removed > 0) console.log(`[DB] Deduplicated history: removed ${removed} duplicate entries`);
+                resolve(removed);
+            };
+            transaction.onerror = (e) => reject(e.target.error);
         });
     }
 
@@ -497,6 +530,62 @@ export class MusicDatabase {
                     });
                 }
                 return false;
+            }
+
+            // For history_tracks, do a proper merge: read local first, merge with
+            // cloud entries keeping only the newest entry per track id, then rewrite.
+            if (storeName === 'history_tracks' && !clear) {
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction(storeName, 'readwrite');
+                    const store = transaction.objectStore(storeName);
+                    const getAllReq = store.getAll();
+
+                    getAllReq.onsuccess = () => {
+                        const localEntries = getAllReq.result || [];
+                        // Build a map keyed by track id, keeping the newest timestamp
+                        const merged = new Map();
+                        for (const entry of localEntries) {
+                            const existing = merged.get(entry.id);
+                            if (!existing || (entry.timestamp || 0) > (existing.timestamp || 0)) {
+                                merged.set(entry.id, entry);
+                            }
+                        }
+                        for (const entry of itemsArray) {
+                            const existing = merged.get(entry.id);
+                            if (!existing || (entry.timestamp || 0) > (existing.timestamp || 0)) {
+                                merged.set(entry.id, entry);
+                            }
+                        }
+
+                        // Clear and rewrite with the merged, deduplicated set
+                        store.clear();
+                        for (const entry of merged.values()) {
+                            if (!entry.timestamp) entry.timestamp = Date.now() + Math.random();
+                            store.put(entry);
+                        }
+                    };
+
+                    transaction.oncomplete = () => {
+                        console.log(`${storeName}: Merged import complete`);
+                        resolve(true);
+                    };
+                    transaction.onerror = (event) => {
+                        console.error(`${storeName}: Merge error:`, event.target.error);
+                        reject(transaction.error);
+                    };
+                });
+            }
+
+            // Deduplicate history_tracks even for clear imports
+            if (storeName === 'history_tracks') {
+                const seen = new Map();
+                for (const item of itemsArray) {
+                    const existing = seen.get(item.id);
+                    if (!existing || (item.timestamp || 0) > (existing.timestamp || 0)) {
+                        seen.set(item.id, item);
+                    }
+                }
+                itemsArray = [...seen.values()];
             }
 
             return new Promise((resolve, reject) => {

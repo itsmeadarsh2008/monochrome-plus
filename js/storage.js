@@ -294,7 +294,9 @@ export const recentActivityManager = {
 
     _add(type, item) {
         const data = this._get();
-        data[type] = data[type].filter((i) => i.id !== item.id);
+        data[type] = data[type].filter(
+            (i) => i.id !== item.id && !(type === 'playlists' && item.uuid && i.uuid === item.uuid)
+        );
         data[type].unshift(item);
         data[type] = data[type].slice(0, this.LIMIT);
         this._save(data);

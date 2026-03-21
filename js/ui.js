@@ -5489,8 +5489,6 @@ export class UIRenderer {
                 }
             }
 
-            recentActivityManager.addArtist(artist);
-
             document.title = artist.name;
         } catch (error) {
             console.error('Failed to load artist:', error);
@@ -5510,7 +5508,7 @@ export class UIRenderer {
         try {
             const history = await db.getHistory();
             const collapsedHistory = [];
-            let previousSignature = null;
+            const seenSignatures = new Set();
 
             const buildTrackSignature = (item) => {
                 if (!item || typeof item !== 'object') return null;
@@ -5541,11 +5539,11 @@ export class UIRenderer {
 
             history.forEach((item) => {
                 const signature = buildTrackSignature(item);
-                if (signature && signature === previousSignature) {
+                if (signature && seenSignatures.has(signature)) {
                     return;
                 }
+                if (signature) seenSignatures.add(signature);
                 collapsedHistory.push(item);
-                previousSignature = signature;
             });
 
             // Show/hide clear button based on whether there's history

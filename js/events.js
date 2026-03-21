@@ -35,11 +35,21 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
     const sleepTimerBtnDesktop = document.getElementById('sleep-timer-btn-desktop');
     const sleepTimerBtnMobile = document.getElementById('sleep-timer-btn');
 
-    // History tracking
+    // History tracking – use accumulated listen time instead of currentTime
     let historyLoggedTrackId = null;
+    let historyListenedTime = 0;
+    let historyLastTimeUpdate = 0;
 
     audioPlayer.addEventListener('loadstart', () => {
         historyLoggedTrackId = null;
+        historyListenedTime = 0;
+        historyLastTimeUpdate = 0;
+    });
+
+    audioPlayer.addEventListener('seeked', () => {
+        // Reset the reference point after a seek so the next timeupdate
+        // delta is measured from the new position, not the old one.
+        historyLastTimeUpdate = audioPlayer.currentTime;
     });
 
     // Sync UI with player state on load
@@ -104,11 +114,21 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
             progressFill.style.width = `${(currentTime / duration) * 100}%`;
             currentTimeEl.textContent = formatTime(currentTime);
 
-            // Log to history after 10 seconds of playback
-            if (currentTime >= 10 && player.currentTrack && player.currentTrack.id !== historyLoggedTrackId) {
+            // Accumulate actual listening time (delta between timeupdate ticks)
+            if (!audioPlayer.paused && historyLastTimeUpdate > 0) {
+                const delta = currentTime - historyLastTimeUpdate;
+                // Only count small forward deltas (normal playback, not seeks)
+                if (delta > 0 && delta < 2) {
+                    historyListenedTime += delta;
+                }
+            }
+            historyLastTimeUpdate = currentTime;
+
+            // Log to history after 10 seconds of actual listening
+            if (historyListenedTime >= 10 && player.currentTrack && player.currentTrack.id !== historyLoggedTrackId) {
                 historyLoggedTrackId = player.currentTrack.id;
-                const historyEntry = await db.addToHistory(player.currentTrack);
-                syncManager.syncHistoryItem(historyEntry);
+                // addToHistory already syncs to cloud internally
+                await db.addToHistory(player.currentTrack);
 
                 if (window.location.hash === '#recent') {
                     ui.renderRecentPage();

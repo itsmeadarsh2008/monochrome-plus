@@ -490,6 +490,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         syncManager.getUserData().catch(() => {});
     }
 
+    // Clean up duplicate history entries from prior data or cloud merges
+    db.deduplicateHistory().catch(() => {});
+
     // Apply carousel mode on initial load
     const { responsiveSettings } = await import('./storage.js');
     if (responsiveSettings.isCarouselMode()) {

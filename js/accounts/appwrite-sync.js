@@ -1087,7 +1087,10 @@ const syncManager = {
             const minified = this._minifyItem('track', historyEntry);
             minified.timestamp = historyEntry.timestamp || Date.now();
 
-            const nextHistory = history.filter((entry) => entry.timestamp !== minified.timestamp);
+            // Remove any existing entries for the same track (by id) AND same timestamp
+            const nextHistory = history.filter(
+                (entry) => entry.timestamp !== minified.timestamp && entry.id !== minified.id
+            );
             nextHistory.unshift(minified);
             nextHistory.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
