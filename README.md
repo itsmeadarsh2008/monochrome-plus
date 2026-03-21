@@ -1,6 +1,3 @@
-
-
-
 <p align="center">
   <a href="https://monochrome-plus.appwrite.network">
     <img src="https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true" alt="Monochrome+ Logo" width="150px">
@@ -40,7 +37,6 @@
 **Monochrome+** is an open-source, privacy-respecting, ad-free Hi-Fi client built on top of [Hi-Fi](https://github.com/binimum/hifi-api).
 
 It provides a clean, minimalist interface for streaming high-quality music without the clutter of traditional platforms.
-
 
 ## Images Preview
 
@@ -117,15 +113,15 @@ For alternative instances, see [docs/INSTANCES.md](docs/INSTANCES.md).
 
 ### Basic Usage
 
-1. Visit the website or your local instance  
-2. Search for artists, albums, or tracks  
-3. Click play to start streaming  
-4. Use media controls to manage playback, queue, and volume  
+1. Visit the website or your local instance
+2. Search for artists, albums, or tracks
+3. Click play to start streaming
+4. Use media controls to manage playback, queue, and volume
 
 ### Keyboard Shortcuts
 
 | Shortcut | Action         |
-|----------|---------------|
+| -------- | -------------- |
 | `Space`  | Play/Pause     |
 | `→`      | Next track     |
 | `←`      | Previous track |
@@ -140,9 +136,9 @@ For alternative instances, see [docs/INSTANCES.md](docs/INSTANCES.md).
 
 To sync your library, history, and playlists across devices:
 
-1. Open the Profile section  
-2. Sign in with Discord or email  
-3. Your data syncs automatically  
+1. Open the Profile section
+2. Sign in with Discord or email
+3. Your data syncs automatically
 
 ---
 
@@ -156,3 +152,4 @@ To sync your library, history, and playlists across devices:
 git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
 cd monochrome-plus
 docker compose up -d
+```

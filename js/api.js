@@ -1462,7 +1462,17 @@ export class LosslessAPI {
             const stringEntries = Object.entries(id).filter(([, value]) => typeof value === 'string' && value.trim());
             if (stringEntries.length > 0) {
                 const normalizedSize = String(size);
-                const preferredKeys = [normalizedSize, `${normalizedSize}x${normalizedSize}`, '1280', '1024', '750', '640', '320', '160', '80'];
+                const preferredKeys = [
+                    normalizedSize,
+                    `${normalizedSize}x${normalizedSize}`,
+                    '1280',
+                    '1024',
+                    '750',
+                    '640',
+                    '320',
+                    '160',
+                    '80',
+                ];
                 for (const key of preferredKeys) {
                     const hit = stringEntries.find(([entryKey]) => entryKey === key);
                     if (hit) return hit[1];

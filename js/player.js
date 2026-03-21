@@ -555,12 +555,15 @@ export class Player {
             }
         }, fadeInterval);
 
-        setTimeout(() => {
-            this._crossfadeInProgress = false;
-            this._gaplessTransitionInProgress = true;
-            this._setTransitionState('swap');
-            this.playNext();
-        }, Math.min(1400, Math.max(480, Math.round(duration * 180))));
+        setTimeout(
+            () => {
+                this._crossfadeInProgress = false;
+                this._gaplessTransitionInProgress = true;
+                this._setTransitionState('swap');
+                this.playNext();
+            },
+            Math.min(1400, Math.max(480, Math.round(duration * 180)))
+        );
     }
 
     _cancelCrossfade() {

@@ -11574,7 +11574,7 @@ textarea:focus {
 #home-recommended-albums.home-panel-carousel > .card,
 #home-collab-playlists-grid.home-panel-carousel > .card {
     opacity: var(--slide-card-opacity, 1);
-    transform: translateY(var(--slide-card-raise, 0px)) scale(var(--slide-card-scale, 1));
+    transform: translateY(var(--slide-card-raise, 0)) scale(var(--slide-card-scale, 1));
     transition:
         opacity 180ms ease,
         transform 220ms ease;
@@ -14829,7 +14829,13 @@ body.artist-page-active #page-artist .detail-header::before {
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(115deg, rgb(3 6 10 / 0.82) 0%, rgb(3 6 10 / 0.52) 44%, rgb(3 6 10 / 0.22) 75%, rgb(3 6 10 / 0.16) 100%),
+        linear-gradient(
+            115deg,
+            rgb(3 6 10 / 0.82) 0%,
+            rgb(3 6 10 / 0.52) 44%,
+            rgb(3 6 10 / 0.22) 75%,
+            rgb(3 6 10 / 0.16) 100%
+        ),
         linear-gradient(to top, rgb(2 3 8 / 0.72) 0%, rgb(2 3 8 / 0.1) 55%);
     z-index: 1;
 }
@@ -14884,7 +14890,7 @@ body.artist-page-active #page-artist .content-section {
     border: 1px solid rgb(255 255 255 / 0.11);
     background: linear-gradient(155deg, rgb(8 11 17 / 0.22), rgb(8 11 17 / 0.12));
     backdrop-filter: blur(14px) saturate(1.02);
-    box-shadow: 0 8px 20px rgb(0 0 0 / 0.10);
+    box-shadow: 0 8px 20px rgb(0 0 0 / 0.1);
     padding: 0.88rem 0.92rem;
 }
 
@@ -14898,7 +14904,7 @@ body.artist-page-active #artist-detail-tracks {
 
 body.artist-page-active #artist-detail-tracks .track-item {
     background: rgb(10 13 20 / 0.32);
-    border: 1px solid rgb(255 255 255 / 0.10);
+    border: 1px solid rgb(255 255 255 / 0.1);
 }
 
 @media (max-width: 980px) {

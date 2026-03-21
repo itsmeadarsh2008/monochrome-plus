@@ -24,19 +24,16 @@ For manual setup, run `npx tambo init` instead (just the API key). If you don't 
 `src/app/layout.tsx`
 
 ```tsx
-"use client";
+'use client';
 
-import { TamboProvider } from "@tambo-ai/react";
+import { TamboProvider } from '@tambo-ai/react';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <TamboProvider
-      apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!}
-      userKey="user-1"
-    >
-      {children}
-    </TamboProvider>
-  );
+    return (
+        <TamboProvider apiKey={process.env.NEXT_PUBLIC_TAMBO_API_KEY!} userKey="user-1">
+            {children}
+        </TamboProvider>
+    );
 }
 ```
 
@@ -53,17 +50,14 @@ NEXT_PUBLIC_TAMBO_API_KEY=tambo_NLsM1xDHHkIG5r+i+2ipxITew1Fy24pzBtF1jCr0L8RcBgN8
 `src/App.tsx`
 
 ```tsx
-import { TamboProvider } from "@tambo-ai/react";
+import { TamboProvider } from '@tambo-ai/react';
 
 export default function App() {
-  return (
-    <TamboProvider
-      apiKey={import.meta.env.VITE_TAMBO_API_KEY!}
-      userKey="user-1"
-    >
-      {/* your app content */}
-    </TamboProvider>
-  );
+    return (
+        <TamboProvider apiKey={import.meta.env.VITE_TAMBO_API_KEY!} userKey="user-1">
+            {/* your app content */}
+        </TamboProvider>
+    );
 }
 ```
 
@@ -78,17 +72,14 @@ VITE_TAMBO_API_KEY=tambo_NLsM1xDHHkIG5r+i+2ipxITew1Fy24pzBtF1jCr0L8RcBgN8+vHPc/Y
 `App.tsx`
 
 ```tsx
-import { TamboProvider } from "@tambo-ai/react";
+import { TamboProvider } from '@tambo-ai/react';
 
 export default function App() {
-  return (
-    <TamboProvider
-      apiKey={process.env.EXPO_PUBLIC_TAMBO_API_KEY!}
-      userKey="user-1"
-    >
-      {/* your app content */}
-    </TamboProvider>
-  );
+    return (
+        <TamboProvider apiKey={process.env.EXPO_PUBLIC_TAMBO_API_KEY!} userKey="user-1">
+            {/* your app content */}
+        </TamboProvider>
+    );
 }
 ```
 
@@ -107,15 +98,15 @@ EXPO_PUBLIC_TAMBO_API_KEY=tambo_NLsM1xDHHkIG5r+i+2ipxITew1Fy24pzBtF1jCr0L8RcBgN8
 `src/app/page.tsx`
 
 ```tsx
-"use client";
-import { MessageThreadCollapsible } from "../source/components/message-thread-collapsible";
+'use client';
+import { MessageThreadCollapsible } from '../source/components/message-thread-collapsible';
 
 export default function Home() {
-  return (
-    <main>
-      <MessageThreadCollapsible />
-    </main>
-  );
+    return (
+        <main>
+            <MessageThreadCollapsible />
+        </main>
+    );
 }
 ```
 
@@ -124,14 +115,14 @@ export default function Home() {
 `src/App.tsx`
 
 ```tsx
-import { MessageThreadCollapsible } from "./components/tambo/message-thread-collapsible";
+import { MessageThreadCollapsible } from './components/tambo/message-thread-collapsible';
 
 export default function App() {
-  return (
-    <main>
-      <MessageThreadCollapsible />
-    </main>
-  );
+    return (
+        <main>
+            <MessageThreadCollapsible />
+        </main>
+    );
 }
 ```
 

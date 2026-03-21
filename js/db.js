@@ -112,13 +112,21 @@ export class MusicDatabase {
         const trackId = track.id || track.trackId || track.uuid || track.isrc;
         if (trackId) return String(trackId);
 
-        const title = String(track.title || track.name || '').trim().toLowerCase();
+        const title = String(track.title || track.name || '')
+            .trim()
+            .toLowerCase();
         const artists = Array.isArray(track.artists)
             ? track.artists
-                  .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                  .map((artist) =>
+                      String(artist?.name || artist || '')
+                          .trim()
+                          .toLowerCase()
+                  )
                   .filter(Boolean)
                   .join(',')
-            : String(track.artist?.name || track.artist || '').trim().toLowerCase();
+            : String(track.artist?.name || track.artist || '')
+                  .trim()
+                  .toLowerCase();
 
         if (!title && !artists) return null;
         const duration = Number(track.duration || track.length || 0) || 0;
@@ -134,7 +142,6 @@ export class MusicDatabase {
         const entry = { ...minified, timestamp, historyKey };
 
         const db = await this.open();
-
 
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readwrite');
@@ -218,13 +225,21 @@ export class MusicDatabase {
                 const trackId = entry.id || entry.trackId || entry.uuid || entry.isrc;
                 if (trackId) return String(trackId);
 
-                const title = String(entry.title || entry.name || '').trim().toLowerCase();
+                const title = String(entry.title || entry.name || '')
+                    .trim()
+                    .toLowerCase();
                 const artists = Array.isArray(entry.artists)
                     ? entry.artists
-                          .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                          .map((artist) =>
+                              String(artist?.name || artist || '')
+                                  .trim()
+                                  .toLowerCase()
+                          )
                           .filter(Boolean)
                           .join(',')
-                    : String(entry.artist?.name || entry.artist || '').trim().toLowerCase();
+                    : String(entry.artist?.name || entry.artist || '')
+                          .trim()
+                          .toLowerCase();
 
                 if (!title && !artists) return null;
                 const duration = Number(entry.duration || entry.length || 0) || 0;
@@ -589,7 +604,11 @@ export class MusicDatabase {
                             }
 
                             // drop exact timestamp duplicate of same track key
-                            if (entry.historyKey && entry.historyKey === last.historyKey && entry.timestamp === last.timestamp) {
+                            if (
+                                entry.historyKey &&
+                                entry.historyKey === last.historyKey &&
+                                entry.timestamp === last.timestamp
+                            ) {
                                 continue;
                             }
 

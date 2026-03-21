@@ -3162,7 +3162,9 @@ export function initializeSettings(scrobbler, player, api, ui) {
         homeCountrySelect.value = currentCountry;
 
         homeCountrySelect.addEventListener('change', async (event) => {
-            const nextCountry = String(event.target.value || 'US').trim().toUpperCase();
+            const nextCountry = String(event.target.value || 'US')
+                .trim()
+                .toUpperCase();
             setUserCountryCode(nextCountry);
 
             try {
@@ -3647,16 +3649,13 @@ export function initializeSettings(scrobbler, player, api, ui) {
         reader.onload = async (event) => {
             try {
                 const parsed = JSON.parse(event.target.result);
-                const data = parsed?.localStorage && typeof parsed.localStorage === 'object' ? parsed.localStorage : null;
+                const data =
+                    parsed?.localStorage && typeof parsed.localStorage === 'object' ? parsed.localStorage : null;
                 if (!data) {
                     throw new Error('Invalid settings backup format.');
                 }
 
-                if (
-                    !confirm(
-                        'This will replace current local settings and reload the app. Continue?'
-                    )
-                ) {
+                if (!confirm('This will replace current local settings and reload the app. Continue?')) {
                     return;
                 }
 

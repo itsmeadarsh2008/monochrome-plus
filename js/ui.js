@@ -2613,7 +2613,10 @@ export class UIRenderer {
         }
 
         const [lead, ...rest] = normalized;
-        const leadImage = this.api.getCoverUrl(lead.album?.cover || lead.cover || lead.image || lead.squareImage, '640');
+        const leadImage = this.api.getCoverUrl(
+            lead.album?.cover || lead.cover || lead.image || lead.squareImage,
+            '640'
+        );
         const leadTitle = escapeHtml(getTrackTitle(lead) || lead.title || 'Spotlight');
         const leadArtist = escapeHtml(getTrackArtists(lead) || lead.artist?.name || lead.artists?.[0]?.name || '');
 
@@ -2732,7 +2735,8 @@ export class UIRenderer {
         this._setDiscoveryModuleVisibility('home-featured-playlists-module', hasFeatured);
         this._setDiscoveryModuleVisibility('home-from-editors-module', hasEditors);
 
-        const hasAny = hasSpotlight || hasHotTracks || hasNewTracks || hasHotAlbums || hasNewAlbums || hasFeatured || hasEditors;
+        const hasAny =
+            hasSpotlight || hasHotTracks || hasNewTracks || hasHotAlbums || hasNewAlbums || hasFeatured || hasEditors;
         section.style.display = hasAny ? '' : 'none';
     }
 

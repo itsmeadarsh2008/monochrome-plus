@@ -33,7 +33,9 @@ export const HOME_COUNTRY_OPTIONS = Object.freeze([
  * Get user's preferred country code from settings
  */
 export function getUserCountryCode() {
-    const stored = String(localStorage.getItem('userCountryCode') || '').trim().toUpperCase();
+    const stored = String(localStorage.getItem('userCountryCode') || '')
+        .trim()
+        .toUpperCase();
     if (stored) return stored;
 
     // Persist default so it behaves as a true local setting from first launch.
@@ -45,7 +47,9 @@ export function getUserCountryCode() {
  * Set user's preferred country code
  */
 export function setUserCountryCode(countryCode) {
-    const normalized = String(countryCode || 'US').trim().toUpperCase();
+    const normalized = String(countryCode || 'US')
+        .trim()
+        .toUpperCase();
     localStorage.setItem('userCountryCode', normalized || 'US');
 }
 
@@ -264,12 +268,16 @@ function normalizeLegacyHotData(data) {
 
     return ensureDistinctDiscoveryBuckets({
         genres: [],
-        trendingAlbums: Array.isArray(data?.top_albums) ? data.top_albums : findSectionItems((title, type) => {
-            return type === 'ALBUM_LIST' && title.includes('trend');
-        }),
-        trendingTracks: Array.isArray(data?.top_tracks) ? data.top_tracks : findSectionItems((title, type) => {
-            return type === 'TRACK_LIST' && title.includes('trend');
-        }),
+        trendingAlbums: Array.isArray(data?.top_albums)
+            ? data.top_albums
+            : findSectionItems((title, type) => {
+                  return type === 'ALBUM_LIST' && title.includes('trend');
+              }),
+        trendingTracks: Array.isArray(data?.top_tracks)
+            ? data.top_tracks
+            : findSectionItems((title, type) => {
+                  return type === 'TRACK_LIST' && title.includes('trend');
+              }),
         featuredPlaylists: Array.isArray(data?.featured_playlists)
             ? data.featured_playlists
             : findSectionItems((title, type) => {

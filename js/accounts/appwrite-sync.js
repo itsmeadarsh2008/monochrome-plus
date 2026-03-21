@@ -216,7 +216,15 @@ const syncManager = {
         if (!nextRecord) return false;
         if (!previousRecord) return true;
 
-        const keys = ['library', 'history', 'history_chunk_count', 'user_playlists', 'user_folders', 'favorite_albums', 'statistics_summary'];
+        const keys = [
+            'library',
+            'history',
+            'history_chunk_count',
+            'user_playlists',
+            'user_folders',
+            'favorite_albums',
+            'statistics_summary',
+        ];
         return keys.some((key) => String(previousRecord[key] ?? '') !== String(nextRecord[key] ?? ''));
     },
 

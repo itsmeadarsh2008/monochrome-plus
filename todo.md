@@ -47,8 +47,8 @@ None.
 
 ```json
 {
-  "version": "2.x",
-  "Repo": "https://github.com/binimum/hifi-api"
+    "version": "2.x",
+    "Repo": "https://github.com/binimum/hifi-api"
 }
 ```
 
@@ -66,72 +66,68 @@ Returns info about a track given ID.
 
 ```json
 {
-  "version": "2.6",
-  "data": {
-    "id": 144371283,
-    "title": "Don't Look Back In Anger",
-    "duration": 328,
-    "replayGain": -10.46,
-    "peak": 0.999969,
-    "allowStreaming": true,
-    "streamReady": true,
-    "payToStream": false,
-    "adSupportedStreamReady": true,
-    "djReady": true,
-    "stemReady": false,
-    "streamStartDate": "2020-08-11T00:00:00.000+0000",
-    "premiumStreamingOnly": false,
-    "trackNumber": 10,
-    "volumeNumber": 1,
-    "version": "Live at Wembley Stadium, July 2000",
-    "popularity": 51,
-    "copyright": "(P) 2000 Big Brother Recordings Ltd",
-    "bpm": 86,
-    "key": "C",
-    "keyScale": "MAJOR",
-    "url": "http://www.tidal.com/track/144371283",
-    "isrc": "GBBQY0002027",
-    "editable": false,
-    "explicit": true,
-    "audioQuality": "LOSSLESS",
-    "audioModes": [
-      "STEREO"
-    ],
-    "mediaMetadata": {
-      "tags": [
-        "LOSSLESS"
-      ]
-    },
-    "upload": false,
-    "accessType": "PUBLIC",
-    "spotlighted": false,
-    "artist": {
-      "id": 109,
-      "name": "Oasis",
-      "handle": null,
-      "type": "MAIN",
-      "picture": "0491c8eb-c16f-409c-915d-36a79d9e6384"
-    },
-    "artists": [
-      {
-        "id": 109,
-        "name": "Oasis",
-        "handle": null,
-        "type": "MAIN",
-        "picture": "0491c8eb-c16f-409c-915d-36a79d9e6384"
-      }
-    ],
-    "album": {
-      "id": 144371273,
-      "title": "Familiar To Millions (Live)",
-      "cover": "8f2d544e-2452-46de-ba70-25498434e2ef",
-      "vibrantColor": "#cb8784",
-      "videoCover": null
-    },
-    "mixes": {
-      "TRACK_MIX": "0010f77179063ef106e2efaac9507a"
+    "version": "2.6",
+    "data": {
+        "id": 144371283,
+        "title": "Don't Look Back In Anger",
+        "duration": 328,
+        "replayGain": -10.46,
+        "peak": 0.999969,
+        "allowStreaming": true,
+        "streamReady": true,
+        "payToStream": false,
+        "adSupportedStreamReady": true,
+        "djReady": true,
+        "stemReady": false,
+        "streamStartDate": "2020-08-11T00:00:00.000+0000",
+        "premiumStreamingOnly": false,
+        "trackNumber": 10,
+        "volumeNumber": 1,
+        "version": "Live at Wembley Stadium, July 2000",
+        "popularity": 51,
+        "copyright": "(P) 2000 Big Brother Recordings Ltd",
+        "bpm": 86,
+        "key": "C",
+        "keyScale": "MAJOR",
+        "url": "http://www.tidal.com/track/144371283",
+        "isrc": "GBBQY0002027",
+        "editable": false,
+        "explicit": true,
+        "audioQuality": "LOSSLESS",
+        "audioModes": ["STEREO"],
+        "mediaMetadata": {
+            "tags": ["LOSSLESS"]
+        },
+        "upload": false,
+        "accessType": "PUBLIC",
+        "spotlighted": false,
+        "artist": {
+            "id": 109,
+            "name": "Oasis",
+            "handle": null,
+            "type": "MAIN",
+            "picture": "0491c8eb-c16f-409c-915d-36a79d9e6384"
+        },
+        "artists": [
+            {
+                "id": 109,
+                "name": "Oasis",
+                "handle": null,
+                "type": "MAIN",
+                "picture": "0491c8eb-c16f-409c-915d-36a79d9e6384"
+            }
+        ],
+        "album": {
+            "id": 144371273,
+            "title": "Familiar To Millions (Live)",
+            "cover": "8f2d544e-2452-46de-ba70-25498434e2ef",
+            "vibrantColor": "#cb8784",
+            "videoCover": null
+        },
+        "mixes": {
+            "TRACK_MIX": "0010f77179063ef106e2efaac9507a"
+        }
     }
-  }
 }
 ```
 
@@ -173,12 +169,12 @@ Where `manifest` is either base64 encoded JSON (use `"manifestMimeType": "applic
 
 ```json
 {
-  "mimeType": "audio/flac",
-  "codecs": "flac",
-  "encryptionType": "NONE",
-  "urls": [
-    "https://lgf.audio.tidal.com/mediatracks/CAEaKwgDEidmYjRiZTBiNjU3YjQ4N2Q5MDBlZGJhNzlhOGJiOWM0MV82MS5tcDQ/0.flac?token=1766870057~NTViMjhmYjdjOTNiNWU4MTM3YzIwNTcxM2Q3NjVhNjJmY2EyNDYwMg=="
-  ]
+    "mimeType": "audio/flac",
+    "codecs": "flac",
+    "encryptionType": "NONE",
+    "urls": [
+        "https://lgf.audio.tidal.com/mediatracks/CAEaKwgDEidmYjRiZTBiNjU3YjQ4N2Q5MDBlZGJhNzlhOGJiOWM0MV82MS5tcDQ/0.flac?token=1766870057~NTViMjhmYjdjOTNiNWU4MTM3YzIwNTcxM2Q3NjVhNjJmY2EyNDYwMg=="
+    ]
 }
 ```
 
@@ -1067,60 +1063,57 @@ Provide `id` or `f`.
 
 ```json
 {
-  "version": "2.6",
-  "artist": {
-    "id": 25022,
-    "name": "Kanye West",
-    "artistTypes": [
-      "ARTIST",
-      "CONTRIBUTOR"
-    ],
-    "url": "http://www.tidal.com/artist/25022",
-    "picture": "0948decd-5591-4b83-b188-8314bfbe7fd3",
-    "selectedAlbumCoverFallback": null,
-    "popularity": 96,
-    "artistRoles": [
-      {
-        "categoryId": -1,
-        "category": "Artist"
-      },
-      {
-        "categoryId": 2,
-        "category": "Songwriter"
-      },
-      {
-        "categoryId": 1,
-        "category": "Producer"
-      },
-      {
-        "categoryId": 11,
-        "category": "Performer"
-      },
-      {
-        "categoryId": 10,
-        "category": "Production team"
-      },
-      {
-        "categoryId": 3,
-        "category": "Engineer"
-      },
-      {
-        "categoryId": 99,
-        "category": "Misc"
-      }
-    ],
-    "mixes": {
-      "ARTIST_MIX": "000a58346749c76f7f6f58bf9cef7a"
+    "version": "2.6",
+    "artist": {
+        "id": 25022,
+        "name": "Kanye West",
+        "artistTypes": ["ARTIST", "CONTRIBUTOR"],
+        "url": "http://www.tidal.com/artist/25022",
+        "picture": "0948decd-5591-4b83-b188-8314bfbe7fd3",
+        "selectedAlbumCoverFallback": null,
+        "popularity": 96,
+        "artistRoles": [
+            {
+                "categoryId": -1,
+                "category": "Artist"
+            },
+            {
+                "categoryId": 2,
+                "category": "Songwriter"
+            },
+            {
+                "categoryId": 1,
+                "category": "Producer"
+            },
+            {
+                "categoryId": 11,
+                "category": "Performer"
+            },
+            {
+                "categoryId": 10,
+                "category": "Production team"
+            },
+            {
+                "categoryId": 3,
+                "category": "Engineer"
+            },
+            {
+                "categoryId": 99,
+                "category": "Misc"
+            }
+        ],
+        "mixes": {
+            "ARTIST_MIX": "000a58346749c76f7f6f58bf9cef7a"
+        },
+        "handle": null,
+        "userId": null,
+        "spotlighted": false
     },
-    "handle": null,
-    "userId": null,
-    "spotlighted": false
-  },
-  "cover": {
-    "id": 25022,
-    "name": "Kanye West",
-    "750": "https://resources.tidal.com/images/0948decd/5591/4b83/b188/8314bfbe7fd3/750x750.jpg"
-  }
+    "cover": {
+        "id": 25022,
+        "name": "Kanye West",
+        "750": "https://resources.tidal.com/images/0948decd/5591/4b83/b188/8314bfbe7fd3/750x750.jpg"
+    }
 }
 ```
 
@@ -1299,16 +1292,16 @@ Provide `id` or `q`.
 
 ```json
 {
-  "version": "2.6",
-  "covers": [
-    {
-      "id": 311222965,
-      "name": "Broke with Expensive Taste",
-      "1280": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/1280x1280.jpg",
-      "640": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/640x640.jpg",
-      "80": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/80x80.jpg"
-    }
-  ]
+    "version": "2.6",
+    "covers": [
+        {
+            "id": 311222965,
+            "name": "Broke with Expensive Taste",
+            "1280": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/1280x1280.jpg",
+            "640": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/640x640.jpg",
+            "80": "https://resources.tidal.com/images/c50c9146/3c7a/44e6/a1bc/55b20516eb29/80x80.jpg"
+        }
+    ]
 }
 ```
 
@@ -1324,16 +1317,16 @@ Provide `id` or `q`.
 
 ```json
 {
-  "version": "2.6",
-  "lyrics": {
-    "trackId": 39249713,
-    "lyricsProvider": "MUSIXMATCH",
-    "providerCommontrackId": "190482820",
-    "providerLyricsId": "37850929",
-    "lyrics": "Doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh (ah, ow)\n\nThis hit, that ice-cold <truncated>",
-    "subtitles": "[00:00.04] Doh\n[00:01.98] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:05.93] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:10.22] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:14.44] Doh-doh-doh, doh-doh (ah, ow)\n[00:16.70] This hit, that ice-cold <truncated>",
-    "isRightToLeft": false
-  }
+    "version": "2.6",
+    "lyrics": {
+        "trackId": 39249713,
+        "lyricsProvider": "MUSIXMATCH",
+        "providerCommontrackId": "190482820",
+        "providerLyricsId": "37850929",
+        "lyrics": "Doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh-doh, doh-doh\nDoh-doh-doh, doh-doh (ah, ow)\n\nThis hit, that ice-cold <truncated>",
+        "subtitles": "[00:00.04] Doh\n[00:01.98] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:05.93] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:10.22] Doh-doh-doh, doh-doh-doh, doh-doh\n[00:14.44] Doh-doh-doh, doh-doh (ah, ow)\n[00:16.70] This hit, that ice-cold <truncated>",
+        "isRightToLeft": false
+    }
 }
 ```
 
@@ -1446,16 +1439,16 @@ Provide `id` or `q`.
 
 ```json
 {
-  "version": "2.6",
-  "video": {
-    "videoId": 48204106,
-    "streamType": "ON_DEMAND",
-    "assetPresentation": "FULL",
-    "videoQuality": "HIGH",
-    "manifestMimeType": "application/vnd.tidal.emu",
-    "manifestHash": "fU3b2NNlidH7ZvUhBSKbJCuDlTeOay1RPqptFQLTt1U=",
-    "manifest": "eyJtaW1lVHlwZSI6ImFwcGxpY2F0aW9uL3ZuZC5hcHBsZS5tcGVndXJsIiwidXJscyI6WyJodHRwczovL2ltLWZhLm1hbmlmZXN0LnRpZGFsLmNvbS8xL21hbmlmZXN0cy9DQUVTQ0RRNE1qQTBNVEEySWhaWFJXcDJVVUowWjB4aFgxaGpjMGMxTkdkcmEzWkJJaFkyTURWcFR6RnBPREJPVm5sRmVuWlVkRk41TmtwQkloWTRkWGx4ZVVaamJETmtPVWxyTW5wU1ozZDJSRmhuSWhaRVRVNVJkRU4yY2xOcWFFZEJXbk53TlVWbmFIcG5JaFkwTm1KMVozaGtXRXBPWTBJNFptUmpZbVJrWWpSUktBRXdBbEFCLm0zdTg/dG9rZW49MTc3MjU3NDYzMH5NalV5T0RRelpqRmpOakJsWWpSaE5qSmxZV1UwTVRFek56TXdNRFEyWm1Nek56RXhabVkwT0E9PSJdfQ=="
-  }
+    "version": "2.6",
+    "video": {
+        "videoId": 48204106,
+        "streamType": "ON_DEMAND",
+        "assetPresentation": "FULL",
+        "videoQuality": "HIGH",
+        "manifestMimeType": "application/vnd.tidal.emu",
+        "manifestHash": "fU3b2NNlidH7ZvUhBSKbJCuDlTeOay1RPqptFQLTt1U=",
+        "manifest": "eyJtaW1lVHlwZSI6ImFwcGxpY2F0aW9uL3ZuZC5hcHBsZS5tcGVndXJsIiwidXJscyI6WyJodHRwczovL2ltLWZhLm1hbmlmZXN0LnRpZGFsLmNvbS8xL21hbmlmZXN0cy9DQUVTQ0RRNE1qQTBNVEEySWhaWFJXcDJVVUowWjB4aFgxaGpjMGMxTkdkcmEzWkJJaFkyTURWcFR6RnBPREJPVm5sRmVuWlVkRk41TmtwQkloWTRkWGx4ZVVaamJETmtPVWxyTW5wU1ozZDJSRmhuSWhaRVRVNVJkRU4yY2xOcWFFZEJXbk53TlVWbmFIcG5JaFkwTm1KMVozaGtXRXBPWTBJNFptUmpZbVJrWWpSUktBRXdBbEFCLm0zdTg/dG9rZW49MTc3MjU3NDYzMH5NalV5T0RRelpqRmpOakJsWWpSaE5qSmxZV1UwTVRFek56TXdNRFEyWm1Nek56RXhabVkwT0E9PSJdfQ=="
+    }
 }
 ```
 
@@ -1465,9 +1458,10 @@ where `manifest` is base64-encoded JSON containing HLS video.
 
 ```json
 {
-  "mimeType":"application/vnd.apple.mpegurl","urls":[
-    "https://im-fa.manifest.tidal.com/1/manifests/CAESCDQ4MjA0MTA2IhZXRWp2UUJ0Z0xhX1hjc0c1NGdra3ZBIhY2MDVpTzFpODBOVnlFenZUdFN5NkpBIhY4dXlxeUZjbDNkOUlrMnpSZ3d2RFhnIhZETU5RdEN2clNqaEdBWnNwNUVnaHpnIhY0NmJ1Z3hkWEpOY0I4ZmRjYmRkYjRRKAEwAlAB.m3u8?token=1772574630~MjUyODQzZjFjNjBlYjRhNjJlYWU0MTEzNzMwMDQ2ZmMzNzExZmY0OA=="
-  ]
+    "mimeType": "application/vnd.apple.mpegurl",
+    "urls": [
+        "https://im-fa.manifest.tidal.com/1/manifests/CAESCDQ4MjA0MTA2IhZXRWp2UUJ0Z0xhX1hjc0c1NGdra3ZBIhY2MDVpTzFpODBOVnlFenZUdFN5NkpBIhY4dXlxeUZjbDNkOUlrMnpSZ3d2RFhnIhZETU5RdEN2clNqaEdBWnNwNUVnaHpnIhY0NmJ1Z3hkWEpOY0I4ZmRjYmRkYjRRKAEwAlAB.m3u8?token=1772574630~MjUyODQzZjFjNjBlYjRhNjJlYWU0MTEzNzMwMDQ2ZmMzNzExZmY0OA=="
+    ]
 }
 ```
 

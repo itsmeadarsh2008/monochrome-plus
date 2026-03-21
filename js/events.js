@@ -46,13 +46,21 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         const trackId = track.id || track.trackId || track.uuid || track.isrc;
         if (trackId) return String(trackId);
 
-        const title = String(track.title || track.name || '').trim().toLowerCase();
+        const title = String(track.title || track.name || '')
+            .trim()
+            .toLowerCase();
         const artists = Array.isArray(track.artists)
             ? track.artists
-                  .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                  .map((artist) =>
+                      String(artist?.name || artist || '')
+                          .trim()
+                          .toLowerCase()
+                  )
                   .filter(Boolean)
                   .join(',')
-            : String(track.artist?.name || track.artist || '').trim().toLowerCase();
+            : String(track.artist?.name || track.artist || '')
+                  .trim()
+                  .toLowerCase();
 
         if (!title && !artists) return null;
         const duration = Number(track.duration || track.length || 0) || 0;
