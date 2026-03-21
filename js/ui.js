@@ -5507,51 +5507,14 @@ export class UIRenderer {
 
         try {
             const history = await db.getHistory();
-            const collapsedHistory = [];
-            const seenSignatures = new Set();
-
-            const buildTrackSignature = (item) => {
-                if (!item || typeof item !== 'object') return null;
-
-                if (item.id != null) return `id:${item.id}`;
-                if (item.trackId != null) return `trackId:${item.trackId}`;
-                if (item.isrc) return `isrc:${String(item.isrc).toLowerCase()}`;
-
-                const title = String(item.title || '')
-                    .trim()
-                    .toLowerCase();
-                const artists = Array.isArray(item.artists)
-                    ? item.artists
-                          .map((artist) =>
-                              String(artist?.name || artist || '')
-                                  .trim()
-                                  .toLowerCase()
-                          )
-                          .filter(Boolean)
-                          .join(',')
-                    : String(item.artist?.name || item.artist || '')
-                          .trim()
-                          .toLowerCase();
-
-                if (!title && !artists) return null;
-                return `meta:${title}::${artists}`;
-            };
-
-            history.forEach((item) => {
-                const signature = buildTrackSignature(item);
-                if (signature && seenSignatures.has(signature)) {
-                    return;
-                }
-                if (signature) seenSignatures.add(signature);
-                collapsedHistory.push(item);
-            });
+            const latestHistory = Array.isArray(history) ? history : [];
 
             // Show/hide clear button based on whether there's history
             if (clearBtn) {
-                clearBtn.style.display = collapsedHistory.length > 0 ? 'flex' : 'none';
+                clearBtn.style.display = latestHistory.length > 0 ? 'flex' : 'none';
             }
 
-            if (collapsedHistory.length === 0) {
+            if (latestHistory.length === 0) {
                 container.innerHTML = createPlaceholder("You haven't played any tracks yet.");
                 if (subtitle) subtitle.textContent = 'No listening history yet.';
                 return;
@@ -5562,7 +5525,7 @@ export class UIRenderer {
             const today = new Date().setHours(0, 0, 0, 0);
             const yesterday = new Date(today - 86400000).setHours(0, 0, 0, 0);
 
-            collapsedHistory.forEach((item) => {
+            latestHistory.forEach((item) => {
                 const date = new Date(item.timestamp);
                 const dayStart = new Date(date).setHours(0, 0, 0, 0);
 
@@ -5583,7 +5546,7 @@ export class UIRenderer {
 
             container.innerHTML = '';
             if (subtitle) {
-                subtitle.textContent = `${collapsedHistory.length} tracks across ${Object.keys(groups).length} day${Object.keys(groups).length === 1 ? '' : 's'}.`;
+                subtitle.textContent = `${latestHistory.length} plays across ${Object.keys(groups).length} day${Object.keys(groups).length === 1 ? '' : 's'}.`;
             }
 
             for (const [label, tracks] of Object.entries(groups)) {
@@ -5598,25 +5561,25 @@ export class UIRenderer {
                 const tempContainer = document.createElement('div');
                 this.renderListWithTracks(tempContainer, tracks, true);
 
-                // Move children to main container
-                while (tempContainer.firstChild) {
-                    const node = tempContainer.firstChild;
-                    if (node.nodeType === 1 && node.classList.contains('track-item')) {
-                        const ts = tracks[groupEl.querySelectorAll('.track-item').length]?.timestamp;
-                        if (ts) {
-                            const when = new Date(ts);
-                            const playedText = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            const artistLine = node.querySelector('.track-item-details .artist');
-                            if (artistLine) {
-                                const playedMeta = document.createElement('span');
-                                playedMeta.className = 'recent-played-at';
-                                playedMeta.textContent = ` • Played ${playedText}`;
-                                artistLine.appendChild(playedMeta);
-                            }
+                // Append rendered track nodes and annotate played time per item
+                const trackNodes = Array.from(tempContainer.querySelectorAll('.track-item'));
+                trackNodes.forEach((node, trackIndex) => {
+                    const ts = tracks[trackIndex]?.timestamp;
+                    if (ts) {
+                        const when = new Date(ts);
+                        const playedText = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const artistLine = node.querySelector('.track-item-details .artist');
+                        if (artistLine) {
+                            const playedMeta = document.createElement('span');
+                            playedMeta.className = 'recent-played-at';
+                            playedMeta.textContent = ` • Played ${playedText}`;
+                            artistLine.appendChild(playedMeta);
                         }
                     }
+
                     groupEl.appendChild(node);
-                }
+                });
+
                 container.appendChild(groupEl);
             }
 

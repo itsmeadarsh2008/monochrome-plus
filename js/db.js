@@ -107,44 +107,51 @@ export class MusicDatabase {
     }
 
     // History API
+    _getHistoryKey(track) {
+        if (!track || typeof track !== 'object') return null;
+        const trackId = track.id || track.trackId || track.uuid || track.isrc;
+        if (trackId) return String(trackId);
+
+        const title = String(track.title || track.name || '').trim().toLowerCase();
+        const artists = Array.isArray(track.artists)
+            ? track.artists
+                  .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                  .filter(Boolean)
+                  .join(',')
+            : String(track.artist?.name || track.artist || '').trim().toLowerCase();
+
+        if (!title && !artists) return null;
+        const duration = Number(track.duration || track.length || 0) || 0;
+        return `meta:${title}:${artists}:${duration}`;
+    }
+
     async addToHistory(track) {
         const storeName = 'history_tracks';
         const minified = this._minifyItem('track', track);
-        const timestamp = Date.now();
-        const entry = { ...minified, timestamp };
+        // Use sub-millisecond entropy to avoid timestamp key collisions in IndexedDB.
+        const timestamp = Number(`${Date.now()}.${Math.floor(Math.random() * 1000000)}`);
+        const historyKey = this._getHistoryKey(track);
+        const entry = { ...minified, timestamp, historyKey };
 
         const db = await this.open();
+
 
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readwrite');
             const store = transaction.objectStore(storeName);
-            const index = store.index('timestamp');
 
-            // Remove ALL older entries for the same track (not just the most recent)
-            const cursorReq = index.openCursor(null, 'prev');
-            cursorReq.onsuccess = (e) => {
-                const cursor = e.target.result;
-                if (cursor) {
-                    if (cursor.value.id === track.id) {
-                        store.delete(cursor.primaryKey);
-                    }
-                    cursor.continue();
-                } else {
-                    // Cursor exhausted – add the new entry
-                    store.put(entry);
-                }
-            };
-
-            cursorReq.onerror = (_e) => {
-                // If cursor fails, just try to put (fallback)
-                store.put(entry);
-            };
+            store.put(entry);
 
             transaction.oncomplete = () => {
                 // Sync to cloud immediately
                 this._syncHistoryItemToCloud(entry).catch((error) => {
                     console.warn('[DB] Failed to sync history to cloud:', error);
                 });
+
+                if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                    window.dispatchEvent(new CustomEvent('history-changed'));
+                }
+
                 resolve(entry);
             };
             transaction.onerror = (e) => reject(e.target.error);
@@ -201,19 +208,38 @@ export class MusicDatabase {
             const index = store.index('timestamp');
             const cursorReq = index.openCursor(null, 'prev');
 
-            // Keep only the newest entry per track id
+            // Keep only the newest entry per track key
             const seen = new Set();
             let removed = 0;
+
+            const getTrackKey = (entry) => {
+                if (!entry || typeof entry !== 'object') return null;
+                if (entry.historyKey) return entry.historyKey;
+                const trackId = entry.id || entry.trackId || entry.uuid || entry.isrc;
+                if (trackId) return String(trackId);
+
+                const title = String(entry.title || entry.name || '').trim().toLowerCase();
+                const artists = Array.isArray(entry.artists)
+                    ? entry.artists
+                          .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                          .filter(Boolean)
+                          .join(',')
+                    : String(entry.artist?.name || entry.artist || '').trim().toLowerCase();
+
+                if (!title && !artists) return null;
+                const duration = Number(entry.duration || entry.length || 0) || 0;
+                return `meta:${title}:${artists}:${duration}`;
+            };
 
             cursorReq.onsuccess = (e) => {
                 const cursor = e.target.result;
                 if (!cursor) return;
-                const trackId = cursor.value.id;
-                if (seen.has(trackId)) {
+                const trackKey = getTrackKey(cursor.value);
+                if (trackKey && seen.has(trackKey)) {
                     store.delete(cursor.primaryKey);
                     removed++;
-                } else {
-                    seen.add(trackId);
+                } else if (trackKey) {
+                    seen.add(trackKey);
                 }
                 cursor.continue();
             };
@@ -532,8 +558,9 @@ export class MusicDatabase {
                 return false;
             }
 
-            // For history_tracks, do a proper merge: read local first, merge with
-            // cloud entries keeping only the newest entry per track id, then rewrite.
+            // For history_tracks, do a proper merge: combine local and cloud entries,
+            // keep each distinct play, remove exact timestamp duplicates and
+            // consecutive same-track repeats.
             if (storeName === 'history_tracks' && !clear) {
                 return new Promise((resolve, reject) => {
                     const transaction = db.transaction(storeName, 'readwrite');
@@ -542,25 +569,39 @@ export class MusicDatabase {
 
                     getAllReq.onsuccess = () => {
                         const localEntries = getAllReq.result || [];
-                        // Build a map keyed by track id, keeping the newest timestamp
-                        const merged = new Map();
-                        for (const entry of localEntries) {
-                            const existing = merged.get(entry.id);
-                            if (!existing || (entry.timestamp || 0) > (existing.timestamp || 0)) {
-                                merged.set(entry.id, entry);
+                        const allEntries = [...localEntries, ...itemsArray].map((entry) => {
+                            const normalized = {
+                                ...entry,
+                                historyKey: entry.historyKey || this._getHistoryKey(entry),
+                                timestamp: entry.timestamp || Date.now() + Math.random(),
+                            };
+                            return normalized;
+                        });
+
+                        allEntries.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                        const deDuped = [];
+                        for (const entry of allEntries) {
+                            const last = deDuped[deDuped.length - 1];
+                            if (!last) {
+                                deDuped.push(entry);
+                                continue;
                             }
-                        }
-                        for (const entry of itemsArray) {
-                            const existing = merged.get(entry.id);
-                            if (!existing || (entry.timestamp || 0) > (existing.timestamp || 0)) {
-                                merged.set(entry.id, entry);
+
+                            // drop exact timestamp duplicate of same track key
+                            if (entry.historyKey && entry.historyKey === last.historyKey && entry.timestamp === last.timestamp) {
+                                continue;
                             }
+
+                            deDuped.push(entry);
                         }
 
-                        // Clear and rewrite with the merged, deduplicated set
+                        // Keep full history (no forced max-limit) while preserving non-duplicates.
+                        const trimmed = deDuped.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+                        // Clear and rewrite
                         store.clear();
-                        for (const entry of merged.values()) {
-                            if (!entry.timestamp) entry.timestamp = Date.now() + Math.random();
+                        for (const entry of trimmed) {
                             store.put(entry);
                         }
                     };
@@ -576,16 +617,20 @@ export class MusicDatabase {
                 });
             }
 
-            // Deduplicate history_tracks even for clear imports
+            // Deduplicate history_tracks for exact duplicates only (same key + same timestamp), not by track ID.
             if (storeName === 'history_tracks') {
-                const seen = new Map();
+                const seen = new Set();
+                const reduced = [];
                 for (const item of itemsArray) {
-                    const existing = seen.get(item.id);
-                    if (!existing || (item.timestamp || 0) > (existing.timestamp || 0)) {
-                        seen.set(item.id, item);
+                    const key = this._getHistoryKey(item) || String(item.id || item.trackId || item.isrc || '');
+                    const timestamp = item.timestamp || 0;
+                    const unique = `${key}::${timestamp}`;
+                    if (!seen.has(unique)) {
+                        seen.add(unique);
+                        reduced.push(item);
                     }
                 }
-                itemsArray = [...seen.values()];
+                itemsArray = reduced;
             }
 
             return new Promise((resolve, reject) => {

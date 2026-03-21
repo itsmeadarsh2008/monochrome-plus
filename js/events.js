@@ -35,21 +35,61 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
     const sleepTimerBtnDesktop = document.getElementById('sleep-timer-btn-desktop');
     const sleepTimerBtnMobile = document.getElementById('sleep-timer-btn');
 
-    // History tracking – use accumulated listen time instead of currentTime
-    let historyLoggedTrackId = null;
-    let historyListenedTime = 0;
-    let historyLastTimeUpdate = 0;
+    // History tracking – immediate entry at first playback for each track (instant).
+    const HISTORY_RECORD_DEDUPE_MS = 5000; // avoid flood when replaying same track instantly
+
+    let historyLoggedTrackKey = null;
+    let historyLoggedTimestamp = 0;
+
+    const getHistoryTrackKey = (track) => {
+        if (!track || typeof track !== 'object') return null;
+        const trackId = track.id || track.trackId || track.uuid || track.isrc;
+        if (trackId) return String(trackId);
+
+        const title = String(track.title || track.name || '').trim().toLowerCase();
+        const artists = Array.isArray(track.artists)
+            ? track.artists
+                  .map((artist) => String(artist?.name || artist || '').trim().toLowerCase())
+                  .filter(Boolean)
+                  .join(',')
+            : String(track.artist?.name || track.artist || '').trim().toLowerCase();
+
+        if (!title && !artists) return null;
+        const duration = Number(track.duration || track.length || 0) || 0;
+        return `meta:${title}:${artists}:${duration}`;
+    };
+
+    const recordCurrentTrackHistory = async () => {
+        if (!player.currentTrack) return;
+        const currentTrackKey = getHistoryTrackKey(player.currentTrack);
+        if (!currentTrackKey) return;
+
+        const now = Date.now();
+        if (currentTrackKey === historyLoggedTrackKey && now - historyLoggedTimestamp < HISTORY_RECORD_DEDUPE_MS) {
+            return;
+        }
+
+        historyLoggedTrackKey = currentTrackKey;
+        historyLoggedTimestamp = now;
+
+        try {
+            await db.addToHistory(player.currentTrack);
+        } catch (error) {
+            console.warn('[Events] Failed to add history:', error);
+        }
+
+        if (window.location.pathname === '/recent') {
+            ui.renderRecentPage();
+        }
+
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('history-changed'));
+        }
+    };
 
     audioPlayer.addEventListener('loadstart', () => {
-        historyLoggedTrackId = null;
-        historyListenedTime = 0;
-        historyLastTimeUpdate = 0;
-    });
-
-    audioPlayer.addEventListener('seeked', () => {
-        // Reset the reference point after a seek so the next timeupdate
-        // delta is measured from the new position, not the old one.
-        historyLastTimeUpdate = audioPlayer.currentTime;
+        historyLoggedTrackKey = null;
+        historyLoggedTimestamp = 0;
     });
 
     // Sync UI with player state on load
@@ -83,6 +123,11 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
             // Update Appwrite Status
             syncManager.updatePlaybackStatus(player.currentTrack);
 
+            // Log history instantly on actual playback start.
+            recordCurrentTrackHistory().catch((error) => {
+                console.warn('[Events] recordCurrentTrackHistory failed:', error);
+            });
+
             updateWaveform();
         }
 
@@ -106,34 +151,13 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         player.updateMediaSessionPositionState();
     });
 
-    audioPlayer.addEventListener('timeupdate', async () => {
+    audioPlayer.addEventListener('timeupdate', () => {
         const { currentTime, duration } = audioPlayer;
         if (duration) {
             const progressFill = document.getElementById('progress-fill');
             const currentTimeEl = document.getElementById('current-time');
-            progressFill.style.width = `${(currentTime / duration) * 100}%`;
-            currentTimeEl.textContent = formatTime(currentTime);
-
-            // Accumulate actual listening time (delta between timeupdate ticks)
-            if (!audioPlayer.paused && historyLastTimeUpdate > 0) {
-                const delta = currentTime - historyLastTimeUpdate;
-                // Only count small forward deltas (normal playback, not seeks)
-                if (delta > 0 && delta < 2) {
-                    historyListenedTime += delta;
-                }
-            }
-            historyLastTimeUpdate = currentTime;
-
-            // Log to history after 10 seconds of actual listening
-            if (historyListenedTime >= 10 && player.currentTrack && player.currentTrack.id !== historyLoggedTrackId) {
-                historyLoggedTrackId = player.currentTrack.id;
-                // addToHistory already syncs to cloud internally
-                await db.addToHistory(player.currentTrack);
-
-                if (window.location.hash === '#recent') {
-                    ui.renderRecentPage();
-                }
-            }
+            if (progressFill) progressFill.style.width = `${(currentTime / duration) * 100}%`;
+            if (currentTimeEl) currentTimeEl.textContent = formatTime(currentTime);
         }
     });
 

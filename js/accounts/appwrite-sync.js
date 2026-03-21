@@ -13,7 +13,6 @@ const FRIEND_REQUESTS_COLLECTION = 'DB_friend_requests';
 const CHAT_MESSAGES_COLLECTION = 'DB_chat_messages';
 
 const DEFAULT_PRIVACY = { playlists: 'public', lastfm: 'public' };
-const MAX_HISTORY_ITEMS = 300;
 const MAX_HISTORY_STRING_LENGTH = 65000; // Appwrite limit is 65535 chars
 const MAX_TRACK_SYNC = 1500;
 const MAX_ALBUM_SYNC = 1000;
@@ -77,24 +76,9 @@ const syncManager = {
     },
 
     _truncateHistoryToFit(history) {
-        if (!Array.isArray(history) || history.length === 0) {
-            return history;
-        }
-
-        let serialized = JSON.stringify(history);
-        if (serialized.length <= MAX_HISTORY_STRING_LENGTH) {
-            return history;
-        }
-
-        let truncated = [...history];
-        while (truncated.length > 0 && JSON.stringify(truncated).length > MAX_HISTORY_STRING_LENGTH) {
-            truncated.pop();
-        }
-
-        console.warn(
-            `[Appwrite Sync] History truncated from ${history.length} to ${truncated.length} items to fit within ${MAX_HISTORY_STRING_LENGTH} char limit`
-        );
-        return truncated;
+        // No forced truncation. Keep the full history on the client side.
+        // Appwrite payload limit must be handled elsewhere if needed.
+        return history;
     },
 
     _normalizeFavoriteAlbums(value) {
@@ -1087,14 +1071,13 @@ const syncManager = {
             const minified = this._minifyItem('track', historyEntry);
             minified.timestamp = historyEntry.timestamp || Date.now();
 
-            // Remove any existing entries for the same track (by id) AND same timestamp
-            const nextHistory = history.filter(
-                (entry) => entry.timestamp !== minified.timestamp && entry.id !== minified.id
-            );
+            // Allow repeated plays of the same track by preserving entries with different timestamps.
+            // Only deduplicate exactly same timestamp entries to prevent accidental duplicates from retry loops.
+            const nextHistory = history.filter((entry) => entry.timestamp !== minified.timestamp);
             nextHistory.unshift(minified);
             nextHistory.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-            const truncatedHistory = this._truncateHistoryToFit(nextHistory.slice(0, MAX_HISTORY_ITEMS));
+            const truncatedHistory = this._truncateHistoryToFit(nextHistory);
             await this._updateUserJSON(null, 'history', truncatedHistory);
             await this.syncListeningStats(truncatedHistory);
             window.dispatchEvent(new CustomEvent('history-changed'));
@@ -2507,13 +2490,11 @@ const syncManager = {
                     mixes: asMap((localData.favorites_mixes || []).slice(0, MAX_MIX_SYNC)),
                 };
 
-                const history = this._truncateHistoryToFit(
-                    (localData.history_tracks || []).slice(0, MAX_HISTORY_ITEMS).map((entry) => {
-                        const minified = this._minifyItem('track', entry);
-                        minified.timestamp = entry.timestamp || Date.now();
-                        return minified;
-                    })
-                );
+                const history = (localData.history_tracks || []).map((entry) => {
+                    const minified = this._minifyItem('track', entry);
+                    minified.timestamp = entry.timestamp || Date.now();
+                    return minified;
+                });
                 const statisticsSummary = this._buildStatisticsSummary(history);
                 const playlists = localData.user_playlists || [];
                 const folders = localData.user_folders || [];
