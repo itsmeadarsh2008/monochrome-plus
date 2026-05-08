@@ -1,0 +1,25 @@
+node_modules
+dist
+.DS_Store
+*.local
+.vite
+.cargo
+.secrets
+
+# Docker
+.env
+
+# Electrobun
+build/
+views/
+
+# Logs
+*.log
+
+# Misc
+.tmp/
+.storage/
+auth_storage/
+
+# opensrc - source code for packages
+opensrc/

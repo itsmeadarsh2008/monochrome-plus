@@ -1,0 +1,603 @@
+//js/ui-interactions.js
+import {
+    SVG_CLOSE,
+    SVG_BIN,
+    SVG_HEART,
+    SVG_DOWNLOAD,
+    formatTime,
+    getTrackTitle,
+    getTrackArtists,
+    escapeHtml,
+    createQualityBadgeHTML,
+    positionMenu,
+} from './utils.js';
+import { sidePanelManager } from './side-panel.js';
+import { downloadQualitySettings, contentBlockingSettings } from './storage.js';
+import { db } from './db.js';
+import { syncManager } from './accounts/appwrite-sync.js';
+import { showNotification, downloadTracks } from './downloads.js';
+
+export function initializeUIInteractions(player, api, ui) {
+    document.body.classList.add('navbar-removed');
+
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebarMobileCloseBtn = document.getElementById('sidebar-mobile-close');
+    const quickNavButtons = Array.from(document.querySelectorAll('[data-quick-nav]'));
+    const queueBtn = document.getElementById('queue-btn');
+    const libraryPage = document.getElementById('page-library');
+
+    if (libraryPage) {
+        libraryPage.addEventListener('dragstart', (e) => {
+            const playlistCard = e.target.closest('.card.user-playlist');
+            if (playlistCard) {
+                e.dataTransfer.setData('text/playlist-id', playlistCard.dataset.userPlaylistId);
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+
+        const handleDragOver = (e) => {
+            const folderCard = e.target.closest('.card[data-folder-id]');
+            if (folderCard && e.dataTransfer.types.includes('text/playlist-id')) {
+                e.preventDefault();
+                folderCard.classList.add('drag-over');
+            }
+        };
+
+        const handleDragLeave = (e) => {
+            const folderCard = e.target.closest('.card[data-folder-id]');
+            if (folderCard) {
+                folderCard.classList.remove('drag-over');
+            }
+        };
+
+        const handleDrop = async (e) => {
+            e.preventDefault();
+            const folderCard = e.target.closest('.card[data-folder-id]');
+            if (folderCard) {
+                folderCard.classList.remove('drag-over');
+                const playlistId = e.dataTransfer.getData('text/playlist-id');
+                const folderId = folderCard.dataset.folderId;
+
+                if (playlistId && folderId) {
+                    const updatedFolder = await db.addPlaylistToFolder(folderId, playlistId);
+                    syncManager.syncUserFolder(updatedFolder, 'update');
+                    const subtitle = folderCard.querySelector('.card-subtitle');
+                    if (subtitle) {
+                        subtitle.textContent = `${updatedFolder.playlists.length} playlists`;
+                    }
+                    showNotification('Playlist added to folder');
+                }
+            }
+        };
+
+        libraryPage.addEventListener('dragover', handleDragOver);
+        libraryPage.addEventListener('dragleave', handleDragLeave);
+        libraryPage.addEventListener('drop', handleDrop);
+    }
+
+    let draggedQueueIndex = null;
+
+    sidebar?.classList.remove('is-open');
+    sidebarOverlay?.classList.remove('is-visible');
+    document.body.classList.remove('mobile-nav-open');
+    hamburgerBtn?.setAttribute('aria-hidden', 'true');
+    sidebarMobileCloseBtn?.setAttribute('aria-hidden', 'true');
+
+    const normalizePath = (path) => {
+        if (!path) return '/';
+        if (path === '/') return '/';
+        const withoutTrailing = path.endsWith('/') ? path.slice(0, -1) : path;
+        return withoutTrailing || '/';
+    };
+
+    const syncQuickNavState = () => {
+        const currentPath = normalizePath(window.location.pathname);
+        quickNavButtons.forEach((button) => {
+            const targetPath = normalizePath(button.getAttribute('data-quick-nav') || '/');
+            const isActive =
+                targetPath === '/'
+                    ? currentPath === '/'
+                    : currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-current', isActive ? 'page' : 'false');
+        });
+    };
+
+    quickNavButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            const targetPath = button.getAttribute('data-quick-nav');
+            if (!targetPath) return;
+
+            if (typeof window.navigate === 'function') {
+                window.navigate(targetPath);
+            } else {
+                window.location.pathname = targetPath;
+            }
+        });
+    });
+
+    syncQuickNavState();
+    window.addEventListener('popstate', syncQuickNavState);
+
+    // Queue panel
+    const renderQueueControls = (container) => {
+        const currentQueue = player.getCurrentQueue();
+        const showActionBtns = currentQueue.length > 0;
+
+        container.innerHTML = `
+            <button id="download-queue-btn" class="btn-icon" title="Download Queue" style="display: ${showActionBtns ? 'flex' : 'none'}">
+                ${SVG_DOWNLOAD}
+            </button>
+            <button id="like-queue-btn" class="btn-icon" title="Add Queue to Liked" style="display: ${showActionBtns ? 'flex' : 'none'}">
+                ${SVG_HEART}
+            </button>
+            <button id="add-queue-to-playlist-btn" class="btn-icon" title="Add Queue to Playlist" style="display: ${showActionBtns ? 'flex' : 'none'}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+            </button>
+            <button id="clear-queue-btn" class="btn-icon" title="Clear Queue" style="display: ${showActionBtns ? 'flex' : 'none'}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+            <button id="close-side-panel-btn" class="btn-icon" title="Close">
+                ${SVG_CLOSE}
+            </button>
+        `;
+
+        container.querySelector('#close-side-panel-btn').addEventListener('click', () => {
+            sidePanelManager.close();
+        });
+
+        const downloadBtn = container.querySelector('#download-queue-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', async () => {
+                downloadTracks(currentQueue, api, downloadQualitySettings.getQuality());
+            });
+        }
+
+        const likeBtn = container.querySelector('#like-queue-btn');
+        if (likeBtn) {
+            likeBtn.addEventListener('click', async () => {
+                let addedCount = 0;
+                for (const track of currentQueue) {
+                    const wasAdded = await db.toggleFavorite('track', track);
+                    if (wasAdded) {
+                        syncManager.syncLibraryItem('track', track, true);
+                        addedCount++;
+                    }
+                }
+
+                if (addedCount > 0) {
+                    showNotification(`Added ${addedCount} track${addedCount > 1 ? 's' : ''} to Liked`);
+                } else {
+                    showNotification('All tracks in queue are already liked');
+                }
+
+                refreshQueuePanel();
+            });
+        }
+
+        const addToPlaylistBtn = container.querySelector('#add-queue-to-playlist-btn');
+        if (addToPlaylistBtn) {
+            addToPlaylistBtn.addEventListener('click', async () => {
+                const playlists = await db.getPlaylists();
+                if (playlists.length === 0) {
+                    showNotification('No playlists yet. Create one first.');
+                    return;
+                }
+
+                const modal = document.createElement('div');
+                modal.className = 'modal active';
+                modal.innerHTML = `
+                    <div class="modal-overlay"></div>
+                    <div class="modal-content">
+                        <h3>Add Queue to Playlist</h3>
+                        <div class="modal-list">
+                            ${playlists
+                                .map(
+                                    (p) => `
+                                <div class="modal-option" data-id="${p.id}">${escapeHtml(p.name)}</div>
+                            `
+                                )
+                                .join('')}
+                        </div>
+                        <div class="modal-actions">
+                            <button class="btn-secondary cancel-btn">Cancel</button>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(modal);
+
+                const closeModal = () => {
+                    modal.remove();
+                };
+
+                modal.addEventListener('click', async (e) => {
+                    if (e.target.classList.contains('modal-overlay') || e.target.classList.contains('cancel-btn')) {
+                        closeModal();
+                        return;
+                    }
+
+                    const option = e.target.closest('.modal-option');
+                    if (option) {
+                        const playlistId = option.dataset.id;
+                        const playlistName = option.textContent;
+
+                        try {
+                            let addedCount = 0;
+                            for (const track of currentQueue) {
+                                await db.addTrackToPlaylist(playlistId, track);
+                                addedCount++;
+                            }
+
+                            const updatedPlaylist = await db.getPlaylist(playlistId);
+                            syncManager.syncUserPlaylist(updatedPlaylist, 'update');
+
+                            showNotification(`Added ${addedCount} tracks to playlist: ${playlistName}`);
+                        } catch (error) {
+                            console.error('Failed to add tracks to playlist:', error);
+                            showNotification('Failed to add tracks to playlist');
+                        }
+
+                        closeModal();
+                    }
+                });
+            });
+        }
+
+        const clearBtn = container.querySelector('#clear-queue-btn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                player.clearQueue();
+                refreshQueuePanel();
+            });
+        }
+    };
+
+    const renderQueueContent = (container) => {
+        const currentQueue = player.getCurrentQueue();
+
+        if (currentQueue.length === 0) {
+            container.innerHTML = '<div class="placeholder-text">Queue is empty.</div>';
+            return;
+        }
+
+        const html = currentQueue
+            .map((track, index) => {
+                const isPlaying = index === player.currentQueueIndex;
+                const isBlocked = contentBlockingSettings?.shouldHideTrack(track);
+                const trackTitle = getTrackTitle(track);
+                const trackArtists = getTrackArtists(track, { fallback: 'Unknown' });
+                const qualityBadge = createQualityBadgeHTML(track);
+                const blockedTitle = isBlocked
+                    ? `title="Blocked: ${contentBlockingSettings.isTrackBlocked(track.id) ? 'Track blocked' : contentBlockingSettings.isArtistBlocked(track.artist?.id) ? 'Artist blocked' : 'Album blocked'}"`
+                    : '';
+
+                return `
+                <div class="queue-track-item ${isPlaying ? 'playing' : ''} ${isBlocked ? 'blocked' : ''}" data-queue-index="${index}" data-track-id="${track.id}" draggable="${isBlocked ? 'false' : 'true'}" ${blockedTitle}>
+                    <div class="drag-handle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="5" y1="8" x2="19" y2="8"></line>
+                            <line x1="5" y1="16" x2="19" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="track-item-info">
+                        <img src="${api.getCoverUrl(track.album?.cover)}"
+                             class="track-item-cover" loading="lazy">
+                        <div class="track-item-details">
+                            <div class="title">${escapeHtml(trackTitle)} ${qualityBadge}</div>
+                            <div class="artist">${escapeHtml(trackArtists)}</div>
+                        </div>
+                    </div>
+                    <div class="track-item-duration">${isBlocked ? '--:--' : formatTime(track.duration)}</div>
+                    <button class="queue-like-btn" data-action="toggle-like" title="Add to Liked">
+                        ${SVG_HEART}
+                    </button>
+                    <button class="queue-remove-btn" data-track-index="${index}" title="Remove from queue">
+                        ${SVG_BIN}
+                    </button>
+                </div>
+            `;
+            })
+            .join('');
+
+        container.innerHTML = html;
+
+        container.querySelectorAll('.queue-track-item').forEach(async (item) => {
+            const index = parseInt(item.dataset.queueIndex);
+            const track = player.getCurrentQueue()[index];
+
+            // Update like button state
+            const likeBtn = item.querySelector('.queue-like-btn');
+            if (likeBtn && track) {
+                const isLiked = await db.isFavorite('track', track.id);
+                likeBtn.classList.toggle('active', isLiked);
+                likeBtn.innerHTML = isLiked
+                    ? SVG_HEART.replace('class="heart-icon"', 'class="heart-icon filled"')
+                    : SVG_HEART;
+            }
+
+            item.addEventListener('click', async (e) => {
+                const removeBtn = e.target.closest('.queue-remove-btn');
+                if (removeBtn) {
+                    e.stopPropagation();
+                    player.removeFromQueue(index);
+                    refreshQueuePanel();
+                    return;
+                }
+
+                const likeBtn = e.target.closest('.queue-like-btn');
+                if (likeBtn && likeBtn.dataset.action === 'toggle-like') {
+                    e.stopPropagation();
+                    const track = player.getCurrentQueue()[index];
+                    if (track) {
+                        const added = await db.toggleFavorite('track', track);
+                        syncManager.syncLibraryItem('track', track, added);
+
+                        // Update button state
+                        likeBtn.classList.toggle('active', added);
+                        likeBtn.innerHTML = added
+                            ? SVG_HEART.replace('class="heart-icon"', 'class="heart-icon filled"')
+                            : SVG_HEART;
+
+                        showNotification(
+                            added ? `Added to Liked: ${track.title}` : `Removed from Liked: ${track.title}`
+                        );
+                    }
+                    return;
+                }
+
+                // Don't play blocked tracks
+                if (item.classList.contains('blocked')) {
+                    return;
+                }
+
+                player.playAtIndex(index);
+                refreshQueuePanel();
+            });
+
+            item.addEventListener('contextmenu', async (e) => {
+                e.preventDefault();
+                const contextMenu = document.getElementById('context-menu');
+                if (contextMenu) {
+                    const track = player.getCurrentQueue()[index];
+                    if (track) {
+                        const isLiked = await db.isFavorite('track', track.id);
+                        const likeItem = contextMenu.querySelector('li[data-action="toggle-like"]');
+                        if (likeItem) {
+                            likeItem.textContent = isLiked ? 'Unlike' : 'Like';
+                        }
+
+                        const trackMixItem = contextMenu.querySelector('li[data-action="track-mix"]');
+                        if (trackMixItem) {
+                            const hasMix = track.mixes && track.mixes.TRACK_MIX;
+                            trackMixItem.style.display = hasMix ? 'block' : 'none';
+                        }
+
+                        positionMenu(contextMenu, e.clientX, e.clientY);
+
+                        contextMenu._contextTrack = track;
+                    }
+                }
+            });
+
+            item.addEventListener('dragstart', () => {
+                draggedQueueIndex = index;
+                item.style.opacity = '0.5';
+            });
+
+            item.addEventListener('dragend', () => {
+                item.style.opacity = '1';
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (draggedQueueIndex !== null && draggedQueueIndex !== index) {
+                    player.moveInQueue(draggedQueueIndex, index);
+                    refreshQueuePanel();
+                }
+            });
+        });
+    };
+
+    const refreshQueuePanel = () => {
+        sidePanelManager.refresh('queue', renderQueueControls, renderQueueContent);
+    };
+
+    const openQueuePanel = () => {
+        sidePanelManager.open('queue', 'Queue', renderQueueControls, renderQueueContent);
+    };
+
+    queueBtn.addEventListener('click', openQueuePanel);
+
+    // Expose renderQueue for external updates (e.g. shuffle, add to queue)
+    window.renderQueueFunction = () => {
+        if (sidePanelManager.isActive('queue')) {
+            refreshQueuePanel();
+        }
+
+        const overlay = document.getElementById('fullscreen-cover-overlay');
+        if (overlay && getComputedStyle(overlay).display !== 'none') {
+            ui.updateFullscreenMetadata(player.currentTrack, player.getNextTrack());
+        }
+    };
+
+    const folderPage = document.getElementById('page-folder');
+    if (folderPage) {
+        folderPage.addEventListener('dragover', (e) => {
+            if (e.dataTransfer.types.includes('text/playlist-id')) {
+                e.preventDefault();
+                folderPage.classList.add('drag-over-folder-page');
+            }
+        });
+        folderPage.addEventListener('dragleave', () => {
+            folderPage.classList.remove('drag-over-folder-page');
+        });
+        folderPage.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            folderPage.classList.remove('drag-over-folder-page');
+            const playlistId = e.dataTransfer.getData('text/playlist-id');
+            const folderId = window.location.pathname.split('/')[2];
+            if (playlistId && folderId) {
+                try {
+                    const updatedFolder = await db.addPlaylistToFolder(folderId, playlistId);
+                    syncManager.syncUserFolder(updatedFolder, 'update');
+                    window.dispatchEvent(new HashChangeEvent('hashchange'));
+                    showNotification('Playlist added to folder');
+                } catch (error) {
+                    console.error('Failed to add playlist to folder:', error);
+                    showNotification('Failed to add playlist to folder', 'error');
+                }
+            }
+        });
+    }
+
+    // Search and Library tabs
+    document.querySelectorAll('.search-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            const page = tab.closest('.page');
+            if (!page) return;
+
+            page.querySelectorAll('.search-tab').forEach((t) => t.classList.remove('active'));
+            page.querySelectorAll('.search-tab-content').forEach((c) => c.classList.remove('active'));
+
+            tab.classList.add('active');
+
+            const prefix = page.id === 'page-library' ? 'library-tab-' : 'search-tab-';
+            const contentId = `${prefix}${tab.dataset.tab}`;
+            document.getElementById(contentId)?.classList.add('active');
+
+            const currentPath = window.location.pathname;
+            if (page.id === 'page-library') {
+                const nextPath = `/library/${encodeURIComponent(tab.dataset.tab || 'tracks')}`;
+                if (currentPath !== nextPath) {
+                    window.history.replaceState({}, '', nextPath);
+                }
+            } else if (page.id === 'page-search') {
+                const segments = currentPath.split('/').filter(Boolean);
+                const encodedQuery = segments[0] === 'search' ? segments[1] || '' : '';
+                const selectedTab = tab.dataset.tab || 'all';
+                const nextPath = encodedQuery
+                    ? `/search/${encodedQuery}/${encodeURIComponent(selectedTab)}`
+                    : '/search';
+                if (currentPath !== nextPath) {
+                    window.history.replaceState({}, '', nextPath);
+                    if (encodedQuery) {
+                        ui.renderSearchPage(decodeURIComponent(encodedQuery), selectedTab);
+                    }
+                }
+            }
+        });
+    });
+
+    // Settings tabs
+    document.querySelectorAll('.settings-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.settings-tab').forEach((t) => t.classList.remove('active'));
+            document.querySelectorAll('.settings-tab-content').forEach((c) => c.classList.remove('active'));
+
+            tab.classList.add('active');
+
+            const contentId = `settings-tab-${tab.dataset.tab}`;
+            document.getElementById(contentId)?.classList.add('active');
+
+            // Save active tab
+            import('./storage.js').then(({ settingsUiState }) => {
+                settingsUiState.setActiveTab(tab.dataset.tab);
+            });
+
+            const nextPath = `/settings/${encodeURIComponent(tab.dataset.tab || 'appearance')}`;
+            if (window.location.pathname !== nextPath) {
+                window.history.replaceState({}, '', nextPath);
+            }
+        });
+    });
+
+    // Tooltip for truncated text — disabled on touch devices
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    let tooltipEl = document.getElementById('custom-tooltip');
+    if (!tooltipEl) {
+        tooltipEl = document.createElement('div');
+        tooltipEl.id = 'custom-tooltip';
+        document.body.appendChild(tooltipEl);
+    }
+
+    if (isTouchDevice) {
+        tooltipEl.style.display = 'none';
+    }
+
+    const updateTooltipPosition = (e) => {
+        const x = e.clientX + 15;
+        const y = e.clientY + 15;
+
+        // Prevent going off-screen
+        const rect = tooltipEl.getBoundingClientRect();
+        const winWidth = window.innerWidth;
+        const winHeight = window.innerHeight;
+
+        let finalX = x;
+        let finalY = y;
+
+        if (x + rect.width > winWidth) {
+            finalX = e.clientX - rect.width - 10;
+        }
+
+        if (y + rect.height > winHeight) {
+            finalY = e.clientY - rect.height - 10;
+        }
+
+        // Ensure it stays within viewport
+        if (finalX < 5) finalX = 5;
+        if (finalY < 5) finalY = 5;
+        if (finalX + rect.width > winWidth - 5) finalX = winWidth - rect.width - 5;
+        if (finalY + rect.height > winHeight - 5) finalY = winHeight - rect.height - 5;
+
+        tooltipEl.style.transform = `translate(${finalX}px, ${finalY}px)`;
+        // Reset top/left to 0 since we use transform
+        tooltipEl.style.top = '0';
+        tooltipEl.style.left = '0';
+    };
+
+    if (!isTouchDevice) {
+        document.body.addEventListener('mouseover', (e) => {
+            const selector =
+                '.card-title, .card-subtitle, .track-item-details .title, .track-item-details .artist, .now-playing-bar .title, .now-playing-bar .artist, .now-playing-bar .album, .pinned-item-name';
+            const target = e.target.closest(selector);
+
+            if (target) {
+                // Remove native title if present to avoid double tooltip
+                if (target.hasAttribute('title')) {
+                    target.removeAttribute('title');
+                }
+
+                if (target.scrollWidth > target.clientWidth) {
+                    tooltipEl.innerHTML = target.innerHTML.trim();
+                    tooltipEl.classList.add('visible');
+                    updateTooltipPosition(e);
+
+                    const moveHandler = (moveEvent) => {
+                        updateTooltipPosition(moveEvent);
+                    };
+
+                    const outHandler = () => {
+                        tooltipEl.classList.remove('visible');
+                        target.removeEventListener('mousemove', moveHandler);
+                        target.removeEventListener('mouseleave', outHandler);
+                    };
+
+                    target.addEventListener('mousemove', moveHandler);
+                    target.addEventListener('mouseleave', outHandler);
+                }
+            }
+        });
+    }
+}
