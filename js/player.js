@@ -306,6 +306,15 @@ export class Player {
                         this._setTransitionState('preparing');
                         this._setAdvanceInFlight(true);
                         this._gaplessTransitionInProgress = true;
+                        // The track is ending even though Howler won't fire
+                        // onend (we advance early) - let history/status
+                        // listeners record it. handleTrackEnded's guards keep
+                        // this from double-advancing.
+                        try {
+                            this.audio.dispatchEvent(new Event('ended'));
+                        } catch {
+                            /* ignore */
+                        }
                         this.playNext();
                         return;
                     }
@@ -2007,6 +2016,13 @@ export class Player {
                 if (this._howlerSound) {
                     this._howlerDurationHint = this._howlerSound.duration() || 0;
                 }
+                // Notify the app that a new track started loading so playback
+                // listeners reset their per-track state.
+                try {
+                    this.audio.dispatchEvent(new Event('loadstart'));
+                } catch {
+                    /* ignore */
+                }
             },
             onloaderror: (id, error) => {
                 console.error('[Howler] Load error:', error);
@@ -2016,6 +2032,15 @@ export class Player {
             },
             onend: () => {
                 this._stopHowlerMonitor();
+                // Forward the ended event through the main audio element so
+                // recently-played history and status listeners see the track
+                // finish. handleTrackEnded is guarded against double-advance
+                // (the element's own 'ended' listener calls it too).
+                try {
+                    this.audio.dispatchEvent(new Event('ended'));
+                } catch {
+                    /* ignore */
+                }
                 this.handleTrackEnded();
             },
             onplay: () => {
@@ -2087,6 +2112,16 @@ export class Player {
         this._howlerLastProgressAt = Date.now();
         this._howlerMonitorInterval = setInterval(() => {
             if (this._howlerSound && this._howlerSound.playing()) {
+                // Forward real playback progress through the main audio element
+                // so app listeners (recently-played history, status heartbeat,
+                // progress UI, lyrics) see timeupdate events during Howler
+                // playback.
+                try {
+                    this.audio.dispatchEvent(new Event('timeupdate'));
+                } catch {
+                    /* ignore */
+                }
+
                 const pos = this._howlerSound.seek();
                 const duration = this._howlerDurationHint || this._howlerSound.duration() || 0;
                 const hasPosition = typeof pos === 'number' && Number.isFinite(pos);

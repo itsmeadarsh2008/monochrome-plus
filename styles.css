@@ -15,7 +15,7 @@
        TYPOGRAPHY SCALE
        Use these variables for ALL font sizes
        ------------------------------------------------------------------------- */
-    --font-family: 'Inter', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
+    --font-family: 'Bricolage Grotesque', 'Inter', -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif;
     --font-size-scale: 100%;
 
     /* Typography Scale - Base 16px (1rem) */
@@ -729,7 +729,7 @@
     margin: 0;
     padding: 0;
     -webkit-tap-highlight-color: transparent;
-    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-family: var(--font-family, 'Bricolage Grotesque', 'Inter', sans-serif) !important;
 }
 
 html {
@@ -743,7 +743,7 @@ html {
 body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: var(--font-family, 'Inter', sans-serif) !important;
+    font-family: var(--font-family, 'Bricolage Grotesque', 'Inter', sans-serif) !important;
     overflow: hidden;
     transition:
         background-color 0.3s ease,

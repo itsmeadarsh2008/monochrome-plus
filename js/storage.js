@@ -1854,7 +1854,7 @@ export const fontSettings = {
     getDefaultConfig() {
         return {
             type: 'preset',
-            family: 'Inter',
+            family: 'Bricolage Grotesque',
             fallback: 'sans-serif',
             weights: [400, 500, 600, 700, 800],
         };
@@ -1945,7 +1945,8 @@ export const fontSettings = {
         }
 
         const encodedFamily = encodeURIComponent(sanitizedFamily);
-        const url = `https://fonts.googleapis.com/css2?family=${encodedFamily}:wght@100;200;300;400;500;600;700;800;900&display=swap`;
+        // CoolLabs proxy is the default Google Fonts provider (privacy-friendly mirror)
+        const url = `https://api.fonts.coollabs.io/css2?family=${encodedFamily}:wght@100;200;300;400;500;600;700;800;900&display=swap`;
 
         let link = document.getElementById(this.FONT_LINK_ID);
         if (!link) {

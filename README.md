@@ -34,9 +34,15 @@
 
 ## What is Monochrome+?
 
-**Monochrome+** is an open-source, privacy-respecting, ad-free Hi-Fi client built on top of [Hi-Fi](https://github.com/binimum/hifi-api).
+**Monochrome+** is an open-source, privacy-respecting, ad-free Hi-Fi client forked from
+[Monochrome](https://github.com/monochrome-music/monochrome). Instead of a hard-coded API,
+it is powered by an **Eclipse addon** ([eclipsemusic.app](https://eclipsemusic.app/docs)) —
+a self-hostable Cloudflare Worker that provides search, streaming and catalog endpoints
+for services such as TIDAL and Qobuz. You install one addon URL in Settings and the app
+does the rest.
 
-It provides a clean, minimalist interface for streaming high-quality music without the clutter of traditional platforms.
+It provides a clean, minimalist interface for streaming high-quality music without the
+clutter of traditional platforms.
 
 ## Images Preview
 
@@ -53,26 +59,32 @@ It provides a clean, minimalist interface for streaming high-quality music witho
 
 ### Audio Quality
 
-- High-quality Hi-Res/lossless audio streaming
+- Hi-Res/lossless audio streaming with real stream quality shown in the player
+  (bit depth, sample rate, container format from the addon)
+- Adaptive streaming (DASH/HLS) plus progressive streaming for regular files
+- Rate-limit-aware request queue with automatic 429 retry and priority lane for playback
 - Support for local music files
 - Intelligent API caching for improved performance
 
 ### Interface
 
 - Modern, minimalist interface with glassmorphism
-- Customizable themes
+- Customizable themes and fonts (Google Fonts via the CoolLabs proxy, URLs, or uploads)
 - Accurate and unique audio visualizer
+- Karaoke lyrics with haptic sync
 - Offline-capable Progressive Web App (PWA)
 - Media Session API integration for system controls
+- Keyboard shortcuts for power users
 
 ### Library & Organization
 
 - Recently Played tracking for easy history access
 - Comprehensive Personal Library for favorites
-- Queue management with shuffle and repeat modes
+- Queue management with shuffle, repeat, and gapless playback modes
 - Playlist import from other platforms
 - Public playlists for social sharing
 - Smart recommendations for new songs, albums & artists
+- Unreleased music tracking
 
 ### Lyrics & Metadata
 
@@ -82,14 +94,13 @@ It provides a clean, minimalist interface for streaming high-quality music witho
 ### Integrations
 
 - Account system for cross-device syncing (Powered by Appwrite)
-- Last.fm and ListenBrainz integration for scrobbling
-- Unreleased music from [ArtistGrid](https://artistgrid.cx)
-- Dynamic Discord embeds
-- Multiple API instance support with failover
+- Last.fm, ListenBrainz, Maloja and LibreFM support for scrobbling
+- Eclipse addon backend — bring your own stream provider
 
-### Power User Features
+### Download
 
-- Keyboard shortcuts for power users
+- High-quality downloads (including DASH manifest resolution)
+- Bulk album/playlist downloads with custom filename templates
 
 ---
 
@@ -101,7 +112,14 @@ Use the official instance:
 
 👉 **https://monochrome-plus.appwrite.network**
 
-For alternative instances, see [docs/INSTANCES.md](docs/INSTANCES.md).
+### Installing an Addon
+
+Monochrome+ needs an Eclipse addon for search and streaming:
+
+1. Deploy an addon (see [eclipsemusic.app](https://eclipsemusic.app/docs)) — e.g. a TIDAL or Qobuz addon
+2. Open **Settings → Eclipse Addon**
+3. Paste the addon's URL and click **Install**
+4. Test the connection, then search and play
 
 ---
 
@@ -140,7 +158,7 @@ To sync your library, history, and playlists across devices:
 
 ## Self-Hosting
 
-> NOTE: Accounts won’t work on self-hosted instances.
+> NOTE: Accounts won't work on self-hosted instances.
 
 ### Option 1: Docker (Recommended)
 
@@ -149,3 +167,5 @@ git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
 cd monochrome-plus
 docker compose up -d
 ```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for the full Docker guide.
