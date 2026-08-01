@@ -4,8 +4,6 @@ import authGatePlugin from './vite-plugin-auth-gate.js';
 import nodeFetch from './vite-plugin-proxy-fetch.js';
 
 export default defineConfig(() => {
-    const hmrHost = process.env.TAURI_DEV_HOST || 'localhost';
-
     return {
         base: '/',
         resolve: {
@@ -20,12 +18,8 @@ export default defineConfig(() => {
             host: true,
             port: 5173,
             strictPort: true,
-            watch: {
-                usePolling: process.env.VITE_USE_POLLING === 'true',
-                interval: 100,
-            },
             hmr: {
-                host: hmrHost,
+                host: 'localhost',
                 protocol: 'ws',
                 port: 5173,
             },
@@ -84,9 +78,6 @@ export default defineConfig(() => {
         build: {
             outDir: 'dist',
             emptyOutDir: true,
-            rollupOptions: {
-                external: [/^@tauri-apps/],
-            },
         },
         plugins: [
             nodeFetch(),
@@ -125,7 +116,7 @@ export default defineConfig(() => {
                         },
                     ],
                 },
-                includeAssets: ['instances.json', 'discord.html'],
+                includeAssets: ['discord.html'],
                 manifest: false, // Use existing public/manifest.json
             }),
         ],

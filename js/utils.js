@@ -361,13 +361,26 @@ const sanitizeToken = (value) => {
 export const normalizeQualityToken = (value) => {
     if (!value) return null;
 
-    const token = sanitizeToken(value);
+    // Strip bracket-wrapped provider prefixes, e.g. "[Qobuz] HI_RES_LOSSLESS"
+    const unwrapped = String(value)
+        .replace(/^\s*\[[^\]]*\]\s*/, '')
+        .trim();
+    const token = sanitizeToken(unwrapped);
+    if (!token) return null;
 
     for (const [quality, aliases] of Object.entries(QUALITY_TOKENS)) {
         if (aliases.includes(token)) {
             return quality;
         }
     }
+
+    // Fallback: match known markers inside richer strings,
+    // e.g. "FLAC 24-bit 192 kHz" → HI_RES_LOSSLESS
+    if (/ATMOS|DOLBY/.test(token)) return 'DOLBY_ATMOS';
+    if (/HI_RES|HIRES|MASTER|MQA|24_BIT|24BIT|_192|192KHZ/.test(token)) return 'HI_RES_LOSSLESS';
+    if (/LOSSLESS|FLAC|ALAC|HIFI/.test(token)) return 'LOSSLESS';
+    if (/HIGH|HQ|_320/.test(token)) return 'HIGH';
+    if (/LOW|_96/.test(token)) return 'LOW';
     return null;
 };
 
@@ -398,7 +411,8 @@ export const createFullscreenQualityHTML = (track) => {
     // Format sample rate as kHz
     let sampleRateStr = null;
     if (sampleRate) {
-        sampleRateStr = `${Math.round(sampleRate / 1000)} kHz`;
+        const kHz = sampleRate / 1000;
+        sampleRateStr = `${Number.isInteger(kHz) ? kHz : kHz.toFixed(1)} kHz`;
     }
 
     // Format bit depth
@@ -406,6 +420,10 @@ export const createFullscreenQualityHTML = (track) => {
     if (bitDepth) {
         bitDepthStr = `${bitDepth}-bit`;
     }
+
+    // Container format reported by the addon (FLAC, MP3, AAC, …)
+    const containerFormat = String(track.format || track.mediaType || '').toUpperCase();
+    const formatStr = containerFormat && !/UNKNOWN|AUDIO/i.test(containerFormat) ? containerFormat : null;
 
     // Determine quality label and logo
     let qualityLabel = '';
@@ -465,6 +483,11 @@ export const createFullscreenQualityHTML = (track) => {
         parts.push(sampleRateStr);
     }
 
+    // Add container format
+    if (formatStr) {
+        parts.push(formatStr);
+    }
+
     // Filter out empty parts
     const validParts = parts.filter((part) => part);
     if (validParts.length === 0) return '';
@@ -518,6 +541,15 @@ export const pickBestQuality = (candidates) => {
 
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
+
+    // Prefer the actual stream specs when known — these are exact numbers
+    // reported by the addon and more truthful than provider quality labels.
+    const bitDepth = toPositiveInt(track.bitDepth);
+    const sampleRate = toPositiveInt(track.sampleRate);
+    if (bitDepth || sampleRate) {
+        if (bitDepth >= 24 || sampleRate > 48000) return 'HI_RES_LOSSLESS';
+        return 'LOSSLESS';
+    }
 
     const candidates = [
         deriveQualityFromTags(track.mediaMetadata?.tags),
@@ -693,13 +725,9 @@ export function positionMenu(menu, x, y, anchorRect = null) {
 export const getShareUrl = (path) => {
     const configuredBase = String(window.__SHARE_BASE_URL__ || '').trim();
     const origin = window.location.origin;
-    const isLocalDesktopOrigin =
-        !origin ||
-        origin.includes('tauri.localhost') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1') ||
-        origin.startsWith('file:');
-    const baseUrl = configuredBase || (isLocalDesktopOrigin ? 'https://monochrome.plus' : origin);
+    const isLocalOrigin =
+        !origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('file:');
+    const baseUrl = configuredBase || (isLocalOrigin ? 'https://monochrome.plus' : origin);
     const safePath = path.startsWith('/') ? path : `/${path}`;
     return `${baseUrl}${safePath}`;
 };

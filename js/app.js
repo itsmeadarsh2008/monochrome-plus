@@ -2,7 +2,6 @@
 import './cors-bypass.js';
 import { MusicAPI } from './music-api.js';
 import {
-    apiSettings,
     themeManager,
     nowPlayingSettings,
     downloadQualitySettings,
@@ -33,8 +32,6 @@ import { registerSW } from 'virtual:pwa-register';
 import './smooth-scrolling.js';
 import { openEditProfile } from './profile.js';
 import './commandPalette.js';
-import { ThemeStore } from './themeStore.js';
-import { isTauriRuntime } from './desktop/tauri-runtime.js';
 import { initImageLoader } from './image-loader.js';
 
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
@@ -501,9 +498,6 @@ async function uploadCoverImage(file) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    new ThemeStore();
-    const isTauri = await isTauriRuntime();
-
     initImageLoader();
 
     // Ping Appwrite to verify setup
@@ -582,7 +576,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.documentElement.classList.add('carousel-mode');
     }
 
-    const api = new MusicAPI(apiSettings);
+    const api = new MusicAPI();
     const audioPlayer = document.getElementById('audio-player');
 
     // i love ios and macos!!!! webkit fucking SUCKS BULLSHIT sorry ios/macos heads yall getting lossless only
@@ -763,18 +757,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (unreleasedSidebarToggle) {
         const toggleRow = unreleasedSidebarToggle.closest('.toggle-setting');
         if (toggleRow) toggleRow.remove();
-    }
-
-    const hasTauriRuntime = await isTauriRuntime();
-
-    // Initialize desktop features if in Tauri mode
-    if (hasTauriRuntime) {
-        try {
-            const desktopModule = await import('./desktop/desktop.js');
-            await desktopModule.initDesktop(player);
-        } catch (err) {
-            console.error('Failed to load desktop module:', err);
-        }
     }
 
     const castBtn = document.getElementById('cast-btn');

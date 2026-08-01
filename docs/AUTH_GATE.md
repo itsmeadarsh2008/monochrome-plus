@@ -37,11 +37,11 @@ This document explains the server-side login gate and what it implies for your s
 
 ## Privacy / Adblock notes for Discord OAuth
 
-- In-app Discord auth uses Appwrite OAuth.
-- If `APPWRITE_ENDPOINT` is cross-site (for example `https://sgp.cloud.appwrite.io/v1` while app runs on another domain), strict tracking protection can block session cookies after OAuth redirect.
-- On localhost/http, keep `APPWRITE_ENDPOINT=https://sgp.cloud.appwrite.io/v1` (proxy mode can fail because secure OAuth cookies may not persist on non-HTTPS).
-- Recommended production fix for strict privacy environments: use a first-party Appwrite custom domain/subdomain over HTTPS.
-- If that is not possible, users may need to allowlist the app domain, Appwrite endpoint, and Discord auth domain in privacy/adblock settings.
+- In-app Discord/Google auth uses Appwrite OAuth via the token flow: the app redirects to Appwrite's OAuth2 token endpoint, and after the provider redirect lands back on the app, the session is created client-side with `account.createSession({ userId, secret })`.
+- This flow does not depend on Appwrite's session cookie (`a_session_*`). Browsers with strict tracking protection (Firefox Total Cookie Protection) or adblockers (uBlock Origin) block that cross-site cookie, which used to leave users signed out right after a successful login. The Appwrite server returns the session in the `X-Fallback-Cookies` response header, which the SDK stores in localStorage and sends on subsequent requests — so login works with cookies fully disabled.
+- The auth-gate session itself (`mono_session`) is a same-origin, `httpOnly`, `SameSite=Lax` cookie, so it is not affected by third-party cookie blocking.
+- If `APPWRITE_ENDPOINT` is cross-site (for example `https://sgp.cloud.appwrite.io/v1` while app runs on another domain), the fallback-cookie mechanism keeps sessions working; a first-party Appwrite custom domain over HTTPS is still the most robust long-term setup.
+- Old session-based OAuth URLs (`/v1/account/sessions/oauth2/...`) are no longer used by the client.
 
 ## Implications for the site
 

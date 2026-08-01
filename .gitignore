@@ -9,10 +9,6 @@ dist
 # Docker
 .env
 
-# Electrobun
-build/
-views/
-
 # Logs
 *.log
 

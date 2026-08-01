@@ -273,17 +273,6 @@ class CommandPalette {
             },
 
             {
-                id: 'theme-store',
-                group: 'Theme',
-                icon: 'store',
-                label: 'Open Theme Store',
-                keywords: ['theme', 'store', 'browse', 'community', 'custom'],
-                action: () => {
-                    document.getElementById('open-theme-store-btn')?.click();
-                },
-            },
-
-            {
                 id: 'lib-create-playlist',
                 group: 'Library',
                 icon: 'plus',

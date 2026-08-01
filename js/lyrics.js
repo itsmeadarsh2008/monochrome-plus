@@ -1415,9 +1415,7 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     backface-visibility: hidden;
                     transition:
                         transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
-                        opacity 180ms linear,
-                        filter 260ms ease,
-                        text-shadow 260ms ease;
+                        opacity 180ms linear;
                 }
 
                 .word, .lyric-word, .karaoke-word-enhanced {
@@ -1435,10 +1433,9 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
                 /* Active line water-wave motion */
                 p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active {
-                    will-change: transform, opacity, filter;
+                    will-change: transform, opacity;
                     transform: translate3d(0, 0, 0) scale(1.022);
                     animation: karaoke-wave-line 2050ms cubic-bezier(0.36, 0.03, 0.21, 0.99) infinite;
-                    filter: saturate(1.08);
                 }
 
                 p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after {
@@ -1459,7 +1456,6 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                         );
                     background-size: 190% 100%;
                     background-position: calc(var(--karaoke-wave-ms) * 0.032px) 50%;
-                    mix-blend-mode: screen;
                     opacity: 0.55;
                     will-change: transform, opacity;
                     animation: karaoke-wave-shimmer 1400ms linear infinite;
@@ -1468,17 +1464,17 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                 p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                 p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
                 p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
-                    will-change: transform, filter;
-                    animation: karaoke-word-wave 1180ms cubic-bezier(0.27, 0.1, 0.23, 1) infinite;
-                    animation-delay: calc(var(--word-index, 0) * 34ms + var(--line-stagger, 0) * 14ms);
+                    will-change: transform;
+                    animation: karaoke-word-wave 2400ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+                    animation-delay: calc(var(--word-index, 0) * 22ms + var(--line-stagger, 0) * 12ms);
                 }
 
                 @keyframes karaoke-wave-line {
-                    0% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 0 rgba(255, 255, 255, 0); }
-                    25% { transform: translate3d(0, -1px, 0) scale(1.028); text-shadow: 0 0 14px rgba(255, 255, 255, 0.18); }
-                    50% { transform: translate3d(0, 0.8px, 0) scale(1.021); text-shadow: 0 0 11px rgba(255, 255, 255, 0.13); }
-                    75% { transform: translate3d(0, -0.7px, 0) scale(1.026); text-shadow: 0 0 16px rgba(255, 255, 255, 0.2); }
-                    100% { transform: translate3d(0, 0, 0) scale(1.02); text-shadow: 0 0 12px rgba(255, 255, 255, 0.14); }
+                    0% { transform: translate3d(0, 0, 0) scale(1.02); }
+                    25% { transform: translate3d(0, -1px, 0) scale(1.028); }
+                    50% { transform: translate3d(0, 0.8px, 0) scale(1.021); }
+                    75% { transform: translate3d(0, -0.7px, 0) scale(1.026); }
+                    100% { transform: translate3d(0, 0, 0) scale(1.02); }
                 }
 
                 @keyframes karaoke-wave-shimmer {
@@ -1488,10 +1484,52 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                 }
 
                 @keyframes karaoke-word-wave {
-                    0% { transform: translate3d(0, 0, 0); }
-                    30% { transform: translate3d(0, -1.5px, 0); }
-                    60% { transform: translate3d(0, 0.7px, 0); }
-                    100% { transform: translate3d(0, 0, 0); }
+                    /* Slow, calm lift-and-settle wave: ease up, hold, gently fall back, rest */
+                    0% {
+                        transform: translate3d(0, 0, 0);
+                        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+                    }
+                    15% {
+                        transform: translate3d(0, -2.2px, 0);
+                        animation-timing-function: cubic-bezier(0.4, 0.05, 0.6, 0.15);
+                    }
+                    32% {
+                        transform: translate3d(0, -2.2px, 0);
+                        animation-timing-function: cubic-bezier(0.4, 0.05, 0.6, 0.15);
+                    }
+                    48% {
+                        transform: translate3d(0, -0.6px, 0);
+                        animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+                    }
+                    100% {
+                        transform: translate3d(0, 0, 0);
+                    }
+                }
+
+                /* Honor the app's performance mode: drop wave effects entirely */
+                html.animations-none p[active], html.animations-none p[data-active], html.animations-none p[data-active="true"],
+                html.animations-none .is-active, html.animations-none p.active, html.animations-none .line.active,
+                html.animations-none .lyric-line.active, html.animations-none .lrc-line.active {
+                    animation: none !important;
+                    transform: none !important;
+                    will-change: auto;
+                }
+                html.animations-none p[active]::after, html.animations-none p[data-active]::after, html.animations-none p[data-active="true"]::after,
+                html.animations-none .is-active::after, html.animations-none p.active::after, html.animations-none .line.active::after,
+                html.animations-none .lyric-line.active::after, html.animations-none .lrc-line.active::after {
+                    display: none;
+                }
+                html.animations-none p[active] .word, html.animations-none p[data-active] .word, html.animations-none p[data-active="true"] .word,
+                html.animations-none .is-active .word, html.animations-none p.active .word, html.animations-none .line.active .word,
+                html.animations-none .lyric-line.active .word, html.animations-none .lrc-line.active .word,
+                html.animations-none p[active] .lyric-word, html.animations-none p[data-active] .lyric-word, html.animations-none p[data-active="true"] .lyric-word,
+                html.animations-none .is-active .lyric-word, html.animations-none p.active .lyric-word, html.animations-none .line.active .lyric-word,
+                html.animations-none .lyric-line.active .lyric-word, html.animations-none .lrc-line.active .lyric-word,
+                html.animations-none p[active] .karaoke-word-enhanced, html.animations-none p[data-active] .karaoke-word-enhanced, html.animations-none p[data-active="true"] .karaoke-word-enhanced,
+                html.animations-none .is-active .karaoke-word-enhanced, html.animations-none p.active .karaoke-word-enhanced, html.animations-none .line.active .karaoke-word-enhanced,
+                html.animations-none .lyric-line.active .karaoke-word-enhanced, html.animations-none .lrc-line.active .karaoke-word-enhanced {
+                    animation: none !important;
+                    will-change: auto;
                 }
 
                 @media (max-height: 760px) {
@@ -1597,6 +1635,7 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
     let baseTimeMs = 0;
     let lastTimestamp = performance.now();
     let animationFrameId = null;
+    let frameCount = 0;
     let lastWaveCssUpdate = 0;
     let syncedLyricLines = [];
     let lastHapticLineIndex = -1;
@@ -1798,7 +1837,14 @@ function setupSync(track, audioPlayer, amLyrics, lyricsManager) {
                 const nextMs = baseTimeMs + elapsed * (audioPlayer.playbackRate || 1);
                 // Apply timing offset: positive offset delays lyrics, negative advances them
                 const syncedTimeMs = nextMs - getTimingOffset();
-                amLyrics.currentTime = syncedTimeMs;
+
+                // Throttle the component update to ~30fps: line/word changes are
+                // far slower than a frame, and the component's internal layout +
+                // autoscroll work is the main cost of the 60fps path.
+                if ((frameCount & 1) === 0) {
+                    amLyrics.currentTime = syncedTimeMs;
+                }
+                frameCount++;
 
                 // Visual phase update for wave shimmer (~20Hz)
                 if (now - lastWaveCssUpdate >= 50) {

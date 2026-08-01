@@ -1,7 +1,6 @@
 //js/tracker.js
 import { escapeHtml, SVG_MENU, SVG_PLAY, trackDataStore, formatTime, SVG_HEART } from './utils.js';
 import { navigate } from './router.js';
-import { proxySettings } from './storage.js';
 
 let artistsData = [];
 let artistsPopularity = new Map(); // name -> popularity score
@@ -10,33 +9,15 @@ let globalPlayer = null;
 // Map to store artist info keyed by sheetId for quick lookup
 const artistBySheetId = new Map();
 
-// Tauri production has no local proxy, so route through the production web proxy.
 // Web (dev: Vite proxy, prod: _redirects) uses relative proxy paths.
-const isTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__);
-const PROD_PROXY = 'https://monochrome-plus.appwrite.network';
-
-const TRACKER_ENDPOINTS = isTauri
-    ? {
-          artistsNdjson: ['https://sheets.artistgrid.cx/artists.ndjson', '/artistgrid-api/artists.ndjson'],
-          trends: ['https://trends.artistgrid.cx', '/artistgrid-trends'],
-          trackerGet: ['/tracker-api/get'],
-          assetsBase: ['https://assets.artistgrid.cx'],
-      }
-    : {
-          artistsNdjson: ['https://sheets.artistgrid.cx/artists.ndjson', '/artistgrid-api/artists.ndjson'],
-          trends: ['https://trends.artistgrid.cx', '/artistgrid-trends'],
-          trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
-          assetsBase: ['/artistgrid-assets', 'https://assets.artistgrid.cx'],
-      };
+const TRACKER_ENDPOINTS = {
+    artistsNdjson: ['https://sheets.artistgrid.cx/artists.ndjson', '/artistgrid-api/artists.ndjson'],
+    trends: ['https://trends.artistgrid.cx', '/artistgrid-trends'],
+    trackerGet: ['/tracker-api/get', 'https://tracker.israeli.ovh/get'],
+    assetsBase: ['/artistgrid-assets', 'https://assets.artistgrid.cx'],
+};
 
 function buildCorsSafeUrl(url) {
-    if (proxySettings.isEnabled()) {
-        const proxy = proxySettings.getFastestProxy() || proxySettings.getProxies()[0];
-        if (proxy?.url) {
-            return proxySettings.buildProxiedUrl(proxy.url, url);
-        }
-    }
-
     const isLocalDevBrowser =
         typeof window !== 'undefined' &&
         (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');

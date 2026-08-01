@@ -38,8 +38,8 @@ import {
     fontSettings,
     contentBlockingSettings,
     rotatingCoverSettings,
-    proxySettings,
 } from './storage.js';
+import { eclipseAddonStorage } from './eclipse.js';
 import { db } from './db.js';
 import { applyPaletteFromImage, resetPalette } from './palette.js';
 import { syncManager } from './accounts/appwrite-sync.js';
@@ -2364,7 +2364,8 @@ export class UIRenderer {
         }
 
         if (pageId === 'settings') {
-            this.renderApiSettings();
+            this.renderAddonSettings();
+            this.renderCacheStats();
             this.applySettingsTabFromPath();
         }
     }
@@ -8403,107 +8404,68 @@ export class UIRenderer {
         ).element;
     }
 
-    renderApiSettings() {
-        const container = document.getElementById('api-instance-list');
-        Promise.all([this.api.settings.getInstances('api'), this.api.settings.getInstances('streaming')]).then(
-            ([apiInstances, streamingInstances]) => {
-                const renderGroup = (instances, type) => {
-                    if (!instances || instances.length === 0) {
-                        return `
-                        <li class="group-header" style="font-weight: bold; padding: 1rem 0 0.5rem; background: transparent; border: none; pointer-events: none;">
-                            ${type === 'api' ? 'API Instances' : 'Streaming Instances'}
-                        </li>
-                        <li style="padding: 0.75rem 1rem; color: var(--muted-foreground); font-size: 0.85rem; border: none;">No instances available</li>
-                        `;
-                    }
-
-                    const listHtml = instances
-                        .map((instance, index) => {
-                            const isObject = instance && typeof instance === 'object';
-                            const instanceUrl = isObject ? instance.url || '' : String(instance || '');
-                            const instanceVersion = isObject && instance.version ? String(instance.version) : '';
-                            const safeUrl = escapeHtml(instanceUrl || '');
-                            const safeVersion = escapeHtml(instanceVersion);
-
-                            return `
-                        <li data-index="${index}" data-type="${type}">
-                            <div style="flex: 1; min-width: 0;">
-                                <div class="instance-url">${safeUrl}</div>
-                                ${safeVersion ? `<div style="font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.1rem;">v${safeVersion}</div>` : ''}
-                            </div>
-                            <div class="controls">
-                                <button class="move-up" title="Move Up" ${index === 0 ? 'disabled' : ''}>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M12 19V5M5 12l7-7 7 7"/>
-                                    </svg>
-                                </button>
-                                <button class="move-down" title="Move Down" ${index === instances.length - 1 ? 'disabled' : ''}>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M12 5v14M19 12l-7 7-7-7"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </li>
-                    `;
-                        })
-                        .join('');
-
-                    return `
-                    <li class="group-header" style="font-weight: bold; padding: 1rem 0 0.5rem; background: transparent; border: none; pointer-events: none;">
-                        ${type === 'api' ? 'API Instances' : 'Streaming Instances'}
-                    </li>
-                    ${listHtml}
-                `;
-                };
-
-                container.innerHTML = renderGroup(apiInstances, 'api') + renderGroup(streamingInstances, 'streaming');
-
-                const stats = this.api.getCacheStats();
-                const cacheInfo = document.getElementById('cache-info');
-                if (cacheInfo) {
-                    cacheInfo.textContent = `Cache: ${stats.memoryEntries}/${stats.maxSize} entries`;
-                }
-            }
-        );
-    }
-
-    renderProxySettings() {
-        const container = document.getElementById('proxy-list');
+    renderAddonSettings() {
+        const container = document.getElementById('addon-info');
         if (!container) return;
 
-        const toggle = document.getElementById('proxy-enabled-toggle');
-        if (toggle) toggle.checked = proxySettings.isEnabled();
+        const actions = document.getElementById('addon-actions');
+        const status = document.getElementById('addon-status');
+        if (status) {
+            status.hidden = true;
+            status.className = 'addon-status';
+        }
 
-        const proxies = proxySettings.getProxies();
-        if (proxies.length === 0) {
-            container.innerHTML = '<li class="proxy-empty">No proxies configured</li>';
+        const addon = eclipseAddonStorage.getAddon();
+        if (!addon) {
+            container.innerHTML = `
+                <div class="addon-empty-state">
+                    <div class="addon-empty-icon">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 4a2 2 0 1 1 4 0v2h4a1 1 0 0 1 1 1v4h2a2 2 0 1 1 0 4h-2v4a1 1 0 0 1-1 1h-4v-2a2 2 0 1 0-4 0v2H5a1 1 0 0 1-1-1v-4h2a2 2 0 1 0 0-4H4V7a1 1 0 0 1 1-1h4V4z"/>
+                        </svg>
+                    </div>
+                    <h4 class="addon-empty-title">No addon installed</h4>
+                    <p class="addon-empty-text">Search, streaming and catalog are powered by an Eclipse addon. Paste an addon URL below to get started.</p>
+                </div>
+            `;
+            if (actions) actions.hidden = true;
             return;
         }
 
-        container.innerHTML = proxies
-            .map((p, index) => {
-                const latencyText =
-                    p.latency != null
-                        ? `<span class="proxy-latency">${p.latency}ms</span>`
-                        : '<span class="proxy-latency untested">untested</span>';
-                const fastestBadge = index === 0 && p.latency != null ? '<span class="proxy-badge">fastest</span>' : '';
-                return `
-                <li data-url="${escapeHtml(p.url)}">
-                    <div style="flex: 1; min-width: 0;">
-                        <div class="instance-url">${escapeHtml(p.url)}</div>
-                        <div class="proxy-meta">${latencyText}${fastestBadge}</div>
+        const manifest = addon.manifest || {};
+        const resources = Array.isArray(manifest.resources)
+            ? manifest.resources.map((resource) => `<span class="addon-badge">${escapeHtml(resource)}</span>`).join('')
+            : '';
+        const icon = manifest.icon
+            ? `<img class="addon-card-icon" src="${escapeHtml(manifest.icon)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+            : '';
+
+        container.innerHTML = `
+            <div class="addon-card">
+                ${icon}
+                <div class="addon-card-body">
+                    <div class="addon-card-title">
+                        ${escapeHtml(manifest.name || 'Eclipse Addon')}
+                        <span class="addon-card-version">v${escapeHtml(manifest.version || '?')}</span>
                     </div>
-                    <div class="controls">
-                        <button class="proxy-remove" title="Remove">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M18 6L6 18M6 6l12 12"/>
-                            </svg>
-                        </button>
-                    </div>
-                </li>
-            `;
-            })
-            .join('');
+                    ${
+                        manifest.description
+                            ? `<div class="addon-card-desc">${escapeHtml(manifest.description)}</div>`
+                            : ''
+                    }
+                    <div class="addon-card-url">${escapeHtml(addon.baseUrl)}</div>
+                    ${resources ? `<div class="addon-card-badges">${resources}</div>` : ''}
+                </div>
+            </div>
+        `;
+        if (actions) actions.hidden = false;
+    }
+
+    renderCacheStats() {
+        const cacheInfo = document.getElementById('cache-info');
+        if (!cacheInfo) return;
+        const stats = this.api.getCacheStats();
+        cacheInfo.textContent = `Cache: ${stats.memoryEntries}/${stats.maxSize} entries • ${stats.streamUrls} stream URLs`;
     }
 
     async renderTrackPage(trackId, provider = null) {

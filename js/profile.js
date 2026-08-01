@@ -2,7 +2,6 @@ import { syncManager } from './accounts/appwrite-sync.js';
 import { authManager } from './accounts/auth.js';
 import { navigate } from './router.js';
 import { MusicAPI } from './music-api.js';
-import { apiSettings } from './storage.js';
 import { debounce, escapeHtml, getShareUrl, copyTextToClipboard } from './utils.js';
 import { storage, client } from './lib/appwrite.js';
 import { ID } from 'appwrite';
@@ -39,7 +38,7 @@ const usernameError = document.getElementById('username-error');
 
 let currentProfileUsername = null;
 let currentFavoriteAlbums = [];
-const api = new MusicAPI(apiSettings);
+const api = new MusicAPI();
 
 function normalizeFavoriteAlbums(value) {
     let parsed = value;

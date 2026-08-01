@@ -33,7 +33,6 @@ import {
     settingsUiState,
     pwaUpdateSettings,
     contentBlockingSettings,
-    musicProviderSettings,
     modalSettings,
     rotatingCoverSettings,
     lyricsPanelSettings,
@@ -41,9 +40,9 @@ import {
     animationSettings,
     responsiveSettings,
     audioProcessingSettings,
-    proxySettings,
 } from './storage.js';
 import { audioContextManager, EQ_PRESETS } from './audio-context.js';
+import { eclipseAddonStorage } from './eclipse.js';
 import { getButterchurnPresets } from './visualizers/butterchurn.js';
 import { db } from './db.js';
 import { authManager } from './accounts/auth.js';
@@ -1205,17 +1204,6 @@ export function initializeSettings(scrobbler, player, api, ui) {
     document.getElementById('reset-custom-theme')?.addEventListener('click', () => {
         renderCustomThemeEditor();
     });
-
-    // Music Provider setting
-    const musicProviderSetting = document.getElementById('music-provider-setting');
-    if (musicProviderSetting) {
-        musicProviderSetting.value = musicProviderSettings.getProvider();
-        musicProviderSetting.addEventListener('change', (e) => {
-            musicProviderSettings.setProvider(e.target.value);
-            // Reload page to apply changes
-            window.location.reload();
-        });
-    }
 
     // Streaming Quality setting
     const streamingQualitySetting = document.getElementById('streaming-quality-setting');
@@ -3470,90 +3458,92 @@ export function initializeSettings(scrobbler, player, api, ui) {
         });
     }
 
-    // API settings
-    document.getElementById('refresh-speed-test-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('refresh-speed-test-btn');
-        const originalText = btn.textContent;
-        btn.textContent = 'Testing...';
-        btn.disabled = true;
+    // Eclipse Addon settings
+    ui.renderAddonSettings();
 
-        try {
-            await api.settings.refreshInstances();
-            ui.renderApiSettings();
-            btn.textContent = 'Done!';
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }, 1500);
-        } catch (error) {
-            console.error('Failed to refresh speed tests:', error);
-            btn.textContent = 'Error';
-            setTimeout(() => {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }, 1500);
+    const addonUrlInput = document.getElementById('addon-url-input');
+    const addonInstallBtn = document.getElementById('addon-install-btn');
+    const addonStatus = document.getElementById('addon-status');
+
+    const setAddonStatus = (message, type = '') => {
+        if (!addonStatus) return;
+        addonStatus.hidden = !message;
+        addonStatus.textContent = message || '';
+        addonStatus.className = `addon-status${type ? ` addon-status-${type}` : ''}`;
+    };
+
+    const updateInstallBtnState = () => {
+        const url = addonUrlInput?.value.trim() || '';
+        addonInstallBtn.disabled = !/^https?:\/\//i.test(url);
+    };
+
+    addonUrlInput?.addEventListener('input', updateInstallBtnState);
+    addonUrlInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !addonInstallBtn.disabled) {
+            addonInstallBtn.click();
         }
     });
 
-    // Proxy settings
-    ui.renderProxySettings();
+    addonInstallBtn?.addEventListener('click', async () => {
+        const url = addonUrlInput.value.trim();
+        if (!/^https?:\/\//i.test(url)) return;
 
-    document.getElementById('proxy-enabled-toggle')?.addEventListener('change', (e) => {
-        proxySettings.setEnabled(e.target.checked);
+        addonInstallBtn.disabled = true;
+        const originalText = addonInstallBtn.textContent;
+        addonInstallBtn.textContent = 'Installing…';
+        setAddonStatus('Checking addon manifest…');
+
+        try {
+            const manifest = await eclipseAddonStorage.fetchManifest(url);
+            eclipseAddonStorage.saveAddon({
+                baseUrl: manifest.rootUrl || url.replace(/\/+$/, ''),
+                manifest,
+                installedAt: Date.now(),
+            });
+            addonUrlInput.value = '';
+            updateInstallBtnState();
+            setAddonStatus(`“${manifest.name}” installed`, 'ok');
+            ui.renderAddonSettings();
+        } catch (error) {
+            setAddonStatus(error.message, 'error');
+            addonUrlInput.focus();
+        } finally {
+            addonInstallBtn.disabled = true;
+            addonInstallBtn.textContent = originalText;
+            updateInstallBtnState();
+        }
     });
 
-    document.getElementById('proxy-add-btn')?.addEventListener('click', () => {
-        const input = document.getElementById('proxy-url-input');
-        const url = input?.value?.trim();
-        if (!url) return;
-        try {
-            new URL(url);
-        } catch {
+    document.getElementById('addon-remove-btn')?.addEventListener('click', async () => {
+        const addon = eclipseAddonStorage.getAddon();
+        const name = addon?.manifest?.name || 'this addon';
+        if (!window.confirm(`Remove ${name}? Music search and streaming will stop until you install another addon.`)) {
             return;
         }
-        if (proxySettings.addProxy(url)) {
-            input.value = '';
-            ui.renderProxySettings();
-        }
+        eclipseAddonStorage.clearAddon();
+        await api.clearCache();
+        ui.renderAddonSettings();
+        setAddonStatus('Addon removed', 'ok');
     });
 
-    document.getElementById('proxy-test-all-btn')?.addEventListener('click', async () => {
-        const btn = document.getElementById('proxy-test-all-btn');
-        btn.textContent = 'Testing...';
+    document.getElementById('addon-test-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('addon-test-btn');
         btn.disabled = true;
-        await proxySettings.testAllProxies();
-        ui.renderProxySettings();
-        btn.textContent = 'Test All';
-        btn.disabled = false;
-    });
-
-    document.getElementById('proxy-list')?.addEventListener('click', (e) => {
-        const button = e.target.closest('.proxy-remove');
-        if (!button) return;
-        const li = button.closest('li');
-        if (!li) return;
-        proxySettings.removeProxy(li.dataset.url);
-        ui.renderProxySettings();
-    });
-
-    document.getElementById('api-instance-list')?.addEventListener('click', async (e) => {
-        const button = e.target.closest('button');
-        if (!button) return;
-
-        const li = button.closest('li');
-        const index = parseInt(li.dataset.index, 10);
-        const type = li.dataset.type || 'api'; // Default to api if not present
-
-        const instances = await api.settings.getInstances(type);
-
-        if (button.classList.contains('move-up') && index > 0) {
-            [instances[index], instances[index - 1]] = [instances[index - 1], instances[index]];
-        } else if (button.classList.contains('move-down') && index < instances.length - 1) {
-            [instances[index], instances[index + 1]] = [instances[index + 1], instances[index]];
+        const originalText = btn.textContent;
+        btn.textContent = 'Testing…';
+        setAddonStatus('Testing connection…');
+        try {
+            const results = await api.searchTracks('test', { limit: 1 });
+            setAddonStatus(
+                results?.items?.length > 0 ? 'Connected — search works' : 'Connected — search returned no results',
+                'ok'
+            );
+        } catch (error) {
+            setAddonStatus(`Failed: ${error.message}`, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
         }
-
-        api.settings.saveInstances(instances, type);
-        ui.renderApiSettings();
     });
 
     document.getElementById('clear-cache-btn')?.addEventListener('click', async () => {
@@ -3569,7 +3559,7 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 btn.textContent = originalText;
                 btn.disabled = false;
                 if (window.location.hash.includes('settings')) {
-                    ui.renderApiSettings();
+                    ui.renderCacheStats();
                 }
             }, 1500);
         } catch (error) {

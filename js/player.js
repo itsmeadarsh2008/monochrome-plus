@@ -26,16 +26,6 @@ import {
     recentActivityManager,
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
-import {
-    isLinuxTauri,
-    audioEngineInit,
-    audioEngineLoad,
-    audioEnginePause,
-    audioEnginePlay,
-    audioEngineSeek,
-    audioEngineSetVolume,
-    blobUrlToMpdXml,
-} from './desktop/tauri-audio-engine.js';
 
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
@@ -74,8 +64,6 @@ export class Player {
         this._advanceLockTimer = null;
         this._transitionState = 'idle';
         this._preloadFailureCounts = new Map();
-        this._linuxRustAudioActive = false;
-        this._linuxRustAudioEligible = false;
         this._atmosUnsupportedInBrowser = false;
         this._atmosSupportChecked = false;
         this._atmosSupported = false;
@@ -141,14 +129,6 @@ export class Player {
 
         // Set up initial audio event listeners
         this._setupAudioEventListeners();
-
-        isLinuxTauri()
-            .then((isLinux) => {
-                this._linuxRustAudioEligible = isLinux;
-            })
-            .catch(() => {
-                this._linuxRustAudioEligible = false;
-            });
     }
 
     get activeElement() {
@@ -545,43 +525,6 @@ export class Player {
         );
     }
 
-    async _tryStartLinuxRustAudio(track, streamUrl, startTime = 0) {
-        if (!this._linuxRustAudioEligible || !streamUrl) return false;
-
-        try {
-            await audioEngineInit();
-            const descriptor = {
-                sourceType: 'direct_url',
-                url: streamUrl,
-                startPositionMs: Math.max(0, Math.floor((startTime || 0) * 1000)),
-            };
-
-            if (streamUrl.startsWith('blob:') && !track?.isLocal) {
-                const mpdXml = await blobUrlToMpdXml(streamUrl);
-                if (mpdXml && mpdXml.includes('<MPD')) {
-                    descriptor.sourceType = 'dash_mpd';
-                    descriptor.mpdXml = mpdXml;
-                    delete descriptor.url;
-                } else {
-                    return false;
-                }
-            } else if (track?.isLocal && track?.file?.path) {
-                descriptor.sourceType = 'local_file';
-                descriptor.localPath = track.file.path;
-                delete descriptor.url;
-            }
-
-            await audioEngineLoad(descriptor);
-            await audioEngineSetVolume(this.userVolume);
-            this._linuxRustAudioActive = true;
-            return true;
-        } catch (error) {
-            console.warn('[LinuxAudio] Rust engine load failed, falling back to web audio:', error);
-            this._linuxRustAudioActive = false;
-            return false;
-        }
-    }
-
     _updateTrackInfoUI(track) {
         const trackTitle = getTrackTitle(track);
         const trackArtistsHTML = getTrackArtistsHTML(track);
@@ -734,10 +677,6 @@ export class Player {
             }
             el.volume = Math.max(0, Math.min(1, effectiveVolume));
         }
-
-        if (this._linuxRustAudioActive) {
-            audioEngineSetVolume(this.userVolume).catch(() => {});
-        }
     }
 
     applyAudioEffects() {
@@ -889,17 +828,11 @@ export class Player {
         navigator.mediaSession.setActionHandler('seekto', (details) => {
             if (details.seekTime !== undefined) {
                 this.audio.currentTime = Math.max(0, details.seekTime);
-                if (this._linuxRustAudioActive) {
-                    audioEngineSeek(Math.floor(this.audio.currentTime * 1000)).catch(() => {});
-                }
                 this.updateMediaSessionPositionState();
             }
         });
 
         navigator.mediaSession.setActionHandler('stop', () => {
-            if (this._linuxRustAudioActive) {
-                audioEnginePause().catch(() => {});
-            }
             this.audio.pause();
             this.audio.currentTime = 0;
             this.updateMediaSessionPlaybackState();
@@ -1150,6 +1083,7 @@ export class Player {
                             if (streamInfo.sampleRate != null) track.sampleRate = streamInfo.sampleRate;
                             if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
                             if (streamInfo.audioMode) track.audioMode = streamInfo.audioMode;
+                            if (streamInfo.format) track.format = streamInfo.format;
                             track.streamedQuality = effectiveQuality;
                         }
                     } catch (e) {
@@ -1376,14 +1310,8 @@ export class Player {
             if (this._howlerSound.playing()) {
                 this._howlerSound.pause();
                 this.stopPlaybackMonitor();
-                if (this._linuxRustAudioActive) {
-                    audioEnginePause().catch(() => {});
-                }
                 this.saveQueueState();
             } else {
-                if (this._linuxRustAudioActive) {
-                    audioEnginePlay().catch(() => {});
-                }
                 this._howlerSound.play();
                 this._howlerPlaybackMonitor();
                 this.startPlaybackMonitor();
@@ -1400,9 +1328,6 @@ export class Player {
         }
 
         if (this.audio.paused) {
-            if (this._linuxRustAudioActive) {
-                audioEnginePlay().catch(() => {});
-            }
             this.audio.play().catch((e) => {
                 if (e.name === 'NotAllowedError' || e.name === 'AbortError') return;
                 console.error('Play failed, reloading track:', e);
@@ -1411,9 +1336,6 @@ export class Player {
                 }
             });
         } else {
-            if (this._linuxRustAudioActive) {
-                audioEnginePause().catch(() => {});
-            }
             this.audio.pause();
             this.saveQueueState();
         }
@@ -1422,9 +1344,6 @@ export class Player {
     seekBackward(seconds = 10) {
         const newTime = Math.max(0, this.audio.currentTime - seconds);
         this.audio.currentTime = newTime;
-        if (this._linuxRustAudioActive) {
-            audioEngineSeek(Math.floor(newTime * 1000)).catch(() => {});
-        }
         this.updateMediaSessionPositionState();
     }
 
@@ -1432,9 +1351,6 @@ export class Player {
         const duration = this.audio.duration || 0;
         const newTime = Math.min(duration, this.audio.currentTime + seconds);
         this.audio.currentTime = newTime;
-        if (this._linuxRustAudioActive) {
-            audioEngineSeek(Math.floor(newTime * 1000)).catch(() => {});
-        }
         this.updateMediaSessionPositionState();
     }
 

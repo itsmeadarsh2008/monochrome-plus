@@ -315,11 +315,6 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         console.error('Audio playback error:', e);
         syncMiniPlayPauseIcon();
 
-        if (player._linuxRustAudioActive) {
-            // Rust engine is handling playback on Linux Tauri. Ignore web audio errors.
-            return;
-        }
-
         const currentQuality = player.quality;
 
         // Check if we can fallback to a lower quality

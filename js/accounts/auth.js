@@ -1,6 +1,6 @@
 // js/accounts/auth.js
-import { account } from '../lib/appwrite.js';
-import { Account, Client, ID } from 'appwrite';
+import { account, client } from '../lib/appwrite.js';
+import { ID } from 'appwrite';
 import MailChecker from 'mailchecker';
 
 const OAUTH_ATTEMPT_KEY = 'mono-oauth-attempt';
@@ -8,7 +8,6 @@ const OAUTH_ATTEMPT_MAX_AGE_MS = 2 * 60 * 1000;
 const APPWRITE_PROJECT_ID = 'monochrome-plus';
 const APPWRITE_OAUTH_FALLBACK_ENDPOINTS = ['https://cloud.appwrite.io/v1', 'https://sgp.cloud.appwrite.io/v1'];
 const DEFAULT_OAUTH_REDIRECT_URL = 'https://monochrome-plus.appwrite.network';
-const DESKTOP_OAUTH_REDIRECT_FALLBACK_URLS = [DEFAULT_OAUTH_REDIRECT_URL];
 const EMAIL_BASIC_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function isHttpUrl(value) {
@@ -22,35 +21,28 @@ function appendUniqueUrl(target, value) {
     }
 }
 
-function isDesktopTauriContext() {
-    if (typeof window === 'undefined') return false;
-
-    if (window.__MONOCHROME_FORCE_TAURI__ === true) return true;
-
-    if (window.__TAURI_INTERNALS__ || window.__TAURI__ || window.__TAURI_IPC__) {
-        return true;
-    }
-
-    return /\btauri\b/i.test(navigator.userAgent || '');
-}
-
 function getOAuthRedirectUrls() {
     const origin = typeof window !== 'undefined' ? window.location?.origin || '' : '';
     const redirects = [];
 
     appendUniqueUrl(redirects, origin);
 
-    if (isDesktopTauriContext()) {
-        for (const fallbackUrl of DESKTOP_OAUTH_REDIRECT_FALLBACK_URLS) {
-            appendUniqueUrl(redirects, fallbackUrl);
-        }
-
-        return redirects.length ? redirects : [DEFAULT_OAUTH_REDIRECT_URL];
-    }
-
     return redirects.length ? redirects : [DEFAULT_OAUTH_REDIRECT_URL];
 }
 
+/**
+ * Start the OAuth2 token flow.
+ *
+ * Uses createOAuth2Token semantics instead of createOAuth2Session:
+ * the session is created client-side after the redirect (via
+ * createSession(userId, secret)) instead of relying on a cross-site
+ * Appwrite cookie. Browsers with strict tracking protection / adblockers
+ * (Firefox Total Cookie Protection, uBlock Origin) block that third-party
+ * cookie, which previously left the user signed out after a "successful"
+ * Discord/Google login. The Appwrite server returns the session in the
+ * X-Fallback-Cookies header on the createSession response, and the SDK
+ * persists it in localStorage, so the session survives without cookies.
+ */
 async function createOAuthSessionWithFallback(provider, redirectUrls) {
     const endpointCandidates = [null, ...APPWRITE_OAUTH_FALLBACK_ENDPOINTS];
     const redirectCandidates = Array.isArray(redirectUrls) ? redirectUrls : [redirectUrls];
@@ -58,20 +50,18 @@ async function createOAuthSessionWithFallback(provider, redirectUrls) {
     for (const redirectUrl of redirectCandidates) {
         for (const endpoint of endpointCandidates) {
             try {
-                if (!endpoint) {
-                    await account.createOAuth2Session(provider, redirectUrl, redirectUrl);
-                    console.log(
-                        `[Appwrite] ${provider} login initiated (primary endpoint, redirect: ${redirectUrl})...`
-                    );
-                    return;
-                }
+                const baseEndpoint = String(endpoint || client.config.endpoint || '')
+                    .trim()
+                    .replace(/\/+$/, '');
+                if (!baseEndpoint) throw new Error('No Appwrite endpoint available');
 
-                const fallbackClient = new Client().setEndpoint(endpoint).setProject(APPWRITE_PROJECT_ID);
-                const fallbackAccount = new Account(fallbackClient);
-                await fallbackAccount.createOAuth2Session(provider, redirectUrl, redirectUrl);
-                console.log(
-                    `[Appwrite] ${provider} login initiated (fallback endpoint: ${endpoint}, redirect: ${redirectUrl})...`
-                );
+                const url = new URL(`${baseEndpoint}/account/tokens/oauth2/${provider}`);
+                url.searchParams.set('project', APPWRITE_PROJECT_ID);
+                url.searchParams.set('success', redirectUrl);
+                url.searchParams.set('failure', redirectUrl);
+
+                console.log(`[Appwrite] ${provider} login initiated (token flow, endpoint: ${baseEndpoint})...`);
+                window.location.href = url.toString();
                 return;
             } catch (error) {
                 console.warn(
@@ -101,6 +91,8 @@ export class AuthManager {
     }
 
     async init() {
+        await this._handleOAuthCallback();
+
         try {
             // Check for existing session (persistent auth)
             const user = await account.get();
@@ -119,27 +111,80 @@ export class AuthManager {
             this.updateUI(null);
             this.authListeners.forEach((listener) => listener(null));
 
-            try {
-                const rawAttempt = localStorage.getItem(OAUTH_ATTEMPT_KEY);
-                if (!rawAttempt) return;
-
-                const attempt = JSON.parse(rawAttempt);
-                const age = Date.now() - Number(attempt?.ts || 0);
-                if (age <= OAUTH_ATTEMPT_MAX_AGE_MS && attempt?.provider) {
-                    window.dispatchEvent(
-                        new CustomEvent('auth-oauth-blocked', {
-                            detail: {
-                                provider: attempt.provider,
-                            },
-                        })
-                    );
-                }
-            } catch {
-                // Ignore malformed localStorage payloads
-            } finally {
-                localStorage.removeItem(OAUTH_ATTEMPT_KEY);
-            }
+            this._reportBlockedOAuth();
         }
+    }
+
+    /**
+     * Complete the OAuth2 token flow after the provider redirect lands back
+     * on the app with `?userId=...&secret=...` (success) or `?error=...`
+     * (failure). Creating the session here keeps auth working even when the
+     * Appwrite session cookie is blocked by tracking protection/adblockers.
+     */
+    async _handleOAuthCallback() {
+        if (typeof window === 'undefined' || !window.location?.search) return false;
+
+        const params = new URLSearchParams(window.location.search);
+        const userId = params.get('userId');
+        const secret = params.get('secret');
+        const oauthError = params.get('error');
+
+        if (!userId && !secret && !oauthError) return false;
+
+        const cleanupUrl = () => {
+            const cleanPath = window.location.pathname + window.location.hash;
+            window.history.replaceState(null, '', cleanPath);
+        };
+
+        try {
+            if (userId && secret) {
+                await account.createSession(userId, secret);
+                console.log('[Appwrite] ✓ OAuth session created via token flow');
+            } else {
+                console.warn('[Appwrite] OAuth callback reported an error:', oauthError || 'unknown');
+                this._reportBlockedOAuth();
+            }
+        } catch (error) {
+            console.error('[Appwrite] OAuth session creation failed:', error);
+            this._reportBlockedOAuth();
+        } finally {
+            localStorage.removeItem(OAUTH_ATTEMPT_KEY);
+            cleanupUrl();
+        }
+
+        return true;
+    }
+
+    _consumeOAuthAttempt() {
+        try {
+            const rawAttempt = localStorage.getItem(OAUTH_ATTEMPT_KEY);
+            if (!rawAttempt) return null;
+
+            const attempt = JSON.parse(rawAttempt);
+            const age = Date.now() - Number(attempt?.ts || 0);
+            if (age <= OAUTH_ATTEMPT_MAX_AGE_MS && attempt?.provider) {
+                return attempt.provider;
+            }
+            return null;
+        } catch {
+            // Ignore malformed localStorage payloads
+            return null;
+        } finally {
+            localStorage.removeItem(OAUTH_ATTEMPT_KEY);
+        }
+    }
+
+    _reportBlockedOAuth() {
+        const provider = this._consumeOAuthAttempt();
+        if (!provider) return;
+
+        window.dispatchEvent(
+            new CustomEvent('auth-oauth-blocked', {
+                detail: {
+                    provider,
+                },
+            })
+        );
     }
 
     onAuthStateChanged(callback) {
