@@ -425,6 +425,9 @@ export const createFullscreenQualityHTML = (track) => {
     const containerFormat = String(track.format || track.mediaType || '').toUpperCase();
     const formatStr = containerFormat && !/UNKNOWN|AUDIO/i.test(containerFormat) ? containerFormat : null;
 
+    // Lossy containers can never carry a lossless label
+    const lossy = isLossyContainer(track.format || track.mediaType);
+
     // Determine quality label and logo
     let qualityLabel = '';
     let logoHtml = '';
@@ -432,6 +435,9 @@ export const createFullscreenQualityHTML = (track) => {
     if (quality === 'DOLBY_ATMOS') {
         // For Dolby Atmos, just show the logo (the badge already shows "Atmos" and title may have it)
         logoHtml = SVG_ATMOS(16);
+    } else if (lossy) {
+        // Lossy format overrides any lossless claim
+        qualityLabel = 'High';
     } else if (quality === 'HI_RES_LOSSLESS') {
         qualityLabel = 'Hi-Res Lossless';
     } else if (quality === 'LOSSLESS') {
@@ -539,14 +545,43 @@ export const pickBestQuality = (candidates) => {
     return best;
 };
 
+const LOSSY_CONTAINERS = new Set([
+    'aac',
+    'm4a',
+    'mp3',
+    'mpeg',
+    'mp4',
+    'ogg',
+    'oga',
+    'opus',
+    'vorbis',
+    'wma',
+    'ac3',
+    'eac3',
+    'dts',
+    'webm',
+]);
+
+export const isLossyContainer = (format) => {
+    const f = String(format || '').toLowerCase();
+    if (!f || /flac|alac|ape|pcm|dsd/i.test(f)) return false;
+    const token = f.split(/[\s\-_/.]/)[0];
+    return LOSSY_CONTAINERS.has(token);
+};
+
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
+
+    // A lossy container (AAC, MP3, …) can never be lossless, no matter what
+    // the provider's quality label claims — clamp it to at most HIGH.
+    const lossy = isLossyContainer(track.format || track.mediaType);
 
     // Prefer the actual stream specs when known — these are exact numbers
     // reported by the addon and more truthful than provider quality labels.
     const bitDepth = toPositiveInt(track.bitDepth);
     const sampleRate = toPositiveInt(track.sampleRate);
     if (bitDepth || sampleRate) {
+        if (lossy) return 'HIGH';
         if (bitDepth >= 24 || sampleRate > 48000) return 'HI_RES_LOSSLESS';
         return 'LOSSLESS';
     }
@@ -558,7 +593,9 @@ export const deriveTrackQuality = (track) => {
         normalizeQualityToken(track.streamedQuality),
     ];
 
-    return pickBestQuality(candidates);
+    const best = pickBestQuality(candidates);
+    if (lossy && (best === 'HI_RES_LOSSLESS' || best === 'LOSSLESS')) return 'HIGH';
+    return best;
 };
 
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -6380,14 +6380,8 @@ input:checked + .slider::before {
 }
 
 /* Pause the blurred background rotation when the disc is paused */
-#fullscreen-cover-overlay:has(#vinyl-disc-container.rotating-disc.paused)::before {
-    animation-play-state: paused;
-}
-
-/* Stop background rotation when the disc is not rotating */
-#fullscreen-cover-overlay:has(#vinyl-disc-container:not(.rotating-disc))::before {
-    animation-play-state: paused;
-}
+/* The fullscreen background animation always runs — independent of the
+   vinyl disc rotation setting/state. */
 
 /* No spindle dot overlay on the center artwork */
 #vinyl-disc-container.rotating-disc .spindle-hole {
