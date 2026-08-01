@@ -55,7 +55,7 @@ export class Player {
         this._backgroundPreloadTimer = null;
         this.currentTrack = null;
         this.currentRgValues = null;
-        this.userVolume = parseFloat(localStorage.getItem('volume') || '0.7');
+        this.userVolume = 1; // Always full volume
         this.video = document.getElementById('video-player');
         this.isFallbackRetry = false;
         this._playbackMonitorTimer = null;
@@ -629,9 +629,8 @@ export class Player {
         this.playNext();
     }
 
-    setVolume(value) {
-        this.userVolume = Math.max(0, Math.min(1, value));
-        localStorage.setItem('volume', this.userVolume);
+    setVolume() {
+        this.userVolume = 1; // Always full volume
         this.applyReplayGain();
     }
 
@@ -2006,7 +2005,7 @@ export class Player {
             preload: true,
             autoplay: true,
             pool: 1,
-            volume: this.userVolume || 1,
+            volume: 1, // Always full volume
             format: ['flac', 'mp3', 'aac', 'ogg', 'wav', 'm4a'],
             xhr: {
                 withCredentials: false,
