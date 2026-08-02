@@ -5762,8 +5762,10 @@ export class UIRenderer {
                 const releaseDate = new Date(album.releaseDate);
                 if (!isNaN(releaseDate.getTime())) {
                     const year = releaseDate.getFullYear();
+                    const isYearOnly =
+                        typeof album.releaseDate === 'string' && /^\d{4}$/.test(album.releaseDate.trim());
                     dateDisplay =
-                        window.innerWidth > 768
+                        !isYearOnly && window.innerWidth > 768
                             ? releaseDate.toLocaleDateString('en-US', {
                                   year: 'numeric',
                                   month: 'long',

@@ -91,7 +91,7 @@ const extractSampleRate = (streamInfo) => {
     return null;
 };
 
-const yearAsDate = (year) => (year ? `${year}-01-01` : undefined);
+const yearAsReleaseDate = (year) => (year ? String(year).trim() : undefined);
 
 export class EclipseAPI {
     constructor() {
@@ -444,7 +444,7 @@ export class EclipseAPI {
             cover: data.artworkURL,
             artist: data.artist ? { name: data.artist } : { name: '' },
             artists: data.artist ? [{ name: data.artist }] : [],
-            releaseDate: yearAsDate(data.year),
+            releaseDate: yearAsReleaseDate(data.year),
             numberOfTracks: data.trackCount,
             artwork: data.artworkURL ? [{ url: data.artworkURL }] : [],
             videoCover: null,
@@ -472,7 +472,7 @@ export class EclipseAPI {
                 artist: a.artist ? { name: a.artist } : { name: data.name },
                 artists: a.artist ? [{ name: a.artist }] : [{ name: data.name }],
                 numberOfTracks: a.trackCount,
-                releaseDate: yearAsDate(a.year),
+                releaseDate: yearAsReleaseDate(a.year),
                 artwork: a.artworkURL ? [{ url: a.artworkURL }] : [],
             })),
             eps: [],

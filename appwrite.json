@@ -1,5 +1,6 @@
 {
     "projectId": "monochrome-plus",
     "projectName": "monochrome-plus",
+    "endpoint": "https://sgp.cloud.appwrite.io/v1",
     "functions": []
 }
