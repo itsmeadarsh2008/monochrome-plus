@@ -572,6 +572,18 @@ export const isLossyContainer = (format) => {
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
 
+    // Dolby Atmos is a format marker, not a bit-depth/sample-rate claim —
+    // it wins over any specs, and Atmos is legitimately delivered lossy (AAC).
+    const atmosFromModes =
+        Array.isArray(track.audioModes) && track.audioModes.some((mode) => /ATMOS|DOLBY/i.test(String(mode)));
+    const atmosFromTokens =
+        normalizeQualityToken(track.audioQuality) === 'DOLBY_ATMOS' ||
+        normalizeQualityToken(track.streamedQuality) === 'DOLBY_ATMOS' ||
+        normalizeQualityToken(track.audioMode) === 'DOLBY_ATMOS' ||
+        deriveQualityFromTags(track.mediaMetadata?.tags) === 'DOLBY_ATMOS' ||
+        deriveQualityFromTags(track.album?.mediaMetadata?.tags) === 'DOLBY_ATMOS';
+    if (atmosFromModes || atmosFromTokens) return 'DOLBY_ATMOS';
+
     // A lossy container (AAC, MP3, …) can never be lossless, no matter what
     // the provider's quality label claims — clamp it to at most HIGH.
     const lossy = isLossyContainer(track.format || track.mediaType);

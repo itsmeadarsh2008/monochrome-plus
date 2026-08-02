@@ -5363,12 +5363,13 @@ export class UIRenderer {
         try {
             const provider = this.api.getCurrentProvider();
 
-            // Always fetch ALL types so tab switching works without re-fetching
+            // Always fetch ALL types so tab switching works without re-fetching.
+            // retry: true — keep retrying through addon rate limits until results arrive.
             const [tracksResult, artistsResult, albumsResult, playlistsResult, usersResult] = await Promise.all([
-                this.api.searchTracks(normalizedQuery, { signal, provider }),
-                this.api.searchArtists(normalizedQuery, { signal, provider }),
-                this.api.searchAlbums(normalizedQuery, { signal, provider }),
-                this.api.searchPlaylists(normalizedQuery, { signal, provider }),
+                this.api.searchTracks(normalizedQuery, { signal, provider, retry: true }),
+                this.api.searchArtists(normalizedQuery, { signal, provider, retry: true }),
+                this.api.searchAlbums(normalizedQuery, { signal, provider, retry: true }),
+                this.api.searchPlaylists(normalizedQuery, { signal, provider, retry: true }),
                 syncManager.searchUsers(normalizedQuery),
             ]);
 

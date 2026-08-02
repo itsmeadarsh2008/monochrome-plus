@@ -189,7 +189,14 @@ export class EclipseAPI {
         }
     }
 
-    async _request(path, retries = MAX_429_RETRIES, priority = false, background = false) {
+    async _request(
+        path,
+        retries = MAX_429_RETRIES,
+        priority = false,
+        background = false,
+        persistent = false,
+        attempt = 0
+    ) {
         const addon = await eclipseAddonStorage.ensureInstalled();
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
 
@@ -204,14 +211,23 @@ export class EclipseAPI {
         }
 
         if (res.status === 429) {
+            // Respect the addon's retry-after when provided; otherwise back off
+            // exponentially (500ms → 1s → 2s …), capped so interactive requests
+            // never sleep too long. Persistent searches (user-facing search page)
+            // keep retrying until the rate limit clears.
+            let backoffMs;
+            const retryAfter = res.headers.get('retry-after');
+            if (retryAfter) {
+                const seconds = Number.parseFloat(retryAfter);
+                backoffMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
+            } else {
+                backoffMs = Math.min(500 * Math.pow(2, attempt), persistent ? 30000 : 8000);
+            }
+            await this._sleep(Math.max(backoffMs, 0));
+            if (persistent) {
+                return this._request(path, retries, priority, background, persistent, attempt + 1);
+            }
             if (retries > 0) {
-                let backoffMs = 500 * (MAX_429_RETRIES - retries + 1);
-                const retryAfter = res.headers.get('retry-after');
-                if (retryAfter) {
-                    const seconds = Number.parseFloat(retryAfter);
-                    backoffMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
-                }
-                await this._sleep(Math.max(backoffMs, 0));
                 return this._request(path, retries - 1, priority, background);
             }
             throw new Error(RATE_LIMIT_ERROR_MESSAGE);
@@ -240,7 +256,8 @@ export class EclipseAPI {
                 `search?q=${encodeURIComponent(q)}`,
                 MAX_429_RETRIES,
                 false,
-                options?.background === true
+                options?.background === true,
+                options?.retry === true
             );
             const result = {
                 tracks: (data.tracks || []).map((t) => this.mapSearchTrack(t)),

@@ -146,6 +146,10 @@ export class MusicAPI {
         await this.tidalAPI.clearCache();
     }
 
+    async clearStreamCache() {
+        await this.tidalAPI.clearStreamCache();
+    }
+
     getCacheStats() {
         return this.tidalAPI.getCacheStats();
     }
