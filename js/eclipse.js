@@ -304,6 +304,29 @@ export class EclipseAPI {
         return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
     }
 
+    /**
+     * Resolves an artist id from a display name (search results only carry
+     * artist names). Exact name match preferred, otherwise the top result.
+     */
+    async resolveArtistIdByName(name) {
+        if (!name) return null;
+        const cleanName = String(name)
+            .replace(/\(\s*(?:feat\.?|ft\.?|with)\s+[^)]*\)/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!cleanName) return null;
+        try {
+            const { items } = await this.searchArtists(cleanName, { limit: 8 });
+            if (!items?.length) return null;
+            const normalized = cleanName.toLowerCase();
+            const exact = items.find((a) => a?.name && String(a.name).toLowerCase() === normalized);
+            return (exact || items[0])?.id || null;
+        } catch (error) {
+            console.warn('Failed to resolve artist id for:', cleanName, error);
+            return null;
+        }
+    }
+
     async searchPlaylists(query, options = {}) {
         const data = await this._search(query, options);
         const items = data.playlists.slice(0, options.limit || 30);

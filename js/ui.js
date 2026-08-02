@@ -2062,9 +2062,18 @@ export class UIRenderer {
         if (artistEl) {
             artistEl.style.cursor = 'pointer';
             artistEl.onclick = () => {
-                if (this.player.currentTrack && this.player.currentTrack.artist) {
-                    this.closeFullscreenCover();
-                    navigate(`/artist/${this.player.currentTrack.artist.id}`);
+                const track = this.player.currentTrack;
+                if (!track) return;
+                this.closeFullscreenCover();
+                if (track.artist?.id) {
+                    navigate(`/artist/${track.artist.id}`);
+                } else if (track.artist?.name) {
+                    this.api
+                        .resolveArtistIdByName(track.artist.name)
+                        .then((resolvedId) => {
+                            if (resolvedId) navigate(`/artist/${resolvedId}`);
+                        })
+                        .catch((err) => console.warn('Failed to resolve artist by name:', track.artist.name, err));
                 }
             };
         }

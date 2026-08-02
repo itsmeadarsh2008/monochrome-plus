@@ -2113,6 +2113,17 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
                 navigate(`/unreleased/${trackerSheetId}`);
             } else if (artistId) {
                 navigate(`/artist/${artistId}`);
+            } else {
+                // Addon tracks have no artist id on search results - resolve by name
+                const name = artistLink.textContent.trim();
+                if (name) {
+                    try {
+                        const resolvedId = await ui.api.resolveArtistIdByName(name);
+                        if (resolvedId) navigate(`/artist/${resolvedId}`);
+                    } catch (resolveError) {
+                        console.warn('Failed to resolve artist by name:', name, resolveError);
+                    }
+                }
             }
             return;
         }
@@ -2297,6 +2308,17 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
                 navigate(`/unreleased/${trackerSheetId}`);
             } else if (artistId) {
                 navigate(`/artist/${artistId}`);
+            } else {
+                // Addon tracks have no artist id on search results - resolve by name
+                const name = link.textContent.trim();
+                if (name) {
+                    ui.api
+                        .resolveArtistIdByName(name)
+                        .then((resolvedId) => {
+                            if (resolvedId) navigate(`/artist/${resolvedId}`);
+                        })
+                        .catch((err) => console.warn('Failed to resolve artist by name:', name, err));
+                }
             }
             return;
         }
@@ -2310,6 +2332,13 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
                 navigate(`/unreleased/${track.trackerInfo.sheetId}`);
             } else if (track.artist?.id) {
                 navigate(`/artist/${track.artist.id}`);
+            } else if (track.artist?.name) {
+                ui.api
+                    .resolveArtistIdByName(track.artist.name)
+                    .then((resolvedId) => {
+                        if (resolvedId) navigate(`/artist/${resolvedId}`);
+                    })
+                    .catch((err) => console.warn('Failed to resolve artist by name:', track.artist.name, err));
             }
         }
     });

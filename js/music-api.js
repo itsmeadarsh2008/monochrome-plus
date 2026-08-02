@@ -31,6 +31,10 @@ export class MusicAPI {
         return this.tidalAPI.searchArtists(query, options);
     }
 
+    async resolveArtistIdByName(name) {
+        return this.tidalAPI.resolveArtistIdByName(name);
+    }
+
     async searchAlbums(query, options = {}) {
         return this.tidalAPI.searchAlbums(query, options);
     }
