@@ -69,6 +69,9 @@ const SEARCH_CACHE_TTL = 15 * 60 * 1000;
 // Minimum gap between addon requests. The addon rate-limits aggressively,
 // and the app fires bursts (home = 7 parallel searches, search page = 4).
 const MIN_REQUEST_GAP_MS = 180;
+// Background work (billboard resolution, etc.) uses a more polite pace and
+// only runs when the interactive queues are idle.
+const BACKGROUND_REQUEST_GAP_MS = 450;
 const MAX_429_RETRIES = 2;
 
 const extractBitDepth = (streamInfo) => {
@@ -99,7 +102,9 @@ export class EclipseAPI {
         this._searchInflight = new Map();
         this._requestQueue = [];
         this._priorityQueue = [];
+        this._backgroundQueue = [];
         this._queueRunning = false;
+        this._backgroundQueueRunning = false;
         this._lastRequestAt = 0;
 
         setInterval(
@@ -120,10 +125,19 @@ export class EclipseAPI {
     // addon's rate limiter. Failures never break the queue.
     // High-priority requests (stream URLs, user-initiated playback) jump the
     // queue so play never stalls behind slow background searches.
-    _enqueueRequest(fn, priority = false) {
+    // Background requests (billboard resolution, non-visible prefetches) go
+    // through a separate lane that only runs when the interactive queues are
+    // idle, so they never delay user-facing work.
+    _enqueueRequest(fn, priority = false, background = false) {
         return new Promise((resolve, reject) => {
-            (priority ? this._priorityQueue : this._requestQueue).push({ fn, resolve, reject });
-            this._pumpQueue();
+            const item = { fn, resolve, reject };
+            if (background) {
+                this._backgroundQueue.push(item);
+                this._pumpBackgroundQueue();
+            } else {
+                (priority ? this._priorityQueue : this._requestQueue).push(item);
+                this._pumpQueue();
+            }
         });
     }
 
@@ -148,7 +162,34 @@ export class EclipseAPI {
         }
     }
 
-    async _request(path, retries = MAX_429_RETRIES, priority = false) {
+    async _pumpBackgroundQueue() {
+        if (this._backgroundQueueRunning) return;
+        this._backgroundQueueRunning = true;
+        try {
+            while (this._backgroundQueue.length) {
+                // Yield to interactive traffic: only run while the main queues
+                // are idle so user-facing searches never wait behind background work.
+                if (this._priorityQueue.length || this._requestQueue.length) {
+                    await this._sleep(200);
+                    continue;
+                }
+                const item = this._backgroundQueue.shift();
+                try {
+                    const now = performance.now();
+                    const waitMs = Math.max(0, this._lastRequestAt + BACKGROUND_REQUEST_GAP_MS - now);
+                    if (waitMs > 0) await this._sleep(waitMs);
+                    this._lastRequestAt = performance.now();
+                    item.resolve(await item.fn());
+                } catch (error) {
+                    item.reject(error);
+                }
+            }
+        } finally {
+            this._backgroundQueueRunning = false;
+        }
+    }
+
+    async _request(path, retries = MAX_429_RETRIES, priority = false, background = false) {
         const addon = await eclipseAddonStorage.ensureInstalled();
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
 
@@ -157,7 +198,7 @@ export class EclipseAPI {
 
         let res;
         try {
-            res = await this._enqueueRequest(() => fetch(url), priority);
+            res = await this._enqueueRequest(() => fetch(url), priority, background);
         } catch (error) {
             throw new Error(`Addon unreachable: ${error.message}`);
         }
@@ -171,7 +212,7 @@ export class EclipseAPI {
                     backoffMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
                 }
                 await this._sleep(Math.max(backoffMs, 0));
-                return this._request(path, retries - 1, priority);
+                return this._request(path, retries - 1, priority, background);
             }
             throw new Error(RATE_LIMIT_ERROR_MESSAGE);
         }
@@ -182,7 +223,7 @@ export class EclipseAPI {
 
     // ---- search ---------------------------------------------------------
 
-    async _search(query) {
+    async _search(query, options = {}) {
         const q = String(query || '').trim();
         if (!q) return { tracks: [], albums: [], artists: [], playlists: [] };
 
@@ -195,7 +236,12 @@ export class EclipseAPI {
         if (this._searchInflight.has(cacheKey)) return this._searchInflight.get(cacheKey);
 
         const inflight = (async () => {
-            const data = await this._request(`search?q=${encodeURIComponent(q)}`);
+            const data = await this._request(
+                `search?q=${encodeURIComponent(q)}`,
+                MAX_429_RETRIES,
+                false,
+                options?.background === true
+            );
             const result = {
                 tracks: (data.tracks || []).map((t) => this.mapSearchTrack(t)),
                 albums: (data.albums || []).map((a) => this.mapSearchAlbum(a)),
@@ -213,25 +259,25 @@ export class EclipseAPI {
     }
 
     async searchTracks(query, options = {}) {
-        const data = await this._search(query);
+        const data = await this._search(query, options);
         const items = data.tracks.slice(0, options.limit || 30);
         return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
     }
 
     async searchAlbums(query, options = {}) {
-        const data = await this._search(query);
+        const data = await this._search(query, options);
         const items = data.albums.slice(0, options.limit || 30);
         return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
     }
 
     async searchArtists(query, options = {}) {
-        const data = await this._search(query);
+        const data = await this._search(query, options);
         const items = data.artists.slice(0, options.limit || 30);
         return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
     }
 
     async searchPlaylists(query, options = {}) {
-        const data = await this._search(query);
+        const data = await this._search(query, options);
         const items = data.playlists.slice(0, options.limit || 30);
         return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
     }

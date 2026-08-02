@@ -4342,7 +4342,7 @@ export class UIRenderer {
         return 0;
     }
 
-    async _resolveBillboardTracks(entries = [], provider = null) {
+    async _resolveBillboardTracks(entries = [], provider = null, options = {}) {
         const cache = this._billboardResolveTrackCache || new Map();
         this._billboardResolveTrackCache = cache;
 
@@ -4353,7 +4353,7 @@ export class UIRenderer {
             const key = `${provider || 'default'}::track::${this._normalizeBillboardText(query)}`;
             if (cache.has(key)) return { ...entry, resolvedTrack: cache.get(key) };
 
-            const search = await this.api.searchTracks(query, { limit: 8, provider });
+            const search = await this.api.searchTracks(query, { limit: 8, provider, ...options });
             let candidates = this._normalizeTrackList(search);
 
             let bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
@@ -4362,7 +4362,7 @@ export class UIRenderer {
                 fallbackQuery && fallbackQuery !== query && (!candidates.length || bestMatch.score < 6);
 
             if (shouldRetryWithoutBrackets) {
-                const fallbackSearch = await this.api.searchTracks(fallbackQuery, { limit: 8, provider });
+                const fallbackSearch = await this.api.searchTracks(fallbackQuery, { limit: 8, provider, ...options });
                 const fallbackCandidates = this._normalizeTrackList(fallbackSearch);
                 if (fallbackCandidates.length) {
                     candidates = fallbackCandidates;
@@ -4382,7 +4382,7 @@ export class UIRenderer {
         );
     }
 
-    async _resolveBillboardAlbums(entries = [], provider = null) {
+    async _resolveBillboardAlbums(entries = [], provider = null, options = {}) {
         const cache = this._billboardResolveAlbumCache || new Map();
         this._billboardResolveAlbumCache = cache;
 
@@ -4391,7 +4391,7 @@ export class UIRenderer {
             const key = `${provider || 'default'}::album::${this._normalizeBillboardText(query)}`;
             if (cache.has(key)) return { ...entry, resolvedAlbum: cache.get(key) };
 
-            const search = await this.api.searchAlbums(query, { limit: 8, provider });
+            const search = await this.api.searchAlbums(query, { limit: 8, provider, ...options });
             const candidates = this._normalizeAlbumList(search);
             let best = null;
             let bestScore = -1;
@@ -4414,7 +4414,7 @@ export class UIRenderer {
         );
     }
 
-    async _resolveBillboardArtists(entries = [], provider = null) {
+    async _resolveBillboardArtists(entries = [], provider = null, options = {}) {
         const cache = this._billboardResolveArtistCache || new Map();
         this._billboardResolveArtistCache = cache;
 
@@ -4423,7 +4423,7 @@ export class UIRenderer {
             const key = `${provider || 'default'}::artist::${this._normalizeBillboardText(query)}`;
             if (cache.has(key)) return { ...entry, resolvedArtist: cache.get(key) };
 
-            const search = await this.api.searchArtists(query, { limit: 8, provider });
+            const search = await this.api.searchArtists(query, { limit: 8, provider, ...options });
             const candidates = this._normalizeArtistList(search);
             let best = null;
             let bestScore = -1;
@@ -4662,6 +4662,25 @@ export class UIRenderer {
         return true;
     }
 
+    _upgradeBillboardModule(containerId, resolver, type = 'track') {
+        const container = document.getElementById(containerId);
+        if (!container || !container.children.length) return;
+        resolver()
+            .then((entries) => {
+                if (!entries || !entries.length) return;
+                if (type === 'album') {
+                    this._renderBillboardAlbumCards(containerId, entries);
+                } else if (type === 'artist') {
+                    this._renderBillboardArtistStrip(containerId, entries);
+                } else {
+                    this._renderBillboardTrackList(containerId, entries);
+                }
+            })
+            .catch(() => {
+                // Keep the phase-1 (unresolved) content — resolution is best-effort.
+            });
+    }
+
     async renderHomeBillboard(forceRefresh = false, variant = 'default') {
         const isEmptyVariant = variant === 'empty';
         const suffix = isEmptyVariant ? '-empty' : '';
@@ -4707,37 +4726,26 @@ export class UIRenderer {
             const japanEntries = japanResult.status === 'fulfilled' ? japanResult.value : [];
             const indiaEntries = indiaResult.status === 'fulfilled' ? indiaResult.value : [];
 
-            const [
-                resolvedHot100,
-                resolvedGlobal200,
-                resolvedAlbums200,
-                resolvedArtists100,
-                resolvedRegional,
-                resolvedUk,
-                resolvedJapan,
-                resolvedIndia,
-            ] = await Promise.all([
-                this._resolveBillboardTracks(hot100.slice(0, 15), provider),
-                this._resolveBillboardTracks(global200.slice(0, 15), provider),
-                this._resolveBillboardAlbums(albums200.slice(0, 12), provider),
-                this._resolveBillboardArtists(artists100.slice(0, 16), provider),
-                this._resolveBillboardTracks(regionalEntries.slice(0, 15), provider),
-                this._resolveBillboardTracks(ukEntries.slice(0, 15), provider),
-                this._resolveBillboardTracks(japanEntries.slice(0, 15), provider),
-                this._resolveBillboardTracks(indiaEntries.slice(0, 15), provider),
-            ]);
-
-            const hasHot100 = this._renderBillboardTrackList(`home-billboard-hot100${suffix}`, resolvedHot100);
-            const hasGlobal200 = this._renderBillboardTrackList(`home-billboard-global200${suffix}`, resolvedGlobal200);
-            const hasAlbums200 = this._renderBillboardAlbumCards(`home-billboard-200${suffix}`, resolvedAlbums200);
+            // Phase 1 — render immediately from raw chart data. Track/album/
+            // artist resolution is done in the background so the section never
+            // waits on the addon's serialized, rate-limited search queue.
+            const hasHot100 = this._renderBillboardTrackList(`home-billboard-hot100${suffix}`, hot100.slice(0, 15));
+            const hasGlobal200 = this._renderBillboardTrackList(
+                `home-billboard-global200${suffix}`,
+                global200.slice(0, 15)
+            );
+            const hasAlbums200 = this._renderBillboardAlbumCards(`home-billboard-200${suffix}`, albums200.slice(0, 12));
             const hasArtists100 = this._renderBillboardArtistStrip(
                 `home-billboard-artist100${suffix}`,
-                resolvedArtists100
+                artists100.slice(0, 16)
             );
-            const hasRegional = this._renderBillboardTrackList(`home-billboard-regional${suffix}`, resolvedRegional);
-            const hasUk = this._renderBillboardTrackList(`home-billboard-uk${suffix}`, resolvedUk);
-            const hasJapan = this._renderBillboardTrackList(`home-billboard-japan${suffix}`, resolvedJapan);
-            const hasIndia = this._renderBillboardTrackList(`home-billboard-india${suffix}`, resolvedIndia);
+            const hasRegional = this._renderBillboardTrackList(
+                `home-billboard-regional${suffix}`,
+                regionalEntries.slice(0, 15)
+            );
+            const hasUk = this._renderBillboardTrackList(`home-billboard-uk${suffix}`, ukEntries.slice(0, 15));
+            const hasJapan = this._renderBillboardTrackList(`home-billboard-japan${suffix}`, japanEntries.slice(0, 15));
+            const hasIndia = this._renderBillboardTrackList(`home-billboard-india${suffix}`, indiaEntries.slice(0, 15));
 
             this._setDiscoveryModuleVisibility(`home-billboard-hot100-module${suffix}`, hasHot100);
             this._setDiscoveryModuleVisibility(`home-billboard-global200-module${suffix}`, hasGlobal200);
@@ -4760,6 +4768,40 @@ export class UIRenderer {
                 hasJapan ||
                 hasIndia;
             section.style.display = hasAny ? '' : 'none';
+            if (!hasAny) return;
+
+            // Phase 2 — resolve chart entries through the addon's background
+            // lane (never delays interactive searches) and upgrade each module
+            // in place as its results arrive.
+            const bg = { background: true };
+            this._upgradeBillboardModule(`home-billboard-hot100${suffix}`, () =>
+                this._resolveBillboardTracks(hot100.slice(0, 15), provider, bg)
+            );
+            this._upgradeBillboardModule(`home-billboard-global200${suffix}`, () =>
+                this._resolveBillboardTracks(global200.slice(0, 15), provider, bg)
+            );
+            this._upgradeBillboardModule(
+                `home-billboard-200${suffix}`,
+                () => this._resolveBillboardAlbums(albums200.slice(0, 12), provider, bg),
+                'album'
+            );
+            this._upgradeBillboardModule(
+                `home-billboard-artist100${suffix}`,
+                () => this._resolveBillboardArtists(artists100.slice(0, 16), provider, bg),
+                'artist'
+            );
+            this._upgradeBillboardModule(`home-billboard-regional${suffix}`, () =>
+                this._resolveBillboardTracks(regionalEntries.slice(0, 15), provider, bg)
+            );
+            this._upgradeBillboardModule(`home-billboard-uk${suffix}`, () =>
+                this._resolveBillboardTracks(ukEntries.slice(0, 15), provider, bg)
+            );
+            this._upgradeBillboardModule(`home-billboard-japan${suffix}`, () =>
+                this._resolveBillboardTracks(japanEntries.slice(0, 15), provider, bg)
+            );
+            this._upgradeBillboardModule(`home-billboard-india${suffix}`, () =>
+                this._resolveBillboardTracks(indiaEntries.slice(0, 15), provider, bg)
+            );
         } catch (error) {
             console.warn('[Home] Failed to render Billboard charts:', error);
             section.style.display = 'none';
