@@ -14,6 +14,7 @@ import {
 } from './utils.js';
 import { isIos, isSafari } from './platform-detection.js';
 import { SVG_CLOCK, SVG_ATMOS } from './icons.js';
+import { showNotification } from './downloads.js';
 import {
     queueManager,
     replayGainSettings,
@@ -387,6 +388,22 @@ export class Player {
 
         this._atmosSupportChecked = true;
         return this._atmosSupported;
+    }
+
+    // Detect Atmos (E-AC3-JOC / AC-4) from the stream the addon resolved.
+    _isAtmosStream(streamInfo, streamUrl) {
+        const source = [
+            streamInfo?.format,
+            streamInfo?.quality,
+            streamInfo?.streamQuality,
+            streamInfo?.audioQuality,
+            streamInfo?.audioMode,
+            streamInfo?.mediaType,
+            typeof streamUrl === 'string' ? streamUrl : '',
+        ]
+            .filter(Boolean)
+            .join(' ');
+        return /(?:eac-?3|ec-?3|joc|ac-?4|atmos|dolby)/i.test(source);
     }
 
     _getEffectivePlaybackQuality(requestedQuality = this.quality) {
@@ -1141,6 +1158,26 @@ export class Player {
             // A newer play request superseded this one while we were fetching
             // the stream — abort instead of starting a second audio instance.
             if (isStalePlay()) return;
+
+            // Dolby Atmos (E-AC3-JOC/AC-4) can't be decoded by most browsers.
+            // Fail fast with a clear message and skip to the next track instead
+            // of hanging in buffering or erroring silently.
+            if (streamInfo && this._isAtmosStream(streamInfo, streamUrl) && !this._supportsDolbyAtmosWebPlayback()) {
+                try {
+                    this.audio.dispatchEvent(new Event('error'));
+                } catch {
+                    /* ignore */
+                }
+                showNotification(
+                    `"${trackTitle}" is only available in Dolby Atmos, which this browser can't play. Skipping to the next track.`
+                );
+                this.api.clearStreamCache?.(track.id);
+                this.preloadCache.delete(track.id);
+                if (recursiveCount < currentQueue.length) {
+                    setTimeout(() => this.playNext(recursiveCount + 1), 800);
+                }
+                return;
+            }
 
             // Handle DASH/HLS streams via dash.js or Shaka Player, use Howler for regular files
             const isDash =
@@ -2071,6 +2108,25 @@ export class Player {
             },
             onloaderror: (id, error) => {
                 console.error('[Howler] Load error:', error);
+                const failedSound = this._howlerSound;
+                if (!failedSound) return;
+
+                // Clear the buffering state so the play button stops spinning.
+                try {
+                    this.audio.dispatchEvent(new Event('error'));
+                } catch {
+                    /* ignore */
+                }
+
+                // If this sound is still the active one and never started
+                // playing (e.g. the browser can't decode the format), skip to
+                // the next track instead of hanging forever.
+                setTimeout(() => {
+                    if (this._howlerSound === failedSound && !failedSound.playing()) {
+                        this._cleanupHowler();
+                        this.playNext(1);
+                    }
+                }, 400);
             },
             onplayerror: (id, error) => {
                 console.error('[Howler] Play error:', error);
