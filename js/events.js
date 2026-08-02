@@ -80,14 +80,32 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         }
     });
 
+    let playbackBuffering = false;
+
     const syncMiniPlayPauseIcon = () => {
         if (!playPauseBtn) return;
+        playPauseBtn.classList.toggle('buffering', playbackBuffering);
+        if (playbackBuffering) return;
         const isHowlerPlaying = Boolean(
             player._howlerSound && typeof player._howlerSound.playing === 'function' && player._howlerSound.playing()
         );
         const isAudioPlaying = !audioPlayer.paused && !audioPlayer.ended;
         playPauseBtn.innerHTML = isHowlerPlaying || isAudioPlaying ? SVG_PAUSE_MINI : SVG_PLAY_MINI;
     };
+
+    const setPlaybackBuffering = (state) => {
+        if (playbackBuffering === state) return;
+        playbackBuffering = state;
+        syncMiniPlayPauseIcon();
+    };
+
+    // A track is loading from the moment its stream is being fetched until
+    // actual playback begins — show the play button as buffering then.
+    audioPlayer.addEventListener('loadstart', () => setPlaybackBuffering(true));
+    audioPlayer.addEventListener('waiting', () => setPlaybackBuffering(true));
+    ['playing', 'pause', 'ended', 'error', 'abort', 'emptied'].forEach((eventName) => {
+        audioPlayer.addEventListener(eventName, () => setPlaybackBuffering(false));
+    });
 
     const getHistoryTrackKey = (track) => {
         if (!track || typeof track !== 'object') return null;

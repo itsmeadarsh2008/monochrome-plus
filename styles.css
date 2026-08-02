@@ -3784,6 +3784,35 @@ html.carousel-mode .card-grid > *,
     justify-content: center;
 }
 
+/* Billboard chart lists reuse the standard track row styling */
+.billboard-chart-list .track-item {
+    grid-template-columns: 40px 1fr 96px 24px;
+}
+
+.billboard-chart-list .track-number.rank-gold {
+    color: #f5c518;
+    font-weight: 700;
+}
+
+.billboard-chart-list .track-number.rank-silver {
+    color: #c0c0c0;
+    font-weight: 700;
+}
+
+.billboard-chart-list .track-number.rank-bronze {
+    color: #cd7f32;
+    font-weight: 700;
+}
+
+.billboard-chart-list .track-item-actions {
+    pointer-events: none;
+    visibility: hidden;
+}
+
+.billboard-chart-list .track-item.billboard-resolving .track-item-info {
+    opacity: 0.55;
+}
+
 .track-item-info {
     display: flex;
     align-items: center;
@@ -5365,6 +5394,32 @@ input:checked + .slider::before {
     transform: scale(0.95);
     background-color: var(--primary);
     color: var(--primary-foreground);
+}
+
+/* Buffering state: the play button shows a spinner while a track loads */
+.player-controls .buttons .play-pause-btn.buffering svg,
+.fullscreen-buttons #fs-play-pause-btn.buffering svg {
+    display: none;
+}
+
+.player-controls .buttons .play-pause-btn.buffering::after {
+    content: '';
+    width: 18px;
+    height: 18px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+.fullscreen-buttons #fs-play-pause-btn.buffering::after {
+    content: '';
+    width: 26px;
+    height: 26px;
+    border: 3px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
 }
 
 .player-controls .progress-container {

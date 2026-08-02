@@ -100,6 +100,7 @@ export class EclipseAPI {
         this.trackRegistry = new Map();
         this._searchCache = new Map();
         this._searchInflight = new Map();
+        this._similarCache = new Map();
         this._requestQueue = [];
         this._priorityQueue = [];
         this._backgroundQueue = [];
@@ -205,8 +206,18 @@ export class EclipseAPI {
 
         let res;
         try {
-            res = await this._enqueueRequest(() => fetch(url), priority, background);
+            // A hung addon must never stall the queue forever: every fetch is
+            // aborted after 15s so the pump moves on and sections can fall back.
+            const useTimeout = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function';
+            res = await this._enqueueRequest(
+                () => fetch(url, useTimeout ? { signal: AbortSignal.timeout(15000) } : undefined),
+                priority,
+                background
+            );
         } catch (error) {
+            if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+                throw new Error('Addon timed out');
+            }
             throw new Error(`Addon unreachable: ${error.message}`);
         }
 
@@ -428,6 +439,9 @@ export class EclipseAPI {
             image: data.artworkURL,
             biography: data.bio || '',
             popularity: 0,
+            genres: Array.isArray(data.genres)
+                ? data.genres.map((genre) => String(genre || '').trim()).filter(Boolean)
+                : [],
             albums: (data.albums || []).map((a) => ({
                 id: String(a.id),
                 title: a.title,
@@ -543,36 +557,185 @@ export class EclipseAPI {
     }
 
     // ---- recommendations (synthesized from addon search) ----------------
+    // The addon protocol has no "similar"/recommendation endpoints, so these
+    // are synthesized from the addon's own catalog:
+    //   • similar artists → seed artist genres → artist search by genre
+    //   • similar albums  → seed album's artist → "more from this artist"
+    //   • similar tracks  → artist + artist/title searches, merged, deduped
+    // All synthesis rides the background request lane and caches per seed.
+
+    async getSimilarArtists(artistId, options = {}) {
+        const seedId = String(artistId || '');
+        if (!seedId) return [];
+
+        const cacheKey = `similar_artists_${seedId}`;
+        const cached = this._similarCache.get(cacheKey);
+        if (cached && !options.skipCache && Date.now() - cached.at < 10 * 60 * 1000) {
+            return cached.items;
+        }
+
+        const background = options?.background === true;
+        const similar = [];
+        let seedName = '';
+
+        try {
+            const data = await this._request(`artist/${seedId}`, MAX_429_RETRIES, false, background);
+            seedName = String(data.name || '').trim();
+            const genres = Array.isArray(data.genres)
+                ? data.genres
+                      .map((genre) => String(genre || '').trim())
+                      .filter(Boolean)
+                      .slice(0, 2)
+                : [];
+            const queries = [...genres, seedName].filter(Boolean).slice(0, 3);
+            const seen = new Set([seedName.toLowerCase()]);
+
+            for (const query of queries) {
+                try {
+                    const result = await this.searchArtists(query, { limit: 12, background });
+                    for (const candidate of result.items || []) {
+                        const key = String(candidate?.name || '')
+                            .trim()
+                            .toLowerCase();
+                        if (!key || seen.has(key)) continue;
+                        seen.add(key);
+                        similar.push(candidate);
+                        if (similar.length >= 12) break;
+                    }
+                } catch (error) {
+                    console.warn('[Eclipse] Similar-artist search failed for', query, error);
+                }
+                if (similar.length >= 12) break;
+            }
+        } catch (error) {
+            console.warn('[Eclipse] Similar-artist synthesis failed for', seedId, error);
+        }
+
+        this._similarCache.set(cacheKey, { at: Date.now(), items: similar });
+        return similar;
+    }
+
+    async getSimilarAlbums(albumId, options = {}) {
+        const seedId = String(albumId || '');
+        if (!seedId) return [];
+
+        const cacheKey = `similar_albums_${seedId}`;
+        const cached = this._similarCache.get(cacheKey);
+        if (cached && !options.skipCache && Date.now() - cached.at < 10 * 60 * 1000) {
+            return cached.items;
+        }
+
+        const background = options?.background === true;
+        const similar = [];
+        let artistName = String(options?.seedArtistName || '').trim();
+        let seedTitle = '';
+
+        if (!artistName) {
+            try {
+                const data = await this._request(`album/${seedId}`, MAX_429_RETRIES, false, background);
+                artistName = String(data.artist || '').trim();
+                seedTitle = String(data.title || '')
+                    .trim()
+                    .toLowerCase();
+            } catch (error) {
+                console.warn('[Eclipse] Similar-album seed detail failed for', seedId, error);
+            }
+        }
+
+        if (artistName) {
+            try {
+                const result = await this.searchAlbums(artistName, { limit: 14, background });
+                for (const album of result.items || []) {
+                    const title = String(album?.title || '')
+                        .trim()
+                        .toLowerCase();
+                    if (title && title === seedTitle) continue;
+                    similar.push(album);
+                    if (similar.length >= 12) break;
+                }
+            } catch (error) {
+                console.warn('[Eclipse] Similar-album search failed for', artistName, error);
+            }
+        }
+
+        this._similarCache.set(cacheKey, { at: Date.now(), items: similar });
+        return similar;
+    }
 
     async getRecommendations(id, options = {}) {
-        const seed = this.trackRegistry.get(String(id));
+        const seed = this.trackRegistry.get(String(id)) || options.seedTrack || null;
         if (!seed) return { items: [] };
 
-        const query = `${seed.artist?.name || ''} ${seed.title || ''}`.trim();
-        if (!query) return { items: [] };
+        const background = options?.background === true;
+        const artistName = String(seed.artist?.name || seed.artists?.[0]?.name || '').trim();
+        const title = String(seed.title || '').trim();
+        const queries = [artistName, `${artistName} ${title}`].filter(Boolean);
 
-        const results = await this.searchTracks(query, { limit: 30 });
-        return { items: results.items.filter((track) => String(track.id) !== String(id)).slice(0, 25) };
+        const seedId = String(id);
+        const candidates = [];
+        for (const query of queries.slice(0, 2)) {
+            try {
+                const results = await this.searchTracks(query, { limit: 24, background });
+                candidates.push(...(results.items || []));
+            } catch (error) {
+                console.warn('[Eclipse] getRecommendations search failed for', query, error);
+            }
+        }
+
+        const seen = new Set();
+        const items = [];
+        for (const track of candidates) {
+            const trackId = String(track?.id || '');
+            if (!trackId || trackId === seedId || seen.has(trackId)) continue;
+            seen.add(trackId);
+            items.push(track);
+            if (items.length >= 25) break;
+        }
+        return { items };
     }
 
-    async getRecommendedTracksForPlaylist(tracks = [], limit = 30) {
-        const seed = tracks?.[0];
-        if (!seed) return [];
+    async getRecommendedTracksForPlaylist(tracks = [], limit = 30, options = {}) {
+        const seeds = (tracks || []).filter((track) => track?.id && (track.title || track.artist?.name)).slice(0, 3);
+        if (seeds.length === 0) return [];
 
-        const query = `${seed.artist?.name || ''} ${seed.title || ''}`.trim();
-        if (!query) return [];
+        const background = options?.background === true;
+        const seedIds = new Set(seeds.map((track) => String(track.id)));
+        const seedTitles = new Set(
+            seeds
+                .map((track) =>
+                    String(track.title || '')
+                        .trim()
+                        .toLowerCase()
+                )
+                .filter(Boolean)
+        );
 
-        const results = await this.searchTracks(query, { limit: limit + 5 });
-        const seedIds = new Set((tracks || []).map((t) => String(t?.id || '')));
-        return results.items.filter((track) => !seedIds.has(String(track.id))).slice(0, limit);
-    }
+        const results = await Promise.allSettled(
+            seeds.map((seed) => {
+                const query = `${seed.artist?.name || ''} ${seed.title || ''}`.trim();
+                if (!query) return Promise.resolve({ items: [] });
+                return this.searchTracks(query, { limit: limit + 5, background });
+            })
+        );
 
-    async getSimilarArtists(artistId) {
-        return [];
-    }
-
-    async getSimilarAlbums(albumId) {
-        return [];
+        const seen = new Set();
+        const items = [];
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            for (const track of result.value?.items || []) {
+                const trackId = String(track?.id || '');
+                const title = String(track?.title || '')
+                    .trim()
+                    .toLowerCase();
+                if (seedIds.has(trackId) || seedTitles.has(title)) continue;
+                const key = trackId || `${title}::${String(track?.artist?.name || '').toLowerCase()}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                items.push(track);
+                if (items.length >= limit) return items;
+            }
+        }
+        return items.slice(0, limit);
     }
 
     // ---- artist info ----------------------------------------------------

@@ -1066,6 +1066,14 @@ export class Player {
         this.updateNativeWindow(track);
 
         try {
+            // Notify the UI that the track is loading so the play button can
+            // show a buffering state until actual playback begins.
+            try {
+                this.audio.dispatchEvent(new Event('loadstart'));
+            } catch {
+                /* ignore */
+            }
+
             let streamUrl;
             let streamInfo = null;
 
@@ -1179,6 +1187,13 @@ export class Player {
             console.error(`Could not play track: ${trackTitle}`, error);
             this._gaplessTransitionInProgress = false;
             this._setAdvanceInFlight(false);
+
+            // Clear the buffering state so the play button doesn't spin forever.
+            try {
+                this.audio.dispatchEvent(new Event('error'));
+            } catch {
+                /* ignore */
+            }
 
             // Clear cached stream data so the track can be retried later
             this.api.clearStreamCache(track.id);

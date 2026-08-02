@@ -2070,7 +2070,11 @@ export class UIRenderer {
         }
 
         let lastPausedState = null;
+        let fsPlaybackBuffering = false;
         const updatePlayBtn = () => {
+            playBtn.classList.toggle('buffering', fsPlaybackBuffering);
+            if (fsPlaybackBuffering) return;
+
             const isPaused = audioPlayer.paused;
             if (isPaused === lastPausedState) return;
             lastPausedState = isPaused;
@@ -2084,6 +2088,20 @@ export class UIRenderer {
 
         updatePlayBtn();
 
+        audioPlayer.addEventListener('loadstart', () => {
+            fsPlaybackBuffering = true;
+            updatePlayBtn();
+        });
+        audioPlayer.addEventListener('waiting', () => {
+            fsPlaybackBuffering = true;
+            updatePlayBtn();
+        });
+        ['playing', 'pause', 'ended', 'error', 'abort', 'emptied'].forEach((eventName) => {
+            audioPlayer.addEventListener(eventName, () => {
+                fsPlaybackBuffering = false;
+                updatePlayBtn();
+            });
+        });
         audioPlayer.addEventListener('play', updatePlayBtn);
         audioPlayer.addEventListener('playing', updatePlayBtn);
         audioPlayer.addEventListener('pause', updatePlayBtn);
@@ -3509,6 +3527,7 @@ export class UIRenderer {
                         .getRecommendedTracksForPlaylist(trackSeeds, 40, {
                             skipCache: true,
                             cacheControl: 'no-store',
+                            background: true,
                         })
                         .then((result) => this._normalizeTrackList(result)),
                     ...trackSeeds
@@ -3520,6 +3539,8 @@ export class UIRenderer {
                                     skipCache: true,
                                     cacheControl: 'no-store',
                                     signal: createTimeoutSignal(5500),
+                                    background: true,
+                                    seedTrack,
                                 })
                                 .then((result) => this._normalizeTrackList(result))
                         ),
@@ -3544,6 +3565,7 @@ export class UIRenderer {
                             this.api.searchTracks(artistSeed.name, {
                                 limit: 10,
                                 provider,
+                                background: true,
                             })
                         )
                     );
@@ -3560,7 +3582,20 @@ export class UIRenderer {
 
                 const recentTrackIds = new Set(profile.recentTracks.map((track) => track.id).filter(Boolean));
                 const dedupedCandidates = this._dedupeTracks(candidateTracks);
-                const unheardCandidates = dedupedCandidates.filter(
+                const seenSongKeys = new Set();
+                const uniqueCandidates = dedupedCandidates.filter((track) => {
+                    const key =
+                        `${String(track?.title || '')
+                            .trim()
+                            .toLowerCase()}::` +
+                        `${String(track?.artist?.name || track?.artists?.[0]?.name || '')
+                            .trim()
+                            .toLowerCase()}`;
+                    if (seenSongKeys.has(key)) return false;
+                    seenSongKeys.add(key);
+                    return true;
+                });
+                const unheardCandidates = uniqueCandidates.filter(
                     (track) => !track?.id || !recentTrackIds.has(track.id)
                 );
 
@@ -3643,12 +3678,42 @@ export class UIRenderer {
                     });
                 };
 
-                const albumSeeds = profile.albumSeeds.filter((albumSeed) => albumSeed.id).slice(0, 8);
+                const albumSeeds = profile.albumSeeds.filter((albumSeed) => albumSeed.id).slice(0, 6);
+
+                // Render an immediate baseline from the user's own recent albums
+                // while recommendation requests run — never leave bare skeletons.
+                const renderAlbums = (albums) => {
+                    const displayedAlbums = albums.slice(0, 12);
+                    albumsContainer.innerHTML = displayedAlbums
+                        .map((album) => this.createAlbumCardHTML(album))
+                        .join('');
+                    albumsContainer.classList.add('home-panel-carousel');
+                    displayedAlbums.forEach((album) => {
+                        const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
+                        if (el) {
+                            trackDataStore.set(el, album);
+                            this.updateLikeState(el, 'album', album.id);
+
+                            // Keep home recommended albums visually aligned with collaborative cards.
+                            el.classList.add('collab-playlist-card', 'home-album-like-collab');
+                            const content = el.querySelector('.card-content');
+                            if (content) {
+                                content.classList.add('card-info');
+                                content.querySelector('.card-subtitle')?.classList.add('card-meta');
+                            }
+                        }
+                    });
+                    this.applyHomePanelSlideFx(albumsContainer);
+                };
+                if (albumSeeds.length > 0) renderAlbums(albumSeeds);
+
                 const similarAlbumResults = await Promise.allSettled(
                     albumSeeds.map((albumSeed) =>
                         this.api.getSimilarAlbums(albumSeed.id, {
                             skipCache: true,
                             cacheControl: 'no-store',
+                            background: true,
+                            seedArtistName: albumSeed.artist?.name || '',
                         })
                     )
                 );
@@ -3672,6 +3737,7 @@ export class UIRenderer {
                             this.api.searchAlbums(artistSeed.name, {
                                 limit: 10,
                                 provider,
+                                background: true,
                             })
                         )
                     );
@@ -3722,35 +3788,17 @@ export class UIRenderer {
                 const filteredAlbums = await this.filterUserContent(candidateAlbums, 'album');
 
                 if (filteredAlbums.length > 0) {
-                    const displayedAlbums = filteredAlbums.slice(0, 12);
-                    albumsContainer.innerHTML = displayedAlbums
-                        .map((album) => this.createAlbumCardHTML(album))
-                        .join('');
-                    albumsContainer.classList.add('home-panel-carousel');
-                    displayedAlbums.forEach((album) => {
-                        const el = albumsContainer.querySelector(`[data-album-id="${album.id}"]`);
-                        if (el) {
-                            trackDataStore.set(el, album);
-                            this.updateLikeState(el, 'album', album.id);
-
-                            // Keep home recommended albums visually aligned with collaborative cards.
-                            el.classList.add('collab-playlist-card', 'home-album-like-collab');
-                            const content = el.querySelector('.card-content');
-                            if (content) {
-                                content.classList.add('card-info');
-                                content.querySelector('.card-subtitle')?.classList.add('card-meta');
-                            }
-                        }
-                    });
-                    this.applyHomePanelSlideFx(albumsContainer);
+                    renderAlbums(filteredAlbums.slice(0, 12));
                 } else {
                     albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('No album recommendations found from your recent tracks yet.')}</div>`;
                     this.resetHomePanelSlideFx(albumsContainer);
                 }
             } catch (e) {
                 console.error(e);
-                albumsContainer.innerHTML = createPlaceholder('Failed to load album recommendations.');
-                this.resetHomePanelSlideFx(albumsContainer);
+                if (!albumsContainer.querySelector('[data-album-id]')) {
+                    albumsContainer.innerHTML = createPlaceholder('Failed to load album recommendations.');
+                    this.resetHomePanelSlideFx(albumsContainer);
+                }
             }
         }
     }
@@ -4342,46 +4390,6 @@ export class UIRenderer {
         return 0;
     }
 
-    async _resolveBillboardTracks(entries = [], provider = null, options = {}) {
-        const cache = this._billboardResolveTrackCache || new Map();
-        this._billboardResolveTrackCache = cache;
-
-        const resolveOne = async (entry) => {
-            const strippedTitle = this._stripBracketedTitle(entry.name);
-            const query = `${entry.name} ${entry.artist}`.trim();
-            const fallbackQuery = `${strippedTitle} ${entry.artist}`.trim();
-            const key = `${provider || 'default'}::track::${this._normalizeBillboardText(query)}`;
-            if (cache.has(key)) return { ...entry, resolvedTrack: cache.get(key) };
-
-            const search = await this.api.searchTracks(query, { limit: 8, provider, ...options });
-            let candidates = this._normalizeTrackList(search);
-
-            let bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
-
-            const shouldRetryWithoutBrackets =
-                fallbackQuery && fallbackQuery !== query && (!candidates.length || bestMatch.score < 6);
-
-            if (shouldRetryWithoutBrackets) {
-                const fallbackSearch = await this.api.searchTracks(fallbackQuery, { limit: 8, provider, ...options });
-                const fallbackCandidates = this._normalizeTrackList(fallbackSearch);
-                if (fallbackCandidates.length) {
-                    candidates = fallbackCandidates;
-                    bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
-                }
-            }
-
-            const resolved =
-                bestMatch.score >= 9 || (bestMatch.score >= 6 && bestMatch.confidence >= 1) ? bestMatch.track : null;
-            cache.set(key, resolved || null);
-            return { ...entry, resolvedTrack: resolved || null };
-        };
-
-        const resolved = await Promise.allSettled(entries.map((entry) => resolveOne(entry)));
-        return resolved.map((item, index) =>
-            item.status === 'fulfilled' ? item.value : { ...entries[index], resolvedTrack: null }
-        );
-    }
-
     async _resolveBillboardAlbums(entries = [], provider = null, options = {}) {
         const cache = this._billboardResolveAlbumCache || new Map();
         this._billboardResolveAlbumCache = cache;
@@ -4474,65 +4482,88 @@ export class UIRenderer {
             container.innerHTML = '';
             return false;
         }
+        container.classList.add('billboard-chart-list');
 
-        container.innerHTML = entries
-            .slice(0, 15)
-            .map((entry) => {
-                const name = escapeHtml(entry.name || 'Untitled');
-                const artist = escapeHtml(entry.artist || 'Unknown Artist');
-                const rank = Number(entry.rank) || 0;
-                const rankClass =
-                    rank === 1 ? ' rank-gold' : rank === 2 ? ' rank-silver' : rank === 3 ? ' rank-bronze' : '';
-                const cover = entry.resolvedTrack?.album?.cover || entry.resolvedTrack?.cover || entry.image;
-                const image = cover ? this.api.getCoverUrl(cover, '320') : '/assets/appicon.png';
-                const peak = Number.isFinite(entry.peak_rank) ? `Peak ${entry.peak_rank}` : 'Peak -';
-                const weeks = Number.isFinite(entry.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
-                return `
-                    <article class="billboard-track-row" data-track-name="${escapeHtml(entry.name || '')}" data-track-artist="${escapeHtml(entry.artist || '')}" data-track-id="${entry.resolvedTrack?.id || ''}">
-                        <span class="billboard-rank${rankClass}">${rank}</span>
-                        <img src="${image}" alt="${name}" loading="lazy" onerror="this.onerror=null;this.src='/assets/appicon.png';" />
-                        <div class="billboard-track-meta">
-                            <h4>${name}</h4>
-                            <p>${artist}</p>
-                        </div>
-                        <small>${peak} • ${weeks}</small>
-                    </article>
-                `;
-            })
-            .join('');
+        // Billboard chart entries are rendered like any other track list
+        // (same .track-item markup and CSS). Nothing is preloaded/resolved in
+        // the background — clicking a row resolves it through the addon at
+        // click time (with persistent retry) and plays it like a normal track.
+        const pseudoTracks = entries.slice(0, 15).map((entry) => {
+            const artistName = String(entry.artist || 'Unknown Artist');
+            return {
+                id: '',
+                title: String(entry.name || 'Untitled'),
+                artist: { name: artistName },
+                artists: [{ name: artistName }],
+                album: { title: '', cover: entry.image || null },
+                duration: 0,
+            };
+        });
 
-        container.querySelectorAll('.billboard-track-row').forEach((row) => {
-            row.addEventListener('click', async () => {
-                const resolvedId = row.dataset.trackId;
-                if (resolvedId) {
-                    const track = entries.find(
-                        (entry) => String(entry?.resolvedTrack?.id) === String(resolvedId)
-                    )?.resolvedTrack;
-                    if (track) {
-                        this.player.setQueue([track], 0);
-                        this.player.playTrackFromQueue();
-                        return;
-                    }
-                }
-                const name = row.dataset.trackName || '';
-                const artist = row.dataset.trackArtist || '';
+        this.renderListWithTracks(container, pseudoTracks, true, false, true);
+
+        const rows = container.querySelectorAll('.track-item');
+        rows.forEach((row, i) => {
+            const entry = entries[i];
+            const rank = Number(entry?.rank) || i + 1;
+            const numberEl = row.querySelector('.track-number');
+            if (numberEl) {
+                numberEl.textContent = rank;
+                if (rank === 1) numberEl.classList.add('rank-gold');
+                else if (rank === 2) numberEl.classList.add('rank-silver');
+                else if (rank === 3) numberEl.classList.add('rank-bronze');
+            }
+            const durationEl = row.querySelector('.track-item-duration');
+            if (durationEl) {
+                const peak = Number.isFinite(entry?.peak_rank) ? `Peak ${entry.peak_rank}` : 'Peak -';
+                const weeks = Number.isFinite(entry?.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
+                durationEl.textContent = `${peak} • ${weeks}`;
+            }
+        });
+
+        container.addEventListener('click', async (e) => {
+            const row = e.target.closest('.track-item');
+            if (!row) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const index = Array.from(container.querySelectorAll('.track-item')).indexOf(row);
+            const entry = entries[index];
+            if (!entry) return;
+
+            const storedTrack = trackDataStore.get(row);
+            if (storedTrack?.id) {
+                this.player.setQueue([storedTrack], 0);
+                this.player.playTrackFromQueue();
+                return;
+            }
+
+            row.classList.add('billboard-resolving');
+            try {
+                const provider =
+                    typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
+                const name = String(entry.name || '');
+                const artist = String(entry.artist || '');
                 const strippedName = this._stripBracketedTitle(name);
                 const primaryQuery = `${name} ${artist}`.trim();
                 const fallbackQuery = `${strippedName} ${artist}`.trim();
 
-                const results = await this.api.searchTracks(primaryQuery);
+                const results = await this.api.searchTracks(primaryQuery, { provider, retry: true });
                 let candidates = this._normalizeTrackList(results);
-                let bestMatch = this._selectBestBillboardTrackCandidate({ name, artist }, candidates);
+                let bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
 
                 const shouldRetryWithoutBrackets =
                     fallbackQuery && fallbackQuery !== primaryQuery && (!candidates.length || bestMatch.score < 6);
-
                 if (shouldRetryWithoutBrackets) {
-                    const fallbackResults = await this.api.searchTracks(fallbackQuery);
-                    const fallbackCandidates = this._normalizeTrackList(fallbackResults);
-                    if (fallbackCandidates.length) {
-                        candidates = fallbackCandidates;
-                        bestMatch = this._selectBestBillboardTrackCandidate({ name, artist }, candidates);
+                    try {
+                        const fallbackResults = await this.api.searchTracks(fallbackQuery, { provider, retry: true });
+                        const fallbackCandidates = this._normalizeTrackList(fallbackResults);
+                        if (fallbackCandidates.length) {
+                            candidates = fallbackCandidates;
+                            bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
+                        }
+                    } catch (error) {
+                        console.warn('[Billboard] Track fallback search failed:', error);
                     }
                 }
 
@@ -4541,9 +4572,16 @@ export class UIRenderer {
                     showNotification('No playable match found for this chart track.', 'warning');
                     return;
                 }
+
+                trackDataStore.set(row, track);
                 this.player.setQueue([track], 0);
                 this.player.playTrackFromQueue();
-            });
+            } catch (error) {
+                console.warn('[Billboard] Track resolution failed:', error);
+                showNotification('Search unavailable right now — try again in a moment.', 'warning');
+            } finally {
+                row.classList.remove('billboard-resolving');
+            }
         });
 
         return true;
@@ -4593,7 +4631,14 @@ export class UIRenderer {
                 const artist = row.dataset.albumArtist || '';
                 const provider =
                     typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                const response = await this.api.searchAlbums(`${name} ${artist}`, { limit: 5, provider });
+                let response;
+                try {
+                    response = await this.api.searchAlbums(`${name} ${artist}`, { limit: 5, provider });
+                } catch (error) {
+                    console.warn('[Billboard] Album search failed:', error);
+                    showNotification('Search unavailable right now — try again in a moment.', 'warning');
+                    return;
+                }
                 const albums = this._normalizeAlbumList(response);
                 const first = albums.find((album) => album?.id);
                 if (!first?.id) {
@@ -4648,7 +4693,14 @@ export class UIRenderer {
                 const name = row.dataset.artistName || '';
                 const provider =
                     typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                const response = await this.api.searchArtists(name, { limit: 8, provider });
+                let response;
+                try {
+                    response = await this.api.searchArtists(name, { limit: 8, provider });
+                } catch (error) {
+                    console.warn('[Billboard] Artist search failed:', error);
+                    showNotification('Search unavailable right now — try again in a moment.', 'warning');
+                    return;
+                }
                 const artists = this._normalizeArtistList(response);
                 const first = artists.find((artist) => artist?.id);
                 if (!first?.id) {
@@ -4770,16 +4822,10 @@ export class UIRenderer {
             section.style.display = hasAny ? '' : 'none';
             if (!hasAny) return;
 
-            // Phase 2 — resolve chart entries through the addon's background
-            // lane (never delays interactive searches) and upgrade each module
-            // in place as its results arrive.
+            // Track charts are rendered as normal track lists and resolve on
+            // click — nothing is preloaded in the background. Albums and artists
+            // still upgrade in place through the addon's background lane.
             const bg = { background: true };
-            this._upgradeBillboardModule(`home-billboard-hot100${suffix}`, () =>
-                this._resolveBillboardTracks(hot100.slice(0, 15), provider, bg)
-            );
-            this._upgradeBillboardModule(`home-billboard-global200${suffix}`, () =>
-                this._resolveBillboardTracks(global200.slice(0, 15), provider, bg)
-            );
             this._upgradeBillboardModule(
                 `home-billboard-200${suffix}`,
                 () => this._resolveBillboardAlbums(albums200.slice(0, 12), provider, bg),
@@ -4789,18 +4835,6 @@ export class UIRenderer {
                 `home-billboard-artist100${suffix}`,
                 () => this._resolveBillboardArtists(artists100.slice(0, 16), provider, bg),
                 'artist'
-            );
-            this._upgradeBillboardModule(`home-billboard-regional${suffix}`, () =>
-                this._resolveBillboardTracks(regionalEntries.slice(0, 15), provider, bg)
-            );
-            this._upgradeBillboardModule(`home-billboard-uk${suffix}`, () =>
-                this._resolveBillboardTracks(ukEntries.slice(0, 15), provider, bg)
-            );
-            this._upgradeBillboardModule(`home-billboard-japan${suffix}`, () =>
-                this._resolveBillboardTracks(japanEntries.slice(0, 15), provider, bg)
-            );
-            this._upgradeBillboardModule(`home-billboard-india${suffix}`, () =>
-                this._resolveBillboardTracks(indiaEntries.slice(0, 15), provider, bg)
             );
         } catch (error) {
             console.warn('[Home] Failed to render Billboard charts:', error);
@@ -4871,12 +4905,13 @@ export class UIRenderer {
                     });
                 };
 
-                const seedArtistsWithId = seedArtists.filter((seedArtist) => seedArtist.id).slice(0, 10);
+                const seedArtistsWithId = seedArtists.filter((seedArtist) => seedArtist.id).slice(0, 6);
                 const similarArtistResults = await Promise.allSettled(
                     seedArtistsWithId.map((seedArtist) =>
                         this.api.getSimilarArtists(seedArtist.id, {
                             skipCache: true,
                             cacheControl: 'no-store',
+                            background: true,
                         })
                     )
                 );
@@ -4898,6 +4933,7 @@ export class UIRenderer {
                             this.api.searchArtists(seedArtist.name, {
                                 limit: 8,
                                 provider,
+                                background: true,
                             })
                         )
                     );
