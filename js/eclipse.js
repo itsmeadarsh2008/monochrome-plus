@@ -777,7 +777,7 @@ export class EclipseAPI {
         const normalizedInput = normalizeRawCoverId(id);
 
         if (!normalizedInput) {
-            return `https://via.placeholder.com/${sizeToken}?text=No+Cover`;
+            return '/assets/appicon.png';
         }
 
         if (

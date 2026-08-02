@@ -643,7 +643,7 @@ export class UIRenderer {
             showCover = false;
         }
         const trackImageHTML = showCover
-            ? `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="Track Cover" class="track-item-cover img-loading" loading="lazy">`
+            ? `<img src="${this.api.getCoverUrl(track.album?.cover)}" alt="Track Cover" class="track-item-cover img-loading" loading="lazy" onerror="this.onerror=null;this.src='/assets/appicon.png';">`
             : '';
 
         let displayIndex;
