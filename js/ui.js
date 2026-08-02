@@ -2374,6 +2374,7 @@ export class UIRenderer {
             syncTimer: null,
             trackKey: null,
             searchCache: new Map(),
+            channelCache: new Map(),
             suppressSync: false,
         };
 
@@ -2382,6 +2383,39 @@ export class UIRenderer {
             if (!track?.title) return null;
             const artist = track.artist?.name || '';
             return `${artist} ${track.title}`.trim();
+        };
+
+        const getTrackArtist = () => this.player?.currentTrack?.artist?.name || '';
+
+        const normalizeName = (s) =>
+            String(s || '')
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, ' ')
+                .trim();
+
+        const findArtistChannel = async (artist) => {
+            const norm = normalizeName(artist);
+            if (!norm) return null;
+            if (state.channelCache.has(norm)) return state.channelCache.get(norm);
+            let channel = null;
+            try {
+                const mod = await import('youtube-search-api');
+                const api = mod.default ?? mod;
+                const result = await api.GetListByKeyword(artist, false, 5, [{ type: 'channel' }]);
+                const channels = (result?.items || []).filter((item) => item.type === 'channel' && item.id);
+                const exact = channels.find((c) => normalizeName(c.title) === norm);
+                channel =
+                    exact ??
+                    channels.find((c) => {
+                        const cn = normalizeName(c.title);
+                        return cn.startsWith(norm) && cn.length > norm.length;
+                    }) ??
+                    null;
+            } catch {
+                channel = null;
+            }
+            state.channelCache.set(norm, channel);
+            return channel;
         };
 
         const loadYoutubeApi = () =>
@@ -2404,12 +2438,28 @@ export class UIRenderer {
                 }
             });
 
-        const searchVideoId = async (key) => {
+        const searchVideoId = async (key, artist) => {
             if (state.searchCache.has(key)) return state.searchCache.get(key);
             const mod = await import('youtube-search-api');
             const api = mod.default ?? mod;
-            const result = await api.GetListByKeyword(`${key} official music video`, false, 3, [{ type: 'video' }]);
-            const video = (result?.items || []).find((item) => item.type === 'video' && item.id && !item.isLive);
+            const result = await api.GetListByKeyword(`${key} official music video`, false, 10, [{ type: 'video' }]);
+            const videos = (result?.items || [])
+                .filter((item) => item.type === 'video' && item.id && !item.isLive)
+                .filter((item) => !normalizeName(item.title).includes('official audio'));
+            let video = null;
+            const artistChannel = await findArtistChannel(artist);
+            if (artistChannel) {
+                const channelTitle = normalizeName(artistChannel.title);
+                if (channelTitle.length >= 3) {
+                    video =
+                        videos.find((item) => normalizeName(item.channelTitle) === channelTitle) ??
+                        videos.find((item) => {
+                            const cn = normalizeName(item.channelTitle);
+                            return cn && cn.length >= 3 && (cn.includes(channelTitle) || channelTitle.includes(cn));
+                        });
+                }
+            }
+            video = video ?? videos[0];
             if (!video?.id) throw new Error('No video found on YouTube');
             state.searchCache.set(key, video.id);
             return video.id;
@@ -2550,7 +2600,7 @@ export class UIRenderer {
             try {
                 const key = getTrackKey();
                 if (!key) throw new Error('No current track');
-                const videoId = await searchVideoId(key);
+                const videoId = await searchVideoId(key, getTrackArtist());
                 await loadYoutubeApi();
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
                 const audio = document.getElementById('audio-player');
@@ -2598,7 +2648,7 @@ export class UIRenderer {
                 state.trackKey = key;
                 (async () => {
                     try {
-                        const videoId = await searchVideoId(key);
+                        const videoId = await searchVideoId(key, getTrackArtist());
                         if (!state.player) return;
                         state.player.loadVideoById({
                             videoId,
