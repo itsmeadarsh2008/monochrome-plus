@@ -1384,10 +1384,12 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
         container.appendChild(amLyrics);
 
+        // NOTE: do NOT inject LRCLIB lyrics here. The component fetches
+        // word-synced lyrics from its own providers (LyricsPlus, BiniLyrics,
+        // Apple Music); injecting ttml eagerly would suppress that fetch and
+        // downgrade the user to line-synced lyrics. LRCLIB is applied below
+        // only as a fallback when the component rendered nothing.
         const preferredLyrics = await preferredLyricsPromise;
-        if (preferredLyrics) {
-            lyricsManager._applyPreferredLyricsToElement(amLyrics, preferredLyrics);
-        }
 
         lyricsManager.setupLyricsObserver(amLyrics);
 
@@ -1425,9 +1427,10 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     return;
                 }
 
-                // Check more frequently (200ms) for faster response
+                // Check more frequently (200ms) for faster response. Give the
+                // component's word-synced providers up to 8s (its fetch timeout).
                 let attempts = 0;
-                const maxAttempts = 25; // 5 seconds max
+                const maxAttempts = 40; // 8 seconds max
                 const interval = setInterval(() => {
                     attempts++;
                     if (componentHasLyrics() || attempts >= maxAttempts) {
@@ -1440,8 +1443,11 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
 
         await waitForLyrics();
 
-        // Only inject plain lyrics as a last-resort fallback when the component couldn't resolve any lines.
-        if (preferredLyrics && preferredLyrics.lyrics && !preferredLyrics.subtitles && !componentHasLyrics()) {
+        // Last-resort fallback: the component rendered nothing, so inject the
+        // LRCLIB result as TTML (line-synced karaoke when available, plain
+        // text otherwise). Injecting while the component is still loading
+        // would abort its word-synced fetch.
+        if (preferredLyrics && !componentHasLyrics()) {
             lyricsManager._applyPreferredLyricsToElement(amLyrics, preferredLyrics, { allowPlainFallback: true });
         }
 
