@@ -629,8 +629,11 @@ export class Player {
         this.playNext();
     }
 
-    setVolume() {
-        this.userVolume = 1; // Always full volume
+    setVolume(volume = null) {
+        if (typeof volume === 'number' && Number.isFinite(volume)) {
+            this.userVolume = Math.max(0, Math.min(1, volume));
+            localStorage.setItem('volume', String(this.userVolume));
+        }
         this.applyReplayGain();
     }
 
@@ -669,6 +672,17 @@ export class Player {
         const effectiveVolume = curvedVolume * scale;
 
         const el = this.activeElement || this.audio;
+
+        // Apply to the Howler sound when it's the active playback engine — it
+        // uses its own HTML5 audio node, so element/graph volume wouldn't reach it.
+        if (this._howlerSound) {
+            try {
+                this._howlerSound.volume(effectiveVolume);
+                this._howlerSound.mute(Boolean(el.muted));
+            } catch {
+                /* ignore */
+            }
+        }
 
         // Apply to audio element and/or Web Audio graph
         const isApple = isIos || isSafari;
@@ -2036,7 +2050,8 @@ export class Player {
             preload: true,
             autoplay: true,
             pool: 1,
-            volume: 1, // Always full volume
+            volume: this.userVolume,
+            mute: Boolean(this.audio.muted),
             format: ['flac', 'mp3', 'aac', 'ogg', 'wav', 'm4a'],
             xhr: {
                 withCredentials: false,
@@ -2127,6 +2142,9 @@ export class Player {
 
         // Play
         this._howlerSound.play();
+
+        // Reflect ReplayGain scaling and the user's volume on the new sound.
+        this.applyReplayGain();
 
         // Setup bridge to sync Howler state to audio element for UI
         this._setupHowlerBridge();
