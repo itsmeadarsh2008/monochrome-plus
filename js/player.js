@@ -979,6 +979,13 @@ export class Player {
     async playTrackFromQueue(startTime = 0, recursiveCount = 0) {
         this._queueNavigationInProgress = false;
 
+        // Token for de-duplicating concurrent play requests (double clicks,
+        // repeated billboard resolution, etc.). A stale run must not start
+        // another audio instance or skip tracks after a newer play began.
+        this._playSequence = (this._playSequence || 0) + 1;
+        const playSequence = this._playSequence;
+        const isStalePlay = () => playSequence !== this._playSequence;
+
         const currentQueue = this.shuffleActive ? this.shuffledQueue : this.queue;
         if (this.currentQueueIndex < 0 || this.currentQueueIndex >= currentQueue.length) {
             return;
@@ -1117,6 +1124,10 @@ export class Player {
                 throw new Error('No stream URL available');
             }
 
+            // A newer play request superseded this one while we were fetching
+            // the stream — abort instead of starting a second audio instance.
+            if (isStalePlay()) return;
+
             // Handle DASH/HLS streams via dash.js or Shaka Player, use Howler for regular files
             const isDash =
                 (typeof streamUrl === 'string' && streamUrl.includes('.mpd')) ||
@@ -1184,6 +1195,10 @@ export class Player {
             this.scheduleBackgroundPreload();
             this._setAdvanceInFlight(false);
         } catch (error) {
+            // A newer play request superseded this one — ignore errors (and
+            // don't auto-skip) for the stale run.
+            if (isStalePlay()) return;
+
             console.error(`Could not play track: ${trackTitle}`, error);
             this._gaplessTransitionInProgress = false;
             this._setAdvanceInFlight(false);
@@ -1968,11 +1983,12 @@ export class Player {
         sound.off('onpause');
         sound.off('onstop');
 
-        // Quick fade out to prevent click/pop artifacts
+        // Quick fade out to prevent click/pop artifacts. Keep the window very
+        // short so a superseding load never has both sounds audible at once.
         try {
             const currentVolume = sound.volume();
             if (sound.playing() && currentVolume > 0) {
-                sound.fade(currentVolume, 0, 80);
+                sound.fade(currentVolume, 0, 30);
                 // Schedule unload after fade completes
                 setTimeout(() => {
                     try {
@@ -1980,7 +1996,7 @@ export class Player {
                     } catch {
                         /* ignore */
                     }
-                }, 100);
+                }, 50);
             } else {
                 sound.stop();
                 sound.unload();
@@ -2043,6 +2059,20 @@ export class Player {
             },
             onplayerror: (id, error) => {
                 console.error('[Howler] Play error:', error);
+                // Autoplay was blocked because play() ran outside a user
+                // gesture (e.g. after an async stream resolution). Retry once
+                // on the next user interaction — media playback is then allowed.
+                if (/user interaction|NotAllowedError|autoplay/i.test(String(error?.message || error))) {
+                    const retryPlay = () => {
+                        document.removeEventListener('pointerdown', retryPlay);
+                        document.removeEventListener('keydown', retryPlay);
+                        if (this._howlerSound && !this._howlerSound.playing()) {
+                            this._howlerSound.play();
+                        }
+                    };
+                    document.addEventListener('pointerdown', retryPlay, { once: true });
+                    document.addEventListener('keydown', retryPlay, { once: true });
+                }
             },
             onend: () => {
                 this._stopHowlerMonitor();

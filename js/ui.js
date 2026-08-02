@@ -4519,17 +4519,21 @@ export class UIRenderer {
                 const weeks = Number.isFinite(entry?.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
                 durationEl.textContent = `${peak} • ${weeks}`;
             }
+            row.dataset.billboardName = String(entry?.name || '');
+            row.dataset.billboardArtist = String(entry?.artist || '');
         });
+
+        // Bind the click handler once — the container persists across
+        // re-renders, and re-binding would make every click fire multiple
+        // concurrent searches/plays and overlap the same song.
+        if (container.dataset.billboardClickBound === '1') return true;
+        container.dataset.billboardClickBound = '1';
 
         container.addEventListener('click', async (e) => {
             const row = e.target.closest('.track-item');
             if (!row) return;
             e.preventDefault();
             e.stopPropagation();
-
-            const index = Array.from(container.querySelectorAll('.track-item')).indexOf(row);
-            const entry = entries[index];
-            if (!entry) return;
 
             const storedTrack = trackDataStore.get(row);
             if (storedTrack?.id) {
@@ -4542,8 +4546,9 @@ export class UIRenderer {
             try {
                 const provider =
                     typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                const name = String(entry.name || '');
-                const artist = String(entry.artist || '');
+                const name = String(row.dataset.billboardName || '');
+                const artist = String(row.dataset.billboardArtist || '');
+                const entry = { name, artist };
                 const strippedName = this._stripBracketedTitle(name);
                 const primaryQuery = `${name} ${artist}`.trim();
                 const fallbackQuery = `${strippedName} ${artist}`.trim();
