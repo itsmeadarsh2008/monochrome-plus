@@ -23,11 +23,23 @@ export async function writeID3v2Tag(mp3Blob, metadata, coverBlob = null) {
     }
 
     if (metadata.trackNumber) {
-        frames.push(createTextFrame('TRCK', metadata.trackNumber.toString()));
+        const total = metadata.album?.numberOfTracks ? `/${metadata.album.numberOfTracks}` : '';
+        frames.push(createTextFrame('TRCK', `${metadata.trackNumber}${total}`));
     }
 
-    if (metadata.album?.releaseDate) {
-        const year = new Date(metadata.album.releaseDate).getFullYear();
+    const discNumber = metadata.volumeNumber ?? metadata.discNumber;
+    if (discNumber) {
+        const discTotal =
+            metadata.album?.numberOfVolumes || metadata.album?.numberOfDiscs
+                ? `/${metadata.album.numberOfVolumes || metadata.album.numberOfDiscs}`
+                : '';
+        frames.push(createTextFrame('TPOS', `${discNumber}${discTotal}`));
+    }
+
+    const releaseDateStr =
+        metadata.album?.releaseDate || (metadata.streamStartDate ? metadata.streamStartDate.split('T')[0] : '');
+    if (releaseDateStr) {
+        const year = new Date(releaseDateStr).getFullYear();
         if (!Number.isNaN(year) && Number.isFinite(year)) {
             frames.push(createTextFrame('TYER', year.toString()));
         }
