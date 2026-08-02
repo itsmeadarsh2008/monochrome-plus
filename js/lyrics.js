@@ -360,23 +360,29 @@ export class LyricsManager {
     _applyPreferredLyricsToElement(amLyrics, lyricsData, { allowPlainFallback = false } = {}) {
         if (!amLyrics || !lyricsData) return;
 
-        // Prefer timed subtitles (karaoke). Fallback to plain text only when timed lyrics are unavailable.
-        if (lyricsData.subtitles) {
-            amLyrics.setAttribute('subtitles', lyricsData.subtitles);
-            amLyrics.setAttribute('prefer-synced', 'true');
+        // The am-lyrics component renders directly-injected lyrics through the
+        // ttml attribute; the legacy subtitles/prefer-synced attributes are
+        // ignored by current builds, so pass the data as TTML instead.
+        const ttml = lyricsData.subtitles ? this.lrcToTTML(lyricsData.subtitles) : null;
+        if (ttml) {
+            amLyrics.setAttribute('ttml', ttml);
             try {
-                amLyrics.subtitles = lyricsData.subtitles;
+                amLyrics.ttml = ttml;
             } catch {
                 /* ignore */
             }
+            return;
         }
 
         if (allowPlainFallback && lyricsData.lyrics) {
-            amLyrics.setAttribute('lyrics', lyricsData.lyrics);
-            try {
-                amLyrics.lyrics = lyricsData.lyrics;
-            } catch {
-                /* ignore */
+            const plainTtml = this.plainLyricsToTTML(lyricsData.lyrics);
+            if (plainTtml) {
+                amLyrics.setAttribute('ttml', plainTtml);
+                try {
+                    amLyrics.ttml = plainTtml;
+                } catch {
+                    /* ignore */
+                }
             }
         }
     }
@@ -746,6 +752,51 @@ export class LyricsManager {
                 return null;
             })
             .filter(Boolean);
+    }
+
+    _escapeXmlText(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    _formatTTMLTime(seconds) {
+        const totalMs = Math.max(0, Math.round(seconds * 1000));
+        const minutes = Math.floor(totalMs / 60000);
+        const secs = Math.floor((totalMs % 60000) / 1000);
+        const centis = Math.floor((totalMs % 1000) / 10);
+        return `${minutes}:${String(secs).padStart(2, '0')}.${String(centis).padStart(2, '0')}`;
+    }
+
+    // Convert LRC synced lyrics into Apple Music-style TTML so the am-lyrics
+    // component can render them directly (the component no longer accepts
+    // plain LRC via a subtitles attribute).
+    lrcToTTML(subtitles) {
+        const lines = this.parseSyncedLyrics(subtitles);
+        if (!lines.length) return null;
+
+        const paragraphs = lines
+            .map((line, index) => {
+                const begin = this._formatTTMLTime(line.time);
+                const end = this._formatTTMLTime(index + 1 < lines.length ? lines[index + 1].time : line.time + 5);
+                return `        <p begin="${begin}" end="${end}">${this._escapeXmlText(line.text)}</p>`;
+            })
+            .join('\n');
+
+        return `<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en">\n  <body>\n    <div>\n${paragraphs}\n    </div>\n  </body>\n</tt>`;
+    }
+
+    // Convert plain (unsynced) lyrics to static TTML paragraphs without
+    // timestamps; the component renders them but never karaoke-highlights them.
+    plainLyricsToTTML(lyrics) {
+        if (!lyrics) return null;
+        const paragraphs = String(lyrics)
+            .split('\n')
+            .map((line) => `        <p>${this._escapeXmlText(line)}</p>`)
+            .join('\n');
+        return `<tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en">\n  <body>\n    <div>\n${paragraphs}\n    </div>\n  </body>\n</tt>`;
     }
 
     generateLRCContent(lyricsData, track) {
@@ -1318,6 +1369,16 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
         amLyrics.setAttribute('hover-background-color', 'rgba(59, 130, 246, 0.14)');
         amLyrics.setAttribute('autoscroll', '');
         amLyrics.setAttribute('interpolate', '');
+        if (durationMs) {
+            // Playback timer duration (ms) — drives the component's end-of-song
+            // and gap states. Set once per track; the element is recreated
+            // on every track change.
+            amLyrics.duration = durationMs;
+        }
+        const rootFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim();
+        if (rootFont) {
+            amLyrics.setAttribute('font-family', rootFont);
+        }
         amLyrics.style.height = '100%';
         amLyrics.style.width = '100%';
 
