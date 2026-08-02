@@ -2374,6 +2374,7 @@ export class UIRenderer {
             syncTimer: null,
             trackKey: null,
             searchCache: new Map(),
+            suppressSync: false,
         };
 
         const getTrackKey = () => {
@@ -2418,6 +2419,7 @@ export class UIRenderer {
             const player = state.player;
             const audio = document.getElementById('audio-player');
             if (!player?.playVideo) return;
+            state.suppressSync = false;
             try {
                 if (audio?.paused) {
                     player.pauseVideo();
@@ -2479,7 +2481,19 @@ export class UIRenderer {
                             onApiChange: () => disableCaptions(),
                             onError: (event) => reject(new Error(`YouTube player error: ${event.data}`)),
                             onStateChange: (event) => {
-                                if (event.data === YT.PlayerState.ENDED) event.target.seekTo(0);
+                                if (event.data === YT.PlayerState.ENDED) {
+                                    const audio = document.getElementById('audio-player');
+                                    if (!audio?.paused) {
+                                        state.suppressSync = true;
+                                        try {
+                                            event.target.seekTo(0, true);
+                                            event.target.playVideo();
+                                        } catch {
+                                            /* ignore restart errors */
+                                        }
+                                    }
+                                    return;
+                                }
                                 if (event.data === YT.PlayerState.BUFFERING) {
                                     setTimeout(disableCaptions, 150);
                                 }
@@ -2496,7 +2510,7 @@ export class UIRenderer {
             state.syncTimer = setInterval(() => {
                 const player = state.player;
                 const audio = document.getElementById('audio-player');
-                if (!player?.getCurrentTime || !audio || audio.paused) return;
+                if (!player?.getCurrentTime || !audio || audio.paused || state.suppressSync) return;
                 const videoTime = player.getCurrentTime();
                 if (!Number.isFinite(videoTime)) return;
                 const audioTime = audio.currentTime || 0;
@@ -2571,6 +2585,11 @@ export class UIRenderer {
             audio.addEventListener('play', () => {
                 if (!state.enabled) return;
                 syncVideoPlayback();
+            });
+            audio.addEventListener('seeking', () => {
+                if (state.suppressSync) {
+                    state.suppressSync = false;
+                }
             });
             audio.addEventListener('loadeddata', () => {
                 if (!state.enabled) return;
