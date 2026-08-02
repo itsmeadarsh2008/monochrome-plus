@@ -27,6 +27,8 @@ const NEEDS_PROXY_HOSTS = new Set([
     'sheets.artistgrid.cx',
     'trends.artistgrid.cx',
     'tracker.israeli.ovh',
+    'www.youtube.com',
+    'youtube.com',
 ]);
 
 // Hosts that support CORS natively (never need proxy)

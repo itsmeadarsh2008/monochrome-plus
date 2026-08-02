@@ -6229,6 +6229,50 @@ input:checked + .slider::before {
     display: none !important;
 }
 
+/* YouTube music video background (clapperboard toggle) ------------------- */
+.fs-video-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0;
+    overflow: hidden;
+    background: #000;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+#fullscreen-cover-overlay.video-bg-active .fs-video-bg {
+    opacity: 1;
+}
+
+#fs-video-player-wrap {
+    position: absolute;
+    inset: 0;
+}
+
+.fs-video-bg iframe {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: max(100vw, 177.78vh);
+    height: max(100vh, 56.25vw);
+    border: none;
+}
+
+#fullscreen-cover-overlay.video-bg-active .fullscreen-main-view {
+    position: relative;
+    z-index: 1;
+}
+
+#fullscreen-cover-overlay.video-bg-active #vinyl-disc-container {
+    display: none;
+}
+
+#fullscreen-cover-overlay.video-bg-active #visualizer-canvas {
+    display: none !important;
+}
+
 .fullscreen-cover-content {
     display: flex;
     flex-direction: row;

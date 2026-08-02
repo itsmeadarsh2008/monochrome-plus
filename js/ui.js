@@ -1,4 +1,5 @@
 //js/ui.js
+/* global YT */
 import { showNotification } from './downloads.js';
 import {
     SVG_PLAY,
@@ -1478,6 +1479,10 @@ export class UIRenderer {
         if (this.visualizer) {
             this.visualizer.stop();
         }
+
+        if (this.fsVideoController) {
+            this.fsVideoController.disable();
+        }
     }
 
     isFullscreenCoverOpen() {
@@ -2353,6 +2358,241 @@ export class UIRenderer {
 
         if (this.fullscreenUpdateInterval) cancelAnimationFrame(this.fullscreenUpdateInterval);
         this.fullscreenUpdateInterval = requestAnimationFrame(update);
+        this.setupFullscreenVideoToggle();
+    }
+
+    setupFullscreenVideoToggle() {
+        const btn = document.getElementById('fs-video-btn');
+        const overlay = document.getElementById('fullscreen-cover-overlay');
+        const wrap = document.getElementById('fs-video-player-wrap');
+        if (!btn || !overlay || !wrap || this.fsVideoController) return;
+
+        const state = {
+            enabled: false,
+            player: null,
+            apiReady: false,
+            syncTimer: null,
+            trackKey: null,
+            searchCache: new Map(),
+        };
+
+        const getTrackKey = () => {
+            const track = this.player?.currentTrack;
+            if (!track?.title) return null;
+            const artist = track.artist?.name || '';
+            return `${artist} ${track.title}`.trim();
+        };
+
+        const loadYoutubeApi = () =>
+            new Promise((resolve) => {
+                if (window.YT?.Player) {
+                    state.apiReady = true;
+                    resolve();
+                    return;
+                }
+                const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+                window.onYouTubeIframeAPIReady = () => {
+                    state.apiReady = true;
+                    resolve();
+                };
+                if (!existing) {
+                    const script = document.createElement('script');
+                    script.src = 'https://www.youtube.com/iframe_api';
+                    script.async = true;
+                    document.head.appendChild(script);
+                }
+            });
+
+        const searchVideoId = async (key) => {
+            if (state.searchCache.has(key)) return state.searchCache.get(key);
+            const mod = await import('youtube-search-api');
+            const api = mod.default ?? mod;
+            const result = await api.GetListByKeyword(`${key} official music video`, false, 3, [{ type: 'video' }]);
+            const video = (result?.items || []).find((item) => item.type === 'video' && item.id && !item.isLive);
+            if (!video?.id) throw new Error('No video found on YouTube');
+            state.searchCache.set(key, video.id);
+            return video.id;
+        };
+
+        const syncVideoPlayback = () => {
+            const player = state.player;
+            const audio = document.getElementById('audio-player');
+            if (!player?.playVideo) return;
+            try {
+                if (audio?.paused) {
+                    player.pauseVideo();
+                } else {
+                    if (Number.isFinite(audio?.currentTime)) {
+                        player.seekTo(audio.currentTime, true);
+                    }
+                    player.playVideo();
+                }
+            } catch {
+                /* ignore player state errors */
+            }
+        };
+
+        const disableCaptions = () => {
+            try {
+                state.player?.unloadModule?.('captions');
+                state.player?.setOption?.('captions', 'track', {});
+            } catch {
+                /* captions module unavailable */
+            }
+        };
+
+        const createPlayer = (videoId, start) =>
+            new Promise((resolve, reject) => {
+                if (state.player) {
+                    state.player.loadVideoById({ videoId, startSeconds: start });
+                    syncVideoPlayback();
+                    resolve(state.player);
+                    return;
+                }
+                wrap.innerHTML = '';
+                const holder = document.createElement('div');
+                holder.id = 'fs-video-player';
+                wrap.appendChild(holder);
+                try {
+                    state.player = new YT.Player(holder.id, {
+                        width: '100%',
+                        height: '100%',
+                        videoId,
+                        playerVars: {
+                            autoplay: 1,
+                            mute: 1,
+                            controls: 0,
+                            modestbranding: 1,
+                            cc_load_policy: 0,
+                            disablekb: 1,
+                            rel: 0,
+                            playsinline: 1,
+                            start,
+                        },
+                        events: {
+                            onReady: (event) => {
+                                event.target.mute();
+                                disableCaptions();
+                                syncVideoPlayback();
+                                resolve(event.target);
+                            },
+                            onApiChange: () => disableCaptions(),
+                            onError: (event) => reject(new Error(`YouTube player error: ${event.data}`)),
+                            onStateChange: (event) => {
+                                if (event.data === YT.PlayerState.ENDED) event.target.seekTo(0);
+                                if (event.data === YT.PlayerState.BUFFERING) {
+                                    setTimeout(disableCaptions, 150);
+                                }
+                            },
+                        },
+                    });
+                } catch (error) {
+                    reject(error);
+                }
+            });
+
+        const startSync = () => {
+            if (state.syncTimer) return;
+            state.syncTimer = setInterval(() => {
+                const player = state.player;
+                const audio = document.getElementById('audio-player');
+                if (!player?.getCurrentTime || !audio || audio.paused) return;
+                const videoTime = player.getCurrentTime();
+                if (!Number.isFinite(videoTime)) return;
+                const audioTime = audio.currentTime || 0;
+                if (Math.abs(videoTime - audioTime) > 3) {
+                    try {
+                        player.seekTo(audioTime, true);
+                    } catch {
+                        /* ignore seek errors */
+                    }
+                }
+            }, 1000);
+        };
+
+        const disable = () => {
+            state.enabled = false;
+            btn.classList.remove('active');
+            btn.title = 'Music Video Background';
+            overlay.classList.remove('video-bg-active');
+            if (state.syncTimer) {
+                clearInterval(state.syncTimer);
+                state.syncTimer = null;
+            }
+            if (state.player) {
+                try {
+                    state.player.destroy();
+                } catch {
+                    /* already destroyed */
+                }
+                state.player = null;
+            }
+            wrap.innerHTML = '';
+        };
+
+        const enable = async () => {
+            btn.classList.add('active');
+            btn.title = 'Finding video…';
+            try {
+                const key = getTrackKey();
+                if (!key) throw new Error('No current track');
+                const videoId = await searchVideoId(key);
+                await loadYoutubeApi();
+                if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
+                const audio = document.getElementById('audio-player');
+                await createPlayer(videoId, Math.floor(audio?.currentTime || 0));
+                state.enabled = true;
+                state.trackKey = key;
+                overlay.classList.add('video-bg-active');
+                btn.title = 'Music Video Background';
+                startSync();
+            } catch (error) {
+                console.warn('[fs-video] Failed to start music video background:', error);
+                btn.classList.remove('active');
+                btn.title = 'Music Video Background';
+            }
+        };
+
+        btn.addEventListener('click', () => {
+            if (state.enabled) disable();
+            else enable();
+        });
+
+        const audio = document.getElementById('audio-player');
+        if (audio) {
+            audio.addEventListener('pause', () => {
+                if (!state.enabled) return;
+                try {
+                    state.player?.pauseVideo();
+                } catch {
+                    /* ignore */
+                }
+            });
+            audio.addEventListener('play', () => {
+                if (!state.enabled) return;
+                syncVideoPlayback();
+            });
+            audio.addEventListener('loadeddata', () => {
+                if (!state.enabled) return;
+                const key = getTrackKey();
+                if (!key || key === state.trackKey) return;
+                state.trackKey = key;
+                (async () => {
+                    try {
+                        const videoId = await searchVideoId(key);
+                        if (!state.player) return;
+                        state.player.loadVideoById({
+                            videoId,
+                            startSeconds: Math.floor(audio.currentTime || 0),
+                        });
+                    } catch (error) {
+                        console.warn('[fs-video] Failed to switch music video:', error);
+                    }
+                })();
+            });
+        }
+
+        this.fsVideoController = { disable, isEnabled: () => state.enabled };
     }
 
     showPage(pageId) {
