@@ -8077,8 +8077,8 @@ input:checked + .slider::before {
 }
 
 .side-panel[data-view='lyrics'] {
-    background: color-mix(in srgb, var(--card) calc(var(--lyrics-panel-opacity, 0.6) * 100%), transparent);
-    backdrop-filter: blur(calc(var(--lyrics-panel-opacity, 0.6) * 10px));
+    background: color-mix(in srgb, var(--card) calc(var(--lyrics-panel-opacity, 0) * 100%), transparent);
+    backdrop-filter: blur(calc(var(--lyrics-panel-opacity, 0) * 10px));
     border-left: none !important;
     box-shadow: none;
 }
@@ -11085,7 +11085,7 @@ body.auth-locked .auth-email-form .template-input {
     .side-panel[data-view='lyrics'] {
         position: fixed;
         overflow: hidden;
-        background: color-mix(in srgb, var(--background) calc(var(--lyrics-panel-opacity, 0.6) * 100%), transparent);
+        background: color-mix(in srgb, var(--background) calc(var(--lyrics-panel-opacity, 0) * 100%), transparent);
         backdrop-filter: none;
         border-left: none;
     }

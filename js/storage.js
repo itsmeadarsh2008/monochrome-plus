@@ -535,7 +535,7 @@ export const rotatingCoverSettings = {
 
 export const lyricsPanelSettings = {
     OPACITY_KEY: 'lyrics-panel-opacity',
-    DEFAULT_OPACITY: 60,
+    DEFAULT_OPACITY: 0,
     MIN_OPACITY: 0,
     MAX_OPACITY: 100,
 
@@ -1853,10 +1853,10 @@ export const fontSettings = {
 
     getDefaultConfig() {
         return {
-            type: 'preset',
+            type: 'google',
             family: 'Bricolage Grotesque',
             fallback: 'sans-serif',
-            weights: [400, 500, 600, 700, 800],
+            weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
         };
     },
 

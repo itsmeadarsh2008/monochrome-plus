@@ -2100,6 +2100,14 @@ export class UIRenderer {
             }
         };
 
+        // If the fullscreen opens while a track is still loading, mirror the
+        // miniplayer's buffering state so the spinner shows immediately
+        // (these listeners are only registered when the fullscreen opens).
+        const miniPlayBtn = document.querySelector('.now-playing-bar .play-pause-btn');
+        if (miniPlayBtn?.classList.contains('buffering')) {
+            fsPlaybackBuffering = true;
+        }
+
         updatePlayBtn();
 
         audioPlayer.addEventListener('loadstart', () => {
@@ -2465,6 +2473,20 @@ export class UIRenderer {
             return video.id;
         };
 
+        const switchVideoForTrack = async (key) => {
+            try {
+                const videoId = await searchVideoId(key, getTrackArtist());
+                if (!state.player) return;
+                const audio = document.getElementById('audio-player');
+                state.player.loadVideoById({
+                    videoId,
+                    startSeconds: Math.floor(audio?.currentTime || 0),
+                });
+            } catch (error) {
+                console.warn('[fs-video] Failed to switch music video:', error);
+            }
+        };
+
         const syncVideoPlayback = () => {
             const player = state.player;
             const audio = document.getElementById('audio-player');
@@ -2600,16 +2622,21 @@ export class UIRenderer {
             try {
                 const key = getTrackKey();
                 if (!key) throw new Error('No current track');
+                state.trackKey = key;
                 const videoId = await searchVideoId(key, getTrackArtist());
                 await loadYoutubeApi();
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
                 const audio = document.getElementById('audio-player');
                 await createPlayer(videoId, Math.floor(audio?.currentTime || 0));
                 state.enabled = true;
-                state.trackKey = key;
                 overlay.classList.add('video-bg-active');
                 btn.title = 'Music Video Background';
                 startSync();
+                const currentKey = getTrackKey();
+                if (currentKey && currentKey !== key) {
+                    state.trackKey = currentKey;
+                    switchVideoForTrack(currentKey);
+                }
             } catch (error) {
                 console.warn('[fs-video] Failed to start music video background:', error);
                 btn.classList.remove('active');
@@ -2641,23 +2668,12 @@ export class UIRenderer {
                     state.suppressSync = false;
                 }
             });
-            audio.addEventListener('loadeddata', () => {
+            audio.addEventListener('loadstart', () => {
                 if (!state.enabled) return;
                 const key = getTrackKey();
                 if (!key || key === state.trackKey) return;
                 state.trackKey = key;
-                (async () => {
-                    try {
-                        const videoId = await searchVideoId(key, getTrackArtist());
-                        if (!state.player) return;
-                        state.player.loadVideoById({
-                            videoId,
-                            startSeconds: Math.floor(audio.currentTime || 0),
-                        });
-                    } catch (error) {
-                        console.warn('[fs-video] Failed to switch music video:', error);
-                    }
-                })();
+                switchVideoForTrack(key);
             });
         }
 
