@@ -2446,51 +2446,120 @@ export class UIRenderer {
                 }
             });
 
-        const searchVideoCandidates = async (artist, title) => {
+        const searchVideoCandidates = async (artist, title, durationSec = NaN) => {
             const cacheKey = `${artist} ${title}`.trim();
             if (state.searchCache.has(cacheKey)) return state.searchCache.get(cacheKey);
             const mod = await import('youtube-search-api');
             const api = mod.default ?? mod;
 
-            const songNorm = normalizeName(title);
-            const artistNorm = normalizeName(artist);
+            // Normalization: strip accents, "&"→"and", bracket junk, collapse.
+            const stripAccents = (s) =>
+                String(s || '')
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '');
+            const normalizedText = (s) => normalizeName(stripAccents(s).replace(/&/g, ' and '));
+            const levenshtein = (a, b) => {
+                const m = a.length;
+                const n = b.length;
+                if (!m) return n;
+                if (!n) return m;
+                const dp = new Array(m + 1);
+                for (let i = 0; i <= m; i++) dp[i] = new Array(n + 1);
+                for (let j = 0; j <= n; j++) dp[0][j] = j;
+                for (let i = 1; i <= m; i++) {
+                    dp[i][0] = i;
+                    for (let j = 1; j <= n; j++) {
+                        dp[i][j] = Math.min(
+                            dp[i - 1][j] + 1,
+                            dp[i][j - 1] + 1,
+                            dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                        );
+                    }
+                }
+                return dp[m][n];
+            };
+            const similarity = (a, b) =>
+                Math.max(a.length, b.length) ? 1 - levenshtein(a, b) / Math.max(a.length, b.length) : 0;
+
+            const songNorm = normalizedText(title);
+            const artistNorm = normalizedText(artist);
             const isTopicChannel = (channel) => /(^|\s)topic$/.test(normalizeName(channel));
 
-            const rankVideo = (item, artistChannel) => {
-                const itemTitle = normalizeName(item.title);
-                const channel = normalizeName(item.channelTitle);
-                // The song name is the dominant signal: a video about a
-                // different song (or a fan remake) must never beat the right one.
-                const songMatch = songNorm.length > 0 && itemTitle.includes(songNorm);
-                // "Official" is a hard requirement tier: an official MV of the
-                // song always beats a live/fan/lyric upload of the same song.
-                const official =
-                    songMatch &&
-                    (/official music video|official video|official mv|music video|\(official/.test(itemTitle) ||
-                        (artistChannel && channel === normalizeName(artistChannel.title)));
+            const parseLenSeconds = (len) => {
+                if (!len?.simpleText) return null;
+                const parts = String(len.simpleText).split(':');
+                if (parts.some((p) => isNaN(parseFloat(p)))) return null;
+                return parts.reduce((acc, p) => acc * 60 + parseFloat(p), 0);
+            };
+
+            const scoreVideo = (item, artistChannel) => {
+                const rawTitle = String(item.title || '');
+                const itemTitle = normalizeName(rawTitle);
+                const clean = normalizedText(rawTitle);
+                const channelClean = normalizedText(item.channelTitle);
                 let score = 0;
-                if (/official music video|official video|official mv|music video/.test(itemTitle)) score += 3;
-                if (itemTitle.includes('(official')) score += 2;
-                if (
-                    /official audio|radio edit|audio|drumless|lyric|karaoke|instrumental|cover|remix|reaction|tribute/.test(
-                        itemTitle
-                    )
-                )
-                    score -= 6;
-                if (/making of|makingof|behind the scenes|behind the music/.test(itemTitle)) score -= 8;
-                if (/fan|backup|leak|hq studio/.test(itemTitle)) score -= 2;
-                if (itemTitle.includes('live')) score -= 2;
-                if (artistNorm && itemTitle.includes(artistNorm)) score += 1;
-                if (artistChannel && channel) {
-                    const artistName = normalizeName(artistChannel.title);
-                    if (channel === artistName) score += 4;
-                    else if (
-                        artistName &&
-                        channel.length >= 3 &&
-                        (channel.includes(artistName) || artistName.includes(channel))
-                    )
-                        score += 2;
+
+                // 1 · Artist match (40)
+                const artistPos = artistNorm ? clean.indexOf(artistNorm) : -1;
+                if (artistPos === 0) score += 40;
+                else if (artistPos > 0) score += 25;
+                else if (artistNorm && similarity(clean, artistNorm) > 0.95) score += 35;
+
+                // 2 · Song title (35)
+                const songPos = songNorm ? clean.indexOf(songNorm) : -1;
+                if (clean === songNorm) score += 35;
+                else if (songPos >= 0) score += clean.endsWith(songNorm) ? 30 : 20;
+                else if (songNorm && similarity(clean, songNorm) > 0.95) score += 30;
+
+                // 3 · Official / artist / VEVO / label channel (25)
+                const artistChannelTitleNorm = artistChannel?.title ? normalizedText(artistChannel.title) : '';
+                const artistChannelId = artistChannel?.id || '';
+                const itemChannelId =
+                    item?.shortBylineText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '';
+                const channelMatchesArtist =
+                    channelClean &&
+                    artistChannelTitleNorm &&
+                    (channelClean === artistChannelTitleNorm || channelClean.includes(artistChannelTitleNorm));
+                if (artistChannelId && itemChannelId === artistChannelId) score += 25;
+                else if (channelMatchesArtist) score += 25;
+                else if (/vevo/.test(channelClean)) score += 22;
+                else if (artistNorm && channelClean && channelClean.includes(artistNorm)) score += 18;
+
+                // 4 · Video type
+                const typeBonus = (() => {
+                    if (/official music video/.test(itemTitle)) return 20;
+                    if (/official video/.test(itemTitle)) return 18;
+                    if (/\bofficial mv\b|\bmusic video\b/.test(itemTitle)) return 15;
+                    if (/visualizer/.test(itemTitle)) return 10;
+                    if (/official audio/.test(itemTitle)) return 8;
+                    if (/nightcore/.test(itemTitle)) return -50;
+                    if (/cover/.test(itemTitle)) return -40;
+                    if (/live/.test(itemTitle)) return -15;
+                    if (/lyrics?/.test(itemTitle)) return -10;
+                    return 0;
+                })();
+                score += typeBonus;
+
+                // 5 · Duration closeness
+                if (Number.isFinite(durationSec)) {
+                    const actual = parseLenSeconds(item.length);
+                    if (actual != null) {
+                        const diff = Math.abs(durationSec - actual);
+                        if (diff <= 5) score += 10;
+                        else if (diff <= 10) score += 8;
+                        else if (diff <= 20) score += 5;
+                        else if (diff <= 40) score += 2;
+                    }
                 }
+
+                // 6 · Title penalties (–30 each occurrence)
+                const badTokens = itemTitle.match(
+                    /reaction|karaoke|slowed|reverb|nightcore|\b8d\b|bass boosted|cover|fanmade/g
+                );
+                if (badTokens) score -= 30 * badTokens.length;
+
+                const official = typeBonus >= 15;
+                const songMatch = (songNorm ? songPos >= 0 : true) || clean === songNorm;
                 return { score, songMatch, official };
             };
 
@@ -2523,14 +2592,15 @@ export class UIRenderer {
             }
 
             const ranked = merged
-                .map((item, index) => ({ item, index, ...rankVideo(item, artistChannel) }))
-                .sort(
-                    (a, b) =>
-                        b.songMatch - a.songMatch || b.official - a.official || b.score - a.score || a.index - b.index
-                );
+                .map((item, index) => ({ item, index, ...scoreVideo(item, artistChannel) }))
+                .sort((a, b) => b.score - a.score || a.index - b.index);
 
+            // Pick the highest-scoring candidates for the right song. Official
+            // MVs tend to score highest; if none exists, the best available
+            // upload is chosen instead.
             const candidates = [];
             for (const rankedItem of ranked) {
+                if (!rankedItem.songMatch) continue;
                 const { item, official } = rankedItem;
                 candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
                 if (candidates.length >= 6) break;
@@ -2548,7 +2618,7 @@ export class UIRenderer {
         const switchVideoForTrack = async (key) => {
             try {
                 const track = this.player?.currentTrack;
-                const candidates = await searchVideoCandidates(getTrackArtist(), track?.title || key);
+                const candidates = await searchVideoCandidates(getTrackArtist(), track?.title || key, track?.duration);
                 if (!state.player) return;
                 const audio = document.getElementById('audio-player');
                 await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
@@ -2727,7 +2797,7 @@ export class UIRenderer {
                 // Video search and iframe-API bootstrap run concurrently.
                 const track = this.player?.currentTrack;
                 const [candidates] = await Promise.all([
-                    searchVideoCandidates(getTrackArtist(), track?.title || key),
+                    searchVideoCandidates(getTrackArtist(), track?.title || key, track?.duration),
                     loadYoutubeApi(),
                 ]);
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
