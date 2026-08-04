@@ -421,12 +421,23 @@ export const createFullscreenQualityHTML = (track) => {
         bitDepthStr = `${bitDepth}-bit`;
     }
 
-    // Container format reported by the addon (FLAC, MP3, AAC, …)
-    const containerFormat = String(track.format || track.mediaType || '').toUpperCase();
-    const formatStr = containerFormat && !/UNKNOWN|AUDIO/i.test(containerFormat) ? containerFormat : null;
+    // Actual codec reported by the addon (AAC, Opus, MP3, …) — this is the
+    // exact answer to "what am I listening to", preferred over container names.
+    const codec = extractCodecFromMime(track.codec || track.mimeType || track.format || track.mediaType);
 
-    // Lossy containers can never carry a lossless label
-    const lossy = isLossyContainer(track.format || track.mediaType);
+    // Container format reported by the addon (MP4, WEBM, FLAC, …). Wrapper
+    // tokens (HLS/ADAPTIVE/DASH) are not real formats and are skipped.
+    const rawFormat = String(track.format || track.mediaType || '').toUpperCase();
+    const containerFormat = rawFormat && !/UNKNOWN|AUDIO|HLS|ADAPTIVE|DASH/i.test(rawFormat) ? rawFormat : null;
+
+    const formatStr = codec || containerFormat || null;
+
+    // Lossy codecs/containers can never carry a lossless label
+    const lossy = codec ? isLossyCodec(codec) : isLossyContainer(track.format || track.mediaType);
+
+    // Exact bitrate when the addon reports it (e.g. 128 → "128 kbps")
+    const bitrateKbps = toPositiveInt(track.bitrateKbps);
+    const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
 
     // Determine quality label and logo
     let qualityLabel = '';
@@ -489,9 +500,14 @@ export const createFullscreenQualityHTML = (track) => {
         parts.push(sampleRateStr);
     }
 
-    // Add container format
+    // Add container format / codec
     if (formatStr) {
         parts.push(formatStr);
+    }
+
+    // Add exact bitrate
+    if (bitrateStr) {
+        parts.push(bitrateStr);
     }
 
     // Filter out empty parts
@@ -569,6 +585,42 @@ export const isLossyContainer = (format) => {
     return LOSSY_CONTAINERS.has(token);
 };
 
+// Resolve a display codec (AAC, Opus, MP3, …) from a codec id, mime type or
+// format string. Wrapper tokens like "hls" / "adaptive" / "dash" are NOT codecs
+// and resolve to null so they never leak into the exact-quality readout.
+export const extractCodecFromMime = (value) => {
+    const source = String(value || '');
+    if (!source) return null;
+
+    // Strip wrapper/container markers that carry no codec info.
+    if (/^(hls|adaptive|dash|mpeg-dash|audio)$/i.test(source.trim())) return null;
+
+    const codecMatch = source.match(/codecs?="?([^"',;]+)/i);
+    const token = (codecMatch && codecMatch[1]) || source;
+    const t = token.trim().toLowerCase();
+
+    if (t.includes('flac')) return 'FLAC';
+    if (t.includes('alac')) return 'ALAC';
+    if (t.includes('opus')) return 'Opus';
+    if (t.includes('mp4a') || t.includes('aac')) return 'AAC';
+    if (t.includes('mp3')) return 'MP3';
+    if (t.includes('vorbis')) return 'Vorbis';
+    if (t.includes('ac-3') || t.includes('eac3') || t.includes('ec-3')) return 'E-AC3';
+    if (t.includes('pcm')) return 'PCM';
+
+    const firstToken = source.split(/[\s\-_/.]/)[0].toLowerCase();
+    if (LOSSY_CONTAINERS.has(firstToken) || /^(flac|alac|aac)$/.test(firstToken)) {
+        return firstToken === 'mp4' ? 'AAC' : firstToken.toUpperCase();
+    }
+    return null;
+};
+
+export const isLossyCodec = (codec) => {
+    const c = String(codec || '').toLowerCase();
+    if (!c || /flac|alac|ape|pcm|wav|dsd/i.test(c)) return false;
+    return /aac|m4a|ac-?3|mp3|mpeg|opus|vorbis|ogg|wma|silk|amr/i.test(c);
+};
+
 export const deriveTrackQuality = (track) => {
     if (!track) return null;
 
@@ -586,7 +638,7 @@ export const deriveTrackQuality = (track) => {
 
     // A lossy container (AAC, MP3, …) can never be lossless, no matter what
     // the provider's quality label claims — clamp it to at most HIGH.
-    const lossy = isLossyContainer(track.format || track.mediaType);
+    const lossy = isLossyCodec(track.codec) || isLossyContainer(track.format || track.mediaType);
 
     // Prefer the actual stream specs when known — these are exact numbers
     // reported by the addon and more truthful than provider quality labels.

@@ -2446,42 +2446,112 @@ export class UIRenderer {
                 }
             });
 
-        const searchVideoId = async (key, artist) => {
-            if (state.searchCache.has(key)) return state.searchCache.get(key);
+        const searchVideoCandidates = async (artist, title) => {
+            const cacheKey = `${artist} ${title}`.trim();
+            if (state.searchCache.has(cacheKey)) return state.searchCache.get(cacheKey);
             const mod = await import('youtube-search-api');
             const api = mod.default ?? mod;
-            const result = await api.GetListByKeyword(`${key} official music video`, false, 10, [{ type: 'video' }]);
-            const videos = (result?.items || [])
-                .filter((item) => item.type === 'video' && item.id && !item.isLive)
-                .filter((item) => !normalizeName(item.title).includes('official audio'));
-            let video = null;
-            const artistChannel = await findArtistChannel(artist);
-            if (artistChannel) {
-                const channelTitle = normalizeName(artistChannel.title);
-                if (channelTitle.length >= 3) {
-                    video =
-                        videos.find((item) => normalizeName(item.channelTitle) === channelTitle) ??
-                        videos.find((item) => {
-                            const cn = normalizeName(item.channelTitle);
-                            return cn && cn.length >= 3 && (cn.includes(channelTitle) || channelTitle.includes(cn));
-                        });
+
+            const songNorm = normalizeName(title);
+            const artistNorm = normalizeName(artist);
+            const isTopicChannel = (channel) => /(^|\s)topic$/.test(normalizeName(channel));
+
+            const rankVideo = (item, artistChannel) => {
+                const itemTitle = normalizeName(item.title);
+                const channel = normalizeName(item.channelTitle);
+                // The song name is the dominant signal: a video about a
+                // different song (or a fan remake) must never beat the right one.
+                const songMatch = songNorm.length > 0 && itemTitle.includes(songNorm);
+                // "Official" is a hard requirement tier: an official MV of the
+                // song always beats a live/fan/lyric upload of the same song.
+                const official =
+                    songMatch &&
+                    (/official music video|official video|official mv|music video|\(official/.test(itemTitle) ||
+                        (artistChannel && channel === normalizeName(artistChannel.title)));
+                let score = 0;
+                if (/official music video|official video|official mv|music video/.test(itemTitle)) score += 3;
+                if (itemTitle.includes('(official')) score += 2;
+                if (
+                    /official audio|radio edit|audio|drumless|lyric|karaoke|instrumental|cover|remix|reaction|tribute/.test(
+                        itemTitle
+                    )
+                )
+                    score -= 6;
+                if (/making of|makingof|behind the scenes|behind the music/.test(itemTitle)) score -= 8;
+                if (/fan|backup|leak|hq studio/.test(itemTitle)) score -= 2;
+                if (itemTitle.includes('live')) score -= 2;
+                if (artistNorm && itemTitle.includes(artistNorm)) score += 1;
+                if (artistChannel && channel) {
+                    const artistName = normalizeName(artistChannel.title);
+                    if (channel === artistName) score += 4;
+                    else if (
+                        artistName &&
+                        channel.length >= 3 &&
+                        (channel.includes(artistName) || artistName.includes(channel))
+                    )
+                        score += 2;
+                }
+                return { score, songMatch, official };
+            };
+
+            const fetchVideos = (query) =>
+                api
+                    .GetListByKeyword(query, false, 12, [{ type: 'video' }])
+                    .then((result) =>
+                        (result?.items || []).filter(
+                            (item) =>
+                                item.type === 'video' && item.id && !item.isLive && !isTopicChannel(item.channelTitle)
+                        )
+                    );
+
+            // MV query, bare-key query and artist-channel lookup run
+            // concurrently; results are merged so the fallback chain stays
+            // within real candidates instead of whatever the first query had.
+            const [mvVideos, keyVideos, artistChannel] = await Promise.all([
+                fetchVideos(`${cacheKey} official music video`).catch(() => []),
+                fetchVideos(cacheKey).catch(() => []),
+                findArtistChannel(artist),
+            ]);
+
+            const seen = new Set();
+            const merged = [];
+            for (const item of [...mvVideos, ...keyVideos]) {
+                if (item.id && !seen.has(item.id)) {
+                    seen.add(item.id);
+                    merged.push(item);
                 }
             }
-            video = video ?? videos[0];
-            if (!video?.id) throw new Error('No video found on YouTube');
-            state.searchCache.set(key, video.id);
-            return video.id;
+
+            const ranked = merged
+                .map((item, index) => ({ item, index, ...rankVideo(item, artistChannel) }))
+                .sort(
+                    (a, b) =>
+                        b.songMatch - a.songMatch || b.official - a.official || b.score - a.score || a.index - b.index
+                );
+
+            const candidates = [];
+            for (const rankedItem of ranked) {
+                const { item, official } = rankedItem;
+                candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
+                if (candidates.length >= 6) break;
+            }
+            if (candidates.length === 0) throw new Error('No video found on YouTube');
+            state.searchCache.set(cacheKey, candidates);
+            console.debug(
+                '[fs-video] Candidates for',
+                cacheKey,
+                candidates.map((c) => `${c.title} (${c.channelTitle})`)
+            );
+            return candidates;
         };
 
         const switchVideoForTrack = async (key) => {
             try {
-                const videoId = await searchVideoId(key, getTrackArtist());
+                const track = this.player?.currentTrack;
+                const candidates = await searchVideoCandidates(getTrackArtist(), track?.title || key);
                 if (!state.player) return;
                 const audio = document.getElementById('audio-player');
-                state.player.loadVideoById({
-                    videoId,
-                    startSeconds: Math.floor(audio?.currentTime || 0),
-                });
+                await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
             } catch (error) {
                 console.warn('[fs-video] Failed to switch music video:', error);
             }
@@ -2515,66 +2585,97 @@ export class UIRenderer {
             }
         };
 
-        const createPlayer = (videoId, start) =>
+        const createPlayer = (candidates, start) =>
             new Promise((resolve, reject) => {
-                if (state.player) {
-                    state.player.loadVideoById({ videoId, startSeconds: start });
-                    syncVideoPlayback();
-                    resolve(state.player);
-                    return;
-                }
-                wrap.innerHTML = '';
-                const holder = document.createElement('div');
-                holder.id = 'fs-video-player';
-                wrap.appendChild(holder);
-                try {
-                    state.player = new YT.Player(holder.id, {
-                        width: '100%',
-                        height: '100%',
-                        videoId,
-                        playerVars: {
-                            autoplay: 1,
-                            mute: 1,
-                            controls: 0,
-                            modestbranding: 1,
-                            cc_load_policy: 0,
-                            disablekb: 1,
-                            rel: 0,
-                            playsinline: 1,
-                            start,
-                        },
-                        events: {
-                            onReady: (event) => {
-                                event.target.mute();
-                                disableCaptions();
-                                syncVideoPlayback();
-                                resolve(event.target);
+                const tryCandidate = (index) => {
+                    const candidate = candidates[index];
+                    if (!candidate) {
+                        reject(new Error('No playable video found on YouTube'));
+                        return;
+                    }
+                    const videoId = candidate.id;
+                    if (state.player) {
+                        try {
+                            state.player.destroy();
+                        } catch {
+                            /* already destroyed */
+                        }
+                        state.player = null;
+                        wrap.innerHTML = '';
+                    }
+                    const holder = document.createElement('div');
+                    holder.id = 'fs-video-player';
+                    wrap.appendChild(holder);
+                    console.log('[fs-video] Playing:', candidate.title, '|', candidate.channelTitle);
+                    let settled = false;
+                    const fail = (code) => {
+                        if (settled) return;
+                        settled = true;
+                        if (state.player) {
+                            try {
+                                state.player.destroy();
+                            } catch {
+                                /* already destroyed */
+                            }
+                            state.player = null;
+                            wrap.innerHTML = '';
+                        }
+                        console.warn(`[fs-video] Video candidate ${index + 1} failed (${code}), trying next`);
+                        tryCandidate(index + 1);
+                    };
+                    try {
+                        state.player = new YT.Player(holder.id, {
+                            width: '100%',
+                            height: '100%',
+                            videoId,
+                            playerVars: {
+                                autoplay: 1,
+                                mute: 1,
+                                controls: 0,
+                                modestbranding: 1,
+                                cc_load_policy: 0,
+                                disablekb: 1,
+                                rel: 0,
+                                playsinline: 1,
+                                start,
                             },
-                            onApiChange: () => disableCaptions(),
-                            onError: (event) => reject(new Error(`YouTube player error: ${event.data}`)),
-                            onStateChange: (event) => {
-                                if (event.data === YT.PlayerState.ENDED) {
-                                    const audio = document.getElementById('audio-player');
-                                    if (!audio?.paused) {
-                                        state.suppressSync = true;
-                                        try {
-                                            event.target.seekTo(0, true);
-                                            event.target.playVideo();
-                                        } catch {
-                                            /* ignore restart errors */
-                                        }
+                            events: {
+                                onReady: (event) => {
+                                    event.target.mute();
+                                    disableCaptions();
+                                    syncVideoPlayback();
+                                    if (!settled) {
+                                        settled = true;
+                                        resolve(event.target);
                                     }
-                                    return;
-                                }
-                                if (event.data === YT.PlayerState.BUFFERING) {
-                                    setTimeout(disableCaptions, 150);
-                                }
+                                },
+                                onApiChange: () => disableCaptions(),
+                                onError: (event) => fail(event.data),
+                                onStateChange: (event) => {
+                                    if (event.data === YT.PlayerState.ENDED) {
+                                        const audio = document.getElementById('audio-player');
+                                        if (!audio?.paused) {
+                                            state.suppressSync = true;
+                                            try {
+                                                event.target.seekTo(0, true);
+                                                event.target.playVideo();
+                                            } catch {
+                                                /* ignore restart errors */
+                                            }
+                                        }
+                                        return;
+                                    }
+                                    if (event.data === YT.PlayerState.BUFFERING) {
+                                        setTimeout(disableCaptions, 150);
+                                    }
+                                },
                             },
-                        },
-                    });
-                } catch (error) {
-                    reject(error);
-                }
+                        });
+                    } catch (error) {
+                        fail(error.message);
+                    }
+                };
+                tryCandidate(0);
             });
 
         const startSync = () => {
@@ -2623,11 +2724,15 @@ export class UIRenderer {
                 const key = getTrackKey();
                 if (!key) throw new Error('No current track');
                 state.trackKey = key;
-                const videoId = await searchVideoId(key, getTrackArtist());
-                await loadYoutubeApi();
+                // Video search and iframe-API bootstrap run concurrently.
+                const track = this.player?.currentTrack;
+                const [candidates] = await Promise.all([
+                    searchVideoCandidates(getTrackArtist(), track?.title || key),
+                    loadYoutubeApi(),
+                ]);
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
                 const audio = document.getElementById('audio-player');
-                await createPlayer(videoId, Math.floor(audio?.currentTime || 0));
+                await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
                 state.enabled = true;
                 overlay.classList.add('video-bg-active');
                 btn.title = 'Music Video Background';
@@ -5244,12 +5349,13 @@ export class UIRenderer {
                     });
                 };
 
-                const seedArtistsWithId = seedArtists.filter((seedArtist) => seedArtist.id).slice(0, 6);
+                const seedArtistsWithId = seedArtists.filter((seedArtist) => seedArtist.id).slice(0, 4);
                 const similarArtistResults = await Promise.allSettled(
                     seedArtistsWithId.map((seedArtist) =>
                         this.api.getSimilarArtists(seedArtist.id, {
-                            skipCache: true,
-                            cacheControl: 'no-store',
+                            seedName: seedArtist.name,
+                            skipCache: forceRefresh,
+                            cacheControl: forceRefresh ? 'no-store' : undefined,
                             background: true,
                         })
                     )

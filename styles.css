@@ -6229,7 +6229,7 @@ input:checked + .slider::before {
     display: none !important;
 }
 
-/* YouTube music video background (clapperboard toggle) ------------------- */
+/* YouTube music video background (film toggle) --------------------------- */
 .fs-video-bg {
     position: absolute;
     inset: 0;
@@ -6536,6 +6536,7 @@ input:checked + .slider::before {
     backdrop-filter: blur(4px);
     vertical-align: middle;
     margin-left: 0.45rem;
+    color: #fff;
 }
 
 #fullscreen-track-title .quality-atmos svg {

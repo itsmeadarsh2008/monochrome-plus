@@ -418,7 +418,9 @@ export class Player {
     async _resolveStreamUrlWithRetry(track, maxAttempts = 3, initialDelayMs = 220) {
         if (!track || track.id === undefined || track.id === null) return null;
         if (this.preloadCache.has(track.id)) {
-            return this.preloadCache.get(track.id);
+            const cached = this.preloadCache.get(track.id);
+            if (typeof cached === 'string') return cached;
+            return cached?.url;
         }
 
         const effectiveQuality = this._getEffectivePlaybackQuality(this.quality);
@@ -441,7 +443,10 @@ export class Player {
                         streamUrl = streamInfo.url;
                     }
                     if (streamUrl) {
-                        this.preloadCache.set(track.id, streamUrl);
+                        this.preloadCache.set(track.id, {
+                            url: streamUrl,
+                            info: streamInfo && typeof streamInfo === 'object' ? streamInfo : null,
+                        });
                         this._preloadFailureCounts.delete(String(track.id));
                         return streamUrl;
                     }
@@ -928,7 +933,13 @@ export class Player {
                         url = streamUrl.url;
                     }
 
-                    this.preloadCache.set(track.id, url);
+                    // _resolveStreamUrlWithRetry already cached the full stream
+                    // info; ensure the entry keeps it (don't overwrite with the
+                    // bare URL so exact quality metadata survives preload).
+                    const cachedEntry = this.preloadCache.get(track.id);
+                    if (!cachedEntry) {
+                        this.preloadCache.set(track.id, url);
+                    }
 
                     // The nearest upcoming track gets a larger warmup window for near-instant start.
                     const warmupBytes = taskIndex === 0 ? 262143 : 131071;
@@ -1122,9 +1133,14 @@ export class Player {
                 const effectiveQuality = this._getEffectivePlaybackQuality(this.quality);
 
                 // Cache-first playback path: instantly reuse preloaded URL when available.
-                const cachedStreamUrl = this.preloadCache.get(track.id);
-                if (cachedStreamUrl && typeof cachedStreamUrl === 'string') {
-                    streamUrl = cachedStreamUrl;
+                const cachedStream = this.preloadCache.get(track.id);
+                if (cachedStream) {
+                    if (typeof cachedStream === 'string') {
+                        streamUrl = cachedStream;
+                    } else if (typeof cachedStream === 'object' && cachedStream.url) {
+                        streamUrl = cachedStream.url;
+                        streamInfo = cachedStream.info || null;
+                    }
                 } else {
                     // Get stream URL from API (optimized for high-fidelity)
                     try {
@@ -1132,18 +1148,24 @@ export class Player {
                         streamUrl = streamInfo;
                         if (typeof streamInfo === 'object' && streamInfo.url) {
                             streamUrl = streamInfo.url;
-                            // Store stream quality metadata on track for UI display
-                            if (streamInfo.bitDepth != null) track.bitDepth = streamInfo.bitDepth;
-                            if (streamInfo.sampleRate != null) track.sampleRate = streamInfo.sampleRate;
-                            if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
-                            if (streamInfo.audioMode) track.audioMode = streamInfo.audioMode;
-                            if (streamInfo.format) track.format = streamInfo.format;
-                            track.streamedQuality = effectiveQuality;
                         }
                     } catch (e) {
                         console.warn(`Failed to get stream URL for track ${trackTitle}:`, e);
                         throw e;
                     }
+                }
+
+                // Store stream quality metadata on track for UI display —
+                // applied on every path so the fullscreen quality readout is exact.
+                if (streamInfo && typeof streamInfo === 'object' && streamInfo.url) {
+                    if (streamInfo.bitDepth != null) track.bitDepth = streamInfo.bitDepth;
+                    if (streamInfo.sampleRate != null) track.sampleRate = streamInfo.sampleRate;
+                    if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
+                    if (streamInfo.audioMode) track.audioMode = streamInfo.audioMode;
+                    if (streamInfo.format) track.format = streamInfo.format;
+                    if (streamInfo.mimeType) track.mimeType = streamInfo.mimeType;
+                    if (streamInfo.bitrateKbps) track.bitrateKbps = streamInfo.bitrateKbps;
+                    track.streamedQuality = effectiveQuality;
                 }
             } else if (track.isLocal && track.file) {
                 streamUrl = URL.createObjectURL(track.file);

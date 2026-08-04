@@ -91,6 +91,22 @@ const extractSampleRate = (streamInfo) => {
     return null;
 };
 
+// Extract the actual bitrate (kbps) reported by the addon. Preferred source is
+// the numeric bitrate field the addon returns per adaptive format; fall back to
+// a "128kbps" style token inside quality strings.
+const extractBitrateKbps = (streamInfo) => {
+    const raw = streamInfo?.bitrate ?? streamInfo?.audioBitrate ?? streamInfo?.bit_rate ?? streamInfo?.avgBitrate;
+    const numeric = parseInt(raw, 10);
+    if (Number.isFinite(numeric) && numeric > 0) {
+        return Math.max(1, Math.round(numeric / 1000));
+    }
+    const qualityTokens = [streamInfo?.quality, streamInfo?.streamQuality, streamInfo?.audioQuality]
+        .filter(Boolean)
+        .join(' ');
+    const tokenMatch = qualityTokens.match(/(\d{2,4})\s*(?:kbps|kbit|kb\/?s)/i);
+    return tokenMatch ? parseInt(tokenMatch[1], 10) : null;
+};
+
 const yearAsReleaseDate = (year) => (year ? String(year).trim() : undefined);
 
 export class EclipseAPI {
@@ -533,6 +549,8 @@ export class EclipseAPI {
             audioQuality: data.streamQuality || data.quality || null,
             audioMode: null,
             mediaType: data.format || null,
+            mimeType: data.mimeType || null,
+            bitrateKbps: extractBitrateKbps(data),
         };
         this.streamCache.set(key, stream);
         return stream;
@@ -560,6 +578,8 @@ export class EclipseAPI {
             audioQuality: stream.audioQuality,
             audioMode: null,
             mediaType: stream.format,
+            mimeType: stream.mimeType,
+            bitrateKbps: stream.bitrateKbps,
             isrc: track.isrc || null,
         };
     }
@@ -599,39 +619,43 @@ export class EclipseAPI {
 
         const background = options?.background === true;
         const similar = [];
-        let seedName = '';
+        let seedName = String(options?.seedName || '').trim();
+        let genres = [];
 
+        // A failed seed-detail must not kill synthesis: the caller-provided
+        // name (when present) still yields a name-based search below.
         try {
             const data = await this._request(`artist/${seedId}`, MAX_429_RETRIES, false, background);
-            seedName = String(data.name || '').trim();
-            const genres = Array.isArray(data.genres)
+            seedName = String(data.name || '').trim() || seedName;
+            genres = Array.isArray(data.genres)
                 ? data.genres
                       .map((genre) => String(genre || '').trim())
                       .filter(Boolean)
                       .slice(0, 2)
                 : [];
-            const queries = [...genres, seedName].filter(Boolean).slice(0, 3);
-            const seen = new Set([seedName.toLowerCase()]);
-
-            for (const query of queries) {
-                try {
-                    const result = await this.searchArtists(query, { limit: 12, background });
-                    for (const candidate of result.items || []) {
-                        const key = String(candidate?.name || '')
-                            .trim()
-                            .toLowerCase();
-                        if (!key || seen.has(key)) continue;
-                        seen.add(key);
-                        similar.push(candidate);
-                        if (similar.length >= 12) break;
-                    }
-                } catch (error) {
-                    console.warn('[Eclipse] Similar-artist search failed for', query, error);
-                }
-                if (similar.length >= 12) break;
-            }
         } catch (error) {
-            console.warn('[Eclipse] Similar-artist synthesis failed for', seedId, error);
+            console.warn('[Eclipse] Similar-artist seed detail failed for', seedId, error);
+        }
+
+        const queries = [...genres, seedName].filter(Boolean).slice(0, 3);
+        const seen = new Set([seedName.toLowerCase()]);
+
+        for (const query of queries) {
+            try {
+                const result = await this.searchArtists(query, { limit: 8, background });
+                for (const candidate of result.items || []) {
+                    const key = String(candidate?.name || '')
+                        .trim()
+                        .toLowerCase();
+                    if (!key || seen.has(key)) continue;
+                    seen.add(key);
+                    similar.push(candidate);
+                    if (similar.length >= 8) break;
+                }
+            } catch (error) {
+                console.warn('[Eclipse] Similar-artist search failed for', query, error);
+            }
+            if (similar.length >= 8) break;
         }
 
         this._similarCache.set(cacheKey, { at: Date.now(), items: similar });

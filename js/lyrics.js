@@ -1460,6 +1460,8 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                  :host {
                      --karaoke-wave-ms: 0;
                      --lyplus-text-secondary: var(--lyplus-lyrics-palette);
+                     --lyplus-blur-amount: 0.03em;
+                     --lyplus-blur-amount-near: 0.015em;
                  }
 
                 .lyrics-container, .container, main, article {
@@ -1482,8 +1484,8 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     transform: translate3d(0, 0, 0);
                     backface-visibility: hidden;
                     transition:
-                        transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
-                        opacity 180ms linear;
+                        transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1),
+                        opacity 200ms ease-out;
                 }
 
                 .word, .lyric-word, .karaoke-word-enhanced {
@@ -1499,11 +1501,18 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     margin-inline-end: 0;
                 }
 
+                /* Hardware-accelerated layers: promote syllables and chars so the
+                   wipe, rise and wave composite on the GPU instead of repainting */
+                .lyrics-syllable, .lyrics-syllable span.char {
+                    transform: translate3d(0, 0, 0);
+                    backface-visibility: hidden;
+                }
+
                 /* Active line water-wave motion */
                 p[active], p[data-active], p[data-active="true"], .is-active, p.active, .line.active, .lyric-line.active, .lrc-line.active {
                     will-change: transform, opacity;
                     transform: translate3d(0, 0, 0) scale(1.022);
-                    animation: karaoke-wave-line 2050ms cubic-bezier(0.36, 0.03, 0.21, 0.99) infinite;
+                    animation: karaoke-wave-line 2600ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
                 }
 
                 p[active]::after, p[data-active]::after, p[data-active="true"]::after, .is-active::after, p.active::after, .line.active::after, .lyric-line.active::after, .lrc-line.active::after {
@@ -1526,51 +1535,151 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     background-position: calc(var(--karaoke-wave-ms) * 0.032px) 50%;
                     opacity: 0.55;
                     will-change: transform, opacity;
-                    animation: karaoke-wave-shimmer 1400ms linear infinite;
+                    animation: karaoke-wave-shimmer 1800ms linear infinite;
                 }
 
                 p[active] .word, p[data-active] .word, p[data-active="true"] .word, .is-active .word, p.active .word, .line.active .word, .lyric-line.active .word, .lrc-line.active .word,
                 p[active] .lyric-word, p[data-active] .lyric-word, p[data-active="true"] .lyric-word, .is-active .lyric-word, p.active .lyric-word, .line.active .lyric-word, .lyric-line.active .lyric-word, .lrc-line.active .lyric-word,
                 p[active] .karaoke-word-enhanced, p[data-active] .karaoke-word-enhanced, p[data-active="true"] .karaoke-word-enhanced, .is-active .karaoke-word-enhanced, p.active .karaoke-word-enhanced, .line.active .karaoke-word-enhanced, .lyric-line.active .karaoke-word-enhanced, .lrc-line.active .karaoke-word-enhanced {
                     will-change: transform;
-                    animation: karaoke-word-wave 2400ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+                    animation: karaoke-word-wave 2700ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
                     animation-delay: calc(var(--word-index, 0) * 22ms + var(--line-stagger, 0) * 12ms);
                 }
 
+                /* Active subtree: promote every syllable/char to its own compositor
+                   layer and rasterize the glow once; only transform/opacity animate */
+                p[active] .lyrics-syllable, p[data-active] .lyrics-syllable, p[data-active="true"] .lyrics-syllable, .is-active .lyrics-syllable, p.active .lyrics-syllable, .line.active .lyrics-syllable, .lyric-line.active .lyrics-syllable, .lrc-line.active .lyrics-syllable {
+                    will-change: transform;
+                    transform: translate3d(0, 0, 0);
+                    backface-visibility: hidden;
+                }
+                p[active] .lyrics-syllable span.char, p[data-active] .lyrics-syllable span.char, p[data-active="true"] .lyrics-syllable span.char, .is-active .lyrics-syllable span.char, p.active .lyrics-syllable span.char, .line.active .lyrics-syllable span.char, .lyric-line.active .lyrics-syllable span.char, .lrc-line.active .lyrics-syllable span.char {
+                    will-change: transform;
+                    transform: translate3d(0, 0, 0);
+                    backface-visibility: hidden;
+                    filter: drop-shadow(0 0 0.08em color-mix(in srgb, var(--lyplus-lyrics-palette), transparent 45%));
+                }
+
                 @keyframes karaoke-wave-line {
-                    0% { transform: translate3d(0, 0, 0) scale(1.02); }
-                    25% { transform: translate3d(0, -1px, 0) scale(1.028); }
-                    50% { transform: translate3d(0, 0.8px, 0) scale(1.021); }
-                    75% { transform: translate3d(0, -0.7px, 0) scale(1.026); }
-                    100% { transform: translate3d(0, 0, 0) scale(1.02); }
+                    0% {
+                        transform: translate3d(0, 0, 0) scale(1.02);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    25% {
+                        transform: translate3d(0, -0.8px, 0) scale(1.028);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    50% {
+                        transform: translate3d(0, 0, 0) scale(1.02);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    75% {
+                        transform: translate3d(0, -0.8px, 0) scale(1.026);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    100% {
+                        transform: translate3d(0, 0, 0) scale(1.02);
+                    }
                 }
 
                 @keyframes karaoke-wave-shimmer {
-                    0% { opacity: 0.3; transform: translate3d(0, 0, 0); }
-                    50% { opacity: 0.58; transform: translate3d(0, -0.6px, 0); }
-                    100% { opacity: 0.3; transform: translate3d(0, 0, 0); }
+                    0% {
+                        opacity: 0.25;
+                        transform: translate3d(0, 0, 0);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    50% {
+                        opacity: 0.45;
+                        transform: translate3d(0, -0.4px, 0);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    100% {
+                        opacity: 0.25;
+                        transform: translate3d(0, 0, 0);
+                    }
                 }
 
                 @keyframes karaoke-word-wave {
-                    /* Slow, calm lift-and-settle wave: ease up, hold, gently fall back, rest */
+                    /* Slow, calm lift-and-settle wave: ease up, hold, gently settle back */
                     0% {
                         transform: translate3d(0, 0, 0);
                         animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
                     }
-                    15% {
-                        transform: translate3d(0, -2.2px, 0);
-                        animation-timing-function: cubic-bezier(0.4, 0.05, 0.6, 0.15);
+                    18% {
+                        transform: translate3d(0, -2.6px, 0);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
                     }
-                    32% {
-                        transform: translate3d(0, -2.2px, 0);
-                        animation-timing-function: cubic-bezier(0.4, 0.05, 0.6, 0.15);
+                    38% {
+                        transform: translate3d(0, -2.6px, 0);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
                     }
-                    48% {
-                        transform: translate3d(0, -0.6px, 0);
-                        animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+                    55% {
+                        transform: translate3d(0, -0.9px, 0);
+                        animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
                     }
                     100% {
                         transform: translate3d(0, 0, 0);
+                    }
+                }
+
+                /* ─── Silky char motion overrides: gentle springs, no hard stops ─── */
+                @keyframes rise-char {
+                    0% {
+                        transform: translate3d(0, 0, 0);
+                        animation-timing-function: cubic-bezier(0.34, 1.3, 0.64, 1);
+                    }
+                    100% {
+                        transform: translate3d(0, var(--char-rise-y, -1.12px), 0);
+                    }
+                }
+
+                @keyframes drag-char {
+                    0% {
+                        transform: translate3d(0, 0, 0);
+                        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+                    }
+                    100% {
+                        transform: translate3d(0, var(--char-rise-y, -1.12px), 0);
+                    }
+                }
+
+                @keyframes grow-dynamic {
+                    0% {
+                        transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+                        animation-timing-function: cubic-bezier(0.34, 1.35, 0.64, 1);
+                    }
+                    28% {
+                        transform: translate3d(var(--char-offset-x, 0px), var(--translate-y-peak, -2px), 0) scale3d(var(--matrix-scale, 1.1), var(--matrix-scale, 1.1), 1);
+                        animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    75% {
+                        transform: translate3d(0, var(--char-rise-y, -1.12px), 0) scale3d(1, 1, 1);
+                        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+                    }
+                    100% {
+                        transform: translate3d(0, var(--char-rise-y, -1.12px), 0) scale3d(1, 1, 1);
+                    }
+                }
+
+                @keyframes grow-static {
+                    0%,
+                    100% {
+                        transform: scale3d(1.01, 1.01, 1.1) translateY(-0.05%);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                    50% {
+                        transform: scale3d(1.07, 1.07, 1.1) translateY(-0.05%);
+                        animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+                    }
+                }
+
+                @keyframes fade-in-line {
+                    from {
+                        opacity: 0.4;
+                        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+                    }
+                    to {
+                        opacity: 1;
                     }
                 }
 
