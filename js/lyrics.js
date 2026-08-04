@@ -1457,9 +1457,10 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
             const style = document.createElement('style');
             style.id = 'custom-lyrics-tuning';
             style.textContent = `
-                :host {
-                    --karaoke-wave-ms: 0;
-                }
+                 :host {
+                     --karaoke-wave-ms: 0;
+                     --lyplus-text-secondary: var(--lyplus-lyrics-palette);
+                 }
 
                 .lyrics-container, .container, main, article {
                     transform: translateZ(0);
