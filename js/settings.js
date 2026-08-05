@@ -13,6 +13,7 @@ import {
     smoothScrollingSettings,
     downloadQualitySettings,
     coverArtSizeSettings,
+    backgroundVideoQualitySettings,
     qualityBadgeSettings,
     trackDateSettings,
     visualizerSettings,
@@ -1236,6 +1237,20 @@ export function initializeSettings(scrobbler, player, api, ui) {
 
         coverArtSizeSetting.addEventListener('change', (e) => {
             coverArtSizeSettings.setSize(e.target.value);
+        });
+    }
+
+    // Background Video Quality setting
+    const backgroundVideoQualitySetting = document.getElementById('background-video-quality-setting');
+    if (backgroundVideoQualitySetting) {
+        backgroundVideoQualitySetting.value = backgroundVideoQualitySettings.getQuality();
+
+        backgroundVideoQualitySetting.addEventListener('change', (e) => {
+            backgroundVideoQualitySettings.setQuality(e.target.value);
+            // Apply live to the current fullscreen video if one is playing.
+            if (ui?.fsVideoController?.setPlaybackQuality) {
+                ui.fsVideoController.setPlaybackQuality(e.target.value);
+            }
         });
     }
 

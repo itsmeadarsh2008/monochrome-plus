@@ -466,6 +466,27 @@ export const downloadQualitySettings = {
     },
 };
 
+export const backgroundVideoQualitySettings = {
+    STORAGE_KEY: 'background-video-quality',
+    DEFAULT_QUALITY: 'hd1080',
+    OPTIONS: ['auto', 'hd720', 'hd1080', 'highres'],
+
+    getQuality() {
+        try {
+            const value = localStorage.getItem(this.STORAGE_KEY) || '';
+            return this.OPTIONS.includes(value) ? value : this.DEFAULT_QUALITY;
+        } catch {
+            return this.DEFAULT_QUALITY;
+        }
+    },
+
+    setQuality(quality) {
+        const normalized = this.OPTIONS.includes(String(quality)) ? String(quality) : this.DEFAULT_QUALITY;
+        localStorage.setItem(this.STORAGE_KEY, normalized);
+        return normalized;
+    },
+};
+
 export const coverArtSizeSettings = {
     STORAGE_KEY: 'cover-art-size',
     getSize() {

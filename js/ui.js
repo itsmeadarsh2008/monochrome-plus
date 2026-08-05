@@ -39,6 +39,7 @@ import {
     fontSettings,
     contentBlockingSettings,
     rotatingCoverSettings,
+    backgroundVideoQualitySettings,
 } from './storage.js';
 import { eclipseAddonStorage } from './eclipse.js';
 import { db } from './db.js';
@@ -2767,6 +2768,14 @@ export class UIRenderer {
                                     clearTimeout(watchdog);
                                     event.target.mute();
                                     disableCaptions();
+                                    const quality = backgroundVideoQualitySettings.getQuality();
+                                    if (quality !== 'auto') {
+                                        try {
+                                            event.target.setPlaybackQuality?.(quality);
+                                        } catch {
+                                            /* ignore quality errors */
+                                        }
+                                    }
                                     syncVideoPlayback();
                                     if (!settled) {
                                         settled = true;
@@ -2988,7 +2997,21 @@ export class UIRenderer {
             });
         }
 
-        this.fsVideoController = { disable, isEnabled: () => state.enabled, hide, show, dismissSignInModal };
+        this.fsVideoController = {
+            disable,
+            isEnabled: () => state.enabled,
+            hide,
+            show,
+            dismissSignInModal,
+            setPlaybackQuality: (quality) => {
+                if (quality === 'auto') return;
+                try {
+                    state.player?.setPlaybackQuality?.(quality);
+                } catch {
+                    /* ignore quality errors */
+                }
+            },
+        };
     }
 
     showPage(pageId) {
