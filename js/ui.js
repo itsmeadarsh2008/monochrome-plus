@@ -2439,11 +2439,45 @@ export class UIRenderer {
             return isYouTubeVideoId(id) ? id : '';
         };
 
+        const normalizeName = (value) =>
+            String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '');
+
+        // Prefer the artist's official music video over the lyric/cover/live
+        // re-uploads that YouTube-style searches tend to rank high. Higher
+        // score = more likely the official video.
+        const scoreVideoCandidate = (candidate, track) => {
+            const title = String(candidate.title || '').toLowerCase();
+            const titleNorm = normalizeName(candidate.title);
+            const trackTitle = normalizeName(track.title);
+            const trackArtist = normalizeName(track.artist?.name || '');
+            let score = 0;
+            if (candidate.isOfficialChannel) score += 120;
+            if (/\bofficial\b/.test(title)) score += 60;
+            if (title.includes('music video')) score += 45;
+            if (/\bvideo\b/.test(title)) score += 25;
+            if (/\baudio\b/.test(title)) score += 20;
+            if (title.includes('visualizer')) score += 10;
+            // Exact "artist - title" pairing is very likely the official video.
+            if (trackArtist && trackTitle && titleNorm.includes(`${trackArtist}${trackTitle}`)) score += 40;
+            if (trackTitle && titleNorm.replace(trackArtist, '').includes(trackTitle)) score += 15;
+            // These are never the artist's official music video.
+            if (/\blyrics?\b/.test(title)) score -= 200;
+            if (/\bkaraoke\b/.test(title)) score -= 200;
+            if (/\bcover\b/.test(title)) score -= 90;
+            if (/\blive\b/.test(title)) score -= 70;
+            if (/\bremix\b/.test(title)) score -= 60;
+            if (/\bextended\b/.test(title)) score -= 40;
+            if (/\breaction\b|\btribute\b|\bmashup\b|\binstrumental\b/.test(title)) score -= 50;
+            return score;
+        };
+
         // Public, CORS-enabled YouTube search (Piped instances), used only as a
         // fallback when the addon search returns no usable videos. This avoids
         // scraping YouTube's /results page (which trips the anti-bot gate) and
         // needs no server-side proxy, so it works on hosted instances too.
-        const searchYouTubeVideos = async (query, limit = 5) => {
+        const searchYouTubeVideos = async (query, limit = 5, trackArtistName = '') => {
             const instances = [
                 'https://api.piped.private.coffee',
                 'https://api.piped.projectsegfau.lt',
@@ -2464,11 +2498,18 @@ export class UIRenderer {
                     for (const item of items) {
                         const match = String(item?.url || '').match(/[?&]v=([\w-]{11})/);
                         if (!match) continue;
+                        const uploader = normalizeName(item.uploaderName || '');
+                        const trackArtist = normalizeName(trackArtistName);
                         videos.push({
                             id: match[1],
                             title: item.title || '',
                             channelTitle: item.uploaderName || '',
                             duration: Number(item.duration) || 0,
+                            isOfficialChannel: Boolean(
+                                trackArtist &&
+                                uploader &&
+                                (uploader.includes(trackArtist) || trackArtist.includes(uploader))
+                            ),
                         });
                     }
                     if (videos.length) return videos.slice(0, limit);
@@ -2500,6 +2541,7 @@ export class UIRenderer {
                     title: track.title || '',
                     channelTitle: artist,
                     duration: track.duration || 0,
+                    isOfficialChannel: true,
                 });
                 seen.add(track.id);
                 console.log('[fs-video] Primary video (current track):', track.title, '|', track.id);
@@ -2509,7 +2551,7 @@ export class UIRenderer {
 
             if (query && typeof this.player?.api?.searchTracks === 'function') {
                 try {
-                    const { items = [] } = await this.player.api.searchTracks(query, { limit: 8 });
+                    const { items = [] } = await this.player.api.searchTracks(query, { limit: 12 });
                     for (const item of items || []) {
                         const id = String(item?.id || '');
                         if (!id || seen.has(id) || !isYouTubeVideoId(id)) continue;
@@ -2519,8 +2561,9 @@ export class UIRenderer {
                             title: item.title || track.title,
                             channelTitle: item.artist?.name || artist,
                             duration: item.duration || track.duration || 0,
+                            isOfficialChannel: false,
                         });
-                        if (candidates.length >= 6) break;
+                        if (candidates.length >= 12) break;
                     }
                 } catch (error) {
                     console.warn('[fs-video] Alternate video lookup failed:', error);
@@ -2529,12 +2572,28 @@ export class UIRenderer {
 
             if (candidates.length < 3 && query) {
                 console.log('[fs-video] Addon search gave few candidates, trying Piped fallback');
-                const piped = await searchYouTubeVideos(query, Math.max(1, 6 - candidates.length));
+                const piped = await searchYouTubeVideos(query, 8, artist);
                 for (const video of piped) {
                     if (seen.has(video.id)) continue;
                     seen.add(video.id);
                     candidates.push(video);
                 }
+            }
+
+            // Rank candidates: the track's own video stays first, the rest are
+            // ordered so official music videos win and lyric/cover/karaoke
+            // re-uploads drop to the bottom (or out entirely).
+            if (candidates.length > 1) {
+                const keepPrimary = isYouTubeVideoId(track.id);
+                const head = keepPrimary ? candidates.slice(0, 1) : [];
+                const rest = (keepPrimary ? candidates.slice(1) : candidates)
+                    .map((candidate) => ({ candidate, score: scoreVideoCandidate(candidate, track) }))
+                    .sort((a, b) => b.score - a.score);
+                const usable = rest.filter((entry) => entry.score > -100);
+                const pool = usable.length ? usable : rest;
+                candidates.length = 0;
+                candidates.push(...head, ...pool.map((entry) => entry.candidate));
+                if (candidates.length > 6) candidates.length = 6;
             }
 
             if (!candidates.length) {
