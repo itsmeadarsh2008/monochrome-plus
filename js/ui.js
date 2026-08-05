@@ -2381,8 +2381,7 @@ export class UIRenderer {
             apiReady: false,
             syncTimer: null,
             trackKey: null,
-            searchCache: new Map(),
-            channelCache: new Map(),
+            signInRetryTimer: null,
             suppressSync: false,
         };
 
@@ -2393,91 +2392,6 @@ export class UIRenderer {
             return `${artist} ${track.title}`.trim();
         };
 
-        const getTrackArtist = () => this.player?.currentTrack?.artist?.name || '';
-
-        const normalizeName = (s) =>
-            String(s || '')
-                .toLowerCase()
-                .replace(/[^\p{L}\p{N}]+/gu, ' ')
-                .trim();
-
-        // Channel search results include an owner badge for official artist
-        // channels (music-note). The youtube-search-api package strips it, so
-        // parse the raw results page; fall back to the package on failure.
-        const fetchRawChannelResults = async (artist) => {
-            const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
-                artist
-            )}&sp=${encodeURIComponent('EgIQAg%3D%3D')}`;
-            const res = await fetch(url, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
-            if (!res.ok) throw new Error(`channel fetch ${res.status}`);
-            const html = await res.text();
-            const part = html.split('var ytInitialData = ')[1];
-            if (!part) return [];
-            const data = JSON.parse(part.split('</script>')[0].trim().replace(/;$/, ''));
-            const sects =
-                data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
-            const channels = [];
-            for (const sec of sects) {
-                const items = sec?.itemSectionRenderer?.contents || [];
-                for (const item of items) {
-                    const c = item?.channelRenderer;
-                    if (c?.channelId) {
-                        channels.push({
-                            id: c.channelId,
-                            title: c.title?.simpleText || '',
-                            verified: (c.ownerBadges || []).some(
-                                (b) => b?.metadataBadgeRenderer?.style === 'BADGE_STYLE_TYPE_VERIFIED_ARTIST'
-                            ),
-                        });
-                    }
-                }
-            }
-            return channels;
-        };
-
-        const findArtistChannel = async (artist) => {
-            const norm = normalizeName(artist);
-            if (!norm) return null;
-            if (state.channelCache.has(norm)) return state.channelCache.get(norm);
-            let channel = null;
-            try {
-                const channels = await fetchRawChannelResults(artist);
-                const exact = channels.find((c) => normalizeName(c.title) === norm);
-                channel =
-                    (exact?.verified ? exact : null) ??
-                    channels.find((c) => c.verified && normalizeName(c.title) === norm) ??
-                    channels.find((c) => c.verified) ??
-                    exact ??
-                    channels.find((c) => {
-                        const cn = normalizeName(c.title);
-                        return cn.startsWith(norm) && cn.length > norm.length;
-                    }) ??
-                    null;
-            } catch {
-                channel = null;
-            }
-            if (!channel) {
-                try {
-                    const mod = await import('youtube-search-api');
-                    const api = mod.default ?? mod;
-                    const result = await api.GetListByKeyword(artist, false, 5, [{ type: 'channel' }]);
-                    const channels = (result?.items || []).filter((item) => item.type === 'channel' && item.id);
-                    const exact = channels.find((c) => normalizeName(c.title) === norm);
-                    channel =
-                        exact ??
-                        channels.find((c) => {
-                            const cn = normalizeName(c.title);
-                            return cn.startsWith(norm) && cn.length > norm.length;
-                        }) ??
-                        null;
-                } catch {
-                    channel = null;
-                }
-            }
-            state.channelCache.set(norm, channel);
-            return channel;
-        };
-
         const loadYoutubeApi = () =>
             new Promise((resolve) => {
                 if (window.YT?.Player) {
@@ -2486,216 +2400,147 @@ export class UIRenderer {
                     return;
                 }
                 const existing = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
-                window.onYouTubeIframeAPIReady = () => {
+                const onReady = () => {
                     state.apiReady = true;
                     resolve();
                 };
+                window.onYouTubeIframeAPIReady = onReady;
                 if (!existing) {
                     const script = document.createElement('script');
                     script.src = 'https://www.youtube.com/iframe_api';
                     script.async = true;
                     document.head.appendChild(script);
                 }
+                // Resolve even if the API never loads so the player flow can
+                // fail gracefully (important on cold/slow hosted instances).
+                setTimeout(onReady, 12000);
             });
 
-        const searchVideoCandidates = async (artist, title, durationSec = NaN) => {
-            const cacheKey = `${artist} ${title}`.trim();
-            if (state.searchCache.has(cacheKey)) return state.searchCache.get(cacheKey);
-            const mod = await import('youtube-search-api');
-            const api = mod.default ?? mod;
+        // Background video uses the currently playing track's own YouTube video
+        // ID (the same ID the audio streams from). This avoids scraping
+        // YouTube's search results page, which was what triggered YouTube's
+        // anti-bot "Sign in to confirm you're not a bot" gating.
+        const isYouTubeVideoId = (id) => /^[\w-]{11}$/.test(String(id || ''));
 
-            // Normalization: strip accents, "&"→"and", bracket junk, collapse.
-            const stripAccents = (s) =>
-                String(s || '')
-                    .normalize('NFD')
-                    .replace(/[\u0300-\u036f]/g, '');
-            const normalizedText = (s) => normalizeName(stripAccents(s).replace(/&/g, ' and '));
-            const levenshtein = (a, b) => {
-                const m = a.length;
-                const n = b.length;
-                if (!m) return n;
-                if (!n) return m;
-                const dp = new Array(m + 1);
-                for (let i = 0; i <= m; i++) dp[i] = new Array(n + 1);
-                for (let j = 0; j <= n; j++) dp[0][j] = j;
-                for (let i = 1; i <= m; i++) {
-                    dp[i][0] = i;
-                    for (let j = 1; j <= n; j++) {
-                        dp[i][j] = Math.min(
-                            dp[i - 1][j] + 1,
-                            dp[i][j - 1] + 1,
-                            dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-                        );
+        const currentTrackVideoId = () => {
+            const id = this.player?.currentTrack?.id || '';
+            return isYouTubeVideoId(id) ? id : '';
+        };
+
+        // Public, CORS-enabled YouTube search (Piped instances), used only as a
+        // fallback when the addon search returns no usable videos. This avoids
+        // scraping YouTube's /results page (which trips the anti-bot gate) and
+        // needs no server-side proxy, so it works on hosted instances too.
+        const searchYouTubeVideos = async (query, limit = 5) => {
+            const instances = [
+                'https://api.piped.private.coffee',
+                'https://api.piped.projectsegfau.lt',
+                'https://pipedapi.adminforge.de',
+            ];
+            for (const base of instances) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 8000);
+                    const response = await fetch(`${base}/search?q=${encodeURIComponent(query)}&filter=videos`, {
+                        signal: controller.signal,
+                    });
+                    clearTimeout(timer);
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    const items = Array.isArray(data?.items) ? data.items : [];
+                    const videos = [];
+                    for (const item of items) {
+                        const match = String(item?.url || '').match(/[?&]v=([\w-]{11})/);
+                        if (!match) continue;
+                        videos.push({
+                            id: match[1],
+                            title: item.title || '',
+                            channelTitle: item.uploaderName || '',
+                            duration: Number(item.duration) || 0,
+                        });
                     }
-                }
-                return dp[m][n];
-            };
-            const similarity = (a, b) =>
-                Math.max(a.length, b.length) ? 1 - levenshtein(a, b) / Math.max(a.length, b.length) : 0;
-
-            const songNorm = normalizedText(title);
-            const artistNorm = normalizedText(artist);
-            const isTopicChannel = (channel) => /(^|\s)topic$/.test(normalizeName(channel));
-
-            const parseLenSeconds = (len) => {
-                if (!len?.simpleText) return null;
-                const parts = String(len.simpleText).split(':');
-                if (parts.some((p) => isNaN(parseFloat(p)))) return null;
-                return parts.reduce((acc, p) => acc * 60 + parseFloat(p), 0);
-            };
-
-            const scoreVideo = (item, artistChannel) => {
-                const rawTitle = String(item.title || '');
-                const itemTitle = normalizeName(rawTitle);
-                const clean = normalizedText(rawTitle);
-                const channelClean = normalizedText(item.channelTitle);
-                let score = 0;
-
-                // 1 · Artist match (40)
-                const artistPos = artistNorm ? clean.indexOf(artistNorm) : -1;
-                if (artistPos === 0) score += 40;
-                else if (artistPos > 0) score += 25;
-                else if (artistNorm && similarity(clean, artistNorm) > 0.95) score += 35;
-
-                // 2 · Song title (35)
-                const songPos = songNorm ? clean.indexOf(songNorm) : -1;
-                if (clean === songNorm) score += 35;
-                else if (songPos >= 0) score += clean.endsWith(songNorm) ? 30 : 20;
-                else if (songNorm && similarity(clean, songNorm) > 0.95) score += 30;
-
-                // 3 · Official / artist / VEVO / label channel (25)
-                const artistChannelTitleNorm = artistChannel?.title ? normalizedText(artistChannel.title) : '';
-                const artistChannelId = artistChannel?.id || '';
-                const itemChannelId =
-                    item?.shortBylineText?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '';
-                const channelMatchesArtist =
-                    channelClean &&
-                    artistChannelTitleNorm &&
-                    (channelClean === artistChannelTitleNorm || channelClean.includes(artistChannelTitleNorm));
-                if (artistChannelId && itemChannelId === artistChannelId) score += artistChannel?.verified ? 30 : 25;
-                else if (channelMatchesArtist) score += 25;
-                else if (/vevo/.test(channelClean)) score += 22;
-                else if (artistNorm && channelClean && channelClean.includes(artistNorm)) score += 18;
-
-                // 4 · Video type
-                const typeBonus = (() => {
-                    if (/official music video/.test(itemTitle)) return 20;
-                    if (/official video/.test(itemTitle)) return 18;
-                    if (/\bofficial mv\b|\bmusic video\b/.test(itemTitle)) return 15;
-                    if (/visualizer/.test(itemTitle)) return 10;
-                    if (/official audio/.test(itemTitle)) return 8;
-                    if (/nightcore/.test(itemTitle)) return -50;
-                    if (/lyrics?|lyric video/.test(itemTitle)) return -40;
-                    if (/cover/.test(itemTitle)) return -40;
-                    if (/live/.test(itemTitle)) return -15;
-                    return 0;
-                })();
-                score += typeBonus;
-                // A lyric video must never beat a real music video of the song.
-                const lyric = /lyrics?|lyric video/.test(itemTitle);
-
-                // 5 · Duration closeness
-                if (Number.isFinite(durationSec)) {
-                    const actual = parseLenSeconds(item.length);
-                    if (actual != null) {
-                        const diff = Math.abs(durationSec - actual);
-                        if (diff <= 5) score += 10;
-                        else if (diff <= 10) score += 8;
-                        else if (diff <= 20) score += 5;
-                        else if (diff <= 40) score += 2;
-                    }
-                }
-
-                // 6 · Title penalties (–30 each occurrence)
-                const badTokens = itemTitle.match(
-                    /reaction|karaoke|slowed|reverb|nightcore|\b8d\b|bass boosted|cover|fanmade/g
-                );
-                if (badTokens) score -= 30 * badTokens.length;
-
-                const official = typeBonus >= 15;
-                const songMatch = (songNorm ? songPos >= 0 : true) || clean === songNorm;
-                return { score, songMatch, official, lyric };
-            };
-
-            const fetchVideos = (query) =>
-                api
-                    .GetListByKeyword(query, false, 12, [{ type: 'video' }])
-                    .then((result) =>
-                        (result?.items || []).filter(
-                            (item) =>
-                                item.type === 'video' && item.id && !item.isLive && !isTopicChannel(item.channelTitle)
-                        )
-                    );
-
-            // MV query, bare-key query and artist-channel lookup run
-            // concurrently; results are merged so the fallback chain stays
-            // within real candidates instead of whatever the first query had.
-            const [mvVideos, keyVideos, artistChannel] = await Promise.all([
-                fetchVideos(`${cacheKey} official music video`).catch(() => []),
-                fetchVideos(cacheKey).catch(() => []),
-                findArtistChannel(artist),
-            ]);
-            if (artistChannel) {
-                console.debug(
-                    `[fs-video] Artist channel for "${artist}": ${artistChannel.title} (verified: ${
-                        artistChannel.verified ? 'yes' : 'no'
-                    })`
-                );
-            }
-
-            const seen = new Set();
-            const merged = [];
-            for (const item of [...mvVideos, ...keyVideos]) {
-                if (item.id && !seen.has(item.id)) {
-                    seen.add(item.id);
-                    merged.push(item);
+                    if (videos.length) return videos.slice(0, limit);
+                } catch {
+                    /* try next instance */
                 }
             }
+            return [];
+        };
 
-            const ranked = merged
-                .map((item, index) => ({ item, index, ...scoreVideo(item, artistChannel) }))
-                .sort((a, b) => b.score - a.score || a.index - b.index);
-
-            // Pick the highest-scoring candidates for the right song. Lyric
-            // videos only qualify when no real music video of the song exists.
-            const lyricPool = [];
+        // Build a candidate list for the background video. The current track's
+        // own YouTube video is tried first — but only if its ID is a real
+        // YouTube video ID. Imported tracks (Tidal, Spotify, …) carry foreign
+        // IDs (e.g. "418765677") that can never play on YouTube; feeding them
+        // to the embed just produces "This video isn't available any more".
+        // The list is then filled from the app's own addon search (server-side)
+        // and, if still short, a Piped fallback search. No /results scraping.
+        const buildVideoCandidates = async () => {
+            const track = this.player?.currentTrack;
+            if (!track?.id) return [];
             const candidates = [];
-            for (const rankedItem of ranked) {
-                if (!rankedItem.songMatch) continue;
-                if (rankedItem.lyric) {
-                    lyricPool.push(rankedItem);
-                    continue;
-                }
-                const { item, official } = rankedItem;
-                candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
-                if (candidates.length >= 6) break;
+            const seen = new Set();
+            const artist = track.artist?.name || '';
+            const query = `${artist} ${track.title}`.trim();
+
+            if (isYouTubeVideoId(track.id)) {
+                candidates.push({
+                    id: track.id,
+                    title: track.title || '',
+                    channelTitle: artist,
+                    duration: track.duration || 0,
+                });
+                seen.add(track.id);
+                console.log('[fs-video] Primary video (current track):', track.title, '|', track.id);
+            } else {
+                console.warn('[fs-video] Track ID is not a YouTube video ID, skipping as primary:', track.id);
             }
-            if (candidates.length === 0) {
-                for (const rankedItem of lyricPool) {
-                    const { item, official } = rankedItem;
-                    candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
-                    if (candidates.length >= 6) break;
+
+            if (query && typeof this.player?.api?.searchTracks === 'function') {
+                try {
+                    const { items = [] } = await this.player.api.searchTracks(query, { limit: 8 });
+                    for (const item of items || []) {
+                        const id = String(item?.id || '');
+                        if (!id || seen.has(id) || !isYouTubeVideoId(id)) continue;
+                        seen.add(id);
+                        candidates.push({
+                            id,
+                            title: item.title || track.title,
+                            channelTitle: item.artist?.name || artist,
+                            duration: item.duration || track.duration || 0,
+                        });
+                        if (candidates.length >= 6) break;
+                    }
+                } catch (error) {
+                    console.warn('[fs-video] Alternate video lookup failed:', error);
                 }
             }
-            if (candidates.length === 0) throw new Error('No video found on YouTube');
-            state.searchCache.set(cacheKey, candidates);
-            console.debug(
-                '[fs-video] Candidates for',
-                cacheKey,
-                candidates.map((c) => `${c.title} (${c.channelTitle})`)
-            );
+
+            if (candidates.length < 3 && query) {
+                console.log('[fs-video] Addon search gave few candidates, trying Piped fallback');
+                const piped = await searchYouTubeVideos(query, Math.max(1, 6 - candidates.length));
+                for (const video of piped) {
+                    if (seen.has(video.id)) continue;
+                    seen.add(video.id);
+                    candidates.push(video);
+                }
+            }
+
+            if (!candidates.length) {
+                console.warn('[fs-video] No video candidates found for:', query || track.title);
+            } else {
+                console.log('[fs-video] Video candidates:', candidates.map((c) => `${c.title} (${c.id})`).join(' ; '));
+            }
             return candidates;
         };
 
-        const switchVideoForTrack = async (key) => {
+        const switchVideoForTrack = async (_key) => {
             try {
-                const track = this.player?.currentTrack;
-                const candidates = await searchVideoCandidates(getTrackArtist(), track?.title || key, track?.duration);
-                if (!state.player) return;
                 const audio = document.getElementById('audio-player');
-                await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
+                await createPlayer(await buildVideoCandidates(), Math.floor(audio?.currentTime || 0));
             } catch (error) {
                 console.warn('[fs-video] Failed to switch music video:', error);
+                showNotification(`Music video failed: ${error?.message || error}`, 'warning');
+                showSignInModal(currentTrackVideoId());
             }
         };
 
@@ -2727,14 +2572,104 @@ export class UIRenderer {
             }
         };
 
+        // YouTube shows a "Sign in to confirm you're not a bot" interstitial in
+        // the player iframe. When detected, show a modal embedding that same
+        // YouTube iframe so the user can complete sign-in in-app, then retry.
+        const dismissSignInModal = () => {
+            if (state.signInRetryTimer) {
+                clearInterval(state.signInRetryTimer);
+                state.signInRetryTimer = null;
+            }
+            document.getElementById('fs-video-signin-modal')?.remove();
+        };
+
+        const showSignInModal = (videoId = '') => {
+            if (document.getElementById('fs-video-signin-modal')) return;
+            // Mirror the app player's embed surface but on the nocookie host —
+            // a separate session context that often bypasses the gate that
+            // makes the www.youtube.com embed show "An error occurred".
+            const embedSrc = videoId
+                ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?enablejsapi=1&autoplay=1&mute=1&playsinline=1&rel=0&controls=1&modestbranding=1`
+                : 'https://www.youtube.com';
+            const watchUrl = videoId
+                ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`
+                : 'https://www.youtube.com';
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.id = 'fs-video-signin-modal';
+            modal.style.zIndex = '100000';
+            modal.innerHTML = `
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width: 640px; display: flex; flex-direction: column;">
+                    <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+                        <h3 style="margin: 0;">YouTube blocked the music video</h3>
+                        <button class="btn-close" style="background: none; border: none; font-size: 2rem; cursor: pointer; color: var(--foreground); padding: 0.2rem 0.5rem; line-height: 1;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="color: var(--foreground); cursor: default;">
+                        <p style="margin: 0 0 0.75rem; line-height: 1.6;">YouTube is blocking the video here. If the player below shows a sign-in prompt, complete it right there. If it shows an error, use <strong>Sign in &amp; open video</strong> — the sign-in and check run on YouTube's own page, and once done the app's video resumes automatically.</p>
+                        <div style="position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden;">
+                            <iframe
+                                src="${embedSrc}"
+                                style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0;"
+                                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                                referrerpolicy="strict-origin-when-cross-origin"
+                                allowfullscreen
+                            ></iframe>
+                        </div>
+                        <p style="margin: 0.75rem 0 0; font-size: 0.9rem; color: var(--foreground-secondary, var(--foreground));">If this video's uploader disabled embedding, no embed can ever play it — the video plays only on YouTube itself.</p>
+                    </div>
+                    <div class="modal-footer" style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.25rem;">
+                        <button class="btn-secondary" id="fs-video-signin-dismiss">Close</button>
+                        <button class="btn-secondary" id="fs-video-signin-tab">Sign in &amp; open video</button>
+                        <button class="btn-primary" id="fs-video-signin-retry">Try again</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const close = () => {
+                modal.remove();
+                if (state.signInRetryTimer) {
+                    clearInterval(state.signInRetryTimer);
+                    state.signInRetryTimer = null;
+                }
+            };
+            modal.querySelector('.modal-overlay').onclick = close;
+            modal.querySelector('.btn-close').onclick = close;
+            modal.querySelector('#fs-video-signin-dismiss').onclick = close;
+            modal.querySelector('#fs-video-signin-tab').onclick = () => window.open(watchUrl, '_blank', 'noopener');
+            modal.querySelector('#fs-video-signin-retry').onclick = () => {
+                close();
+                enable();
+            };
+            modal.querySelector('.modal-content').addEventListener('click', (e) => e.stopPropagation());
+            // Auto-retry in the background: once YouTube lifts the block the
+            // video resumes and the modal dismisses itself.
+            if (!state.signInRetryTimer) {
+                state.signInRetryTimer = setInterval(() => {
+                    enable().catch(() => {});
+                }, 60000);
+            }
+        };
+
         const createPlayer = (candidates, start) =>
             new Promise((resolve, reject) => {
+                let sawRestrictive = false;
+                let lastVideoId = '';
+                let hangCount = 0;
                 const tryCandidate = (index) => {
                     const candidate = candidates[index];
                     if (!candidate) {
-                        reject(new Error('No playable video found on YouTube'));
+                        if (sawRestrictive) {
+                            // Every candidate was blocked as restricted
+                            // (embedding/sign-in). Point the user at sign-in.
+                            showSignInModal(lastVideoId);
+                            reject(new Error('YouTube restricted embed (sign-in required)'));
+                        } else {
+                            reject(new Error('No playable video found on YouTube'));
+                        }
                         return;
                     }
+                    lastVideoId = candidate.id;
                     const videoId = candidate.id;
                     if (state.player) {
                         try {
@@ -2750,9 +2685,37 @@ export class UIRenderer {
                     wrap.appendChild(holder);
                     console.log('[fs-video] Playing:', candidate.title, '|', candidate.channelTitle);
                     let settled = false;
+                    // If the player never becomes ready nor errors, the video
+                    // may be gated (embedding disabled / sign-in). Cycle to the
+                    // next candidate; only give up after two consecutive hangs.
+                    const watchdog = setTimeout(() => {
+                        if (settled) return;
+                        settled = true;
+                        sawRestrictive = true;
+                        hangCount += 1;
+                        if (state.player) {
+                            try {
+                                state.player.destroy();
+                            } catch {
+                                /* already destroyed */
+                            }
+                            state.player = null;
+                            wrap.innerHTML = '';
+                        }
+                        if (hangCount >= 2) {
+                            console.warn('[fs-video] Embed hangs across candidates — prompting sign-in');
+                            showSignInModal(videoId);
+                            reject(new Error('YouTube requires sign-in (bot check)'));
+                            return;
+                        }
+                        console.warn(`[fs-video] Video candidate ${index + 1} hung (never ready), trying next`);
+                        tryCandidate(index + 1);
+                    }, 8000);
                     const fail = (code) => {
                         if (settled) return;
                         settled = true;
+                        clearTimeout(watchdog);
+                        if (code === 101 || code === 150) sawRestrictive = true;
                         if (state.player) {
                             try {
                                 state.player.destroy();
@@ -2783,6 +2746,7 @@ export class UIRenderer {
                             },
                             events: {
                                 onReady: (event) => {
+                                    clearTimeout(watchdog);
                                     event.target.mute();
                                     disableCaptions();
                                     syncVideoPlayback();
@@ -2790,6 +2754,49 @@ export class UIRenderer {
                                         settled = true;
                                         resolve(event.target);
                                     }
+                                    // If the embed loads but playback never starts
+                                    // while audio is playing, the interstitial is
+                                    // likely covering the player. Detect it and
+                                    // point the user at sign-in.
+                                    setTimeout(() => {
+                                        const audio = document.getElementById('audio-player');
+                                        if (state.player !== event.target || audio?.paused) return;
+                                        let playerState;
+                                        let currentTime;
+                                        try {
+                                            playerState = event.target.getPlayerState?.();
+                                            currentTime = event.target.getCurrentTime?.();
+                                        } catch {
+                                            return;
+                                        }
+                                        const stuck =
+                                            playerState !== undefined &&
+                                            playerState !== YT.PlayerState.PLAYING &&
+                                            playerState !== YT.PlayerState.BUFFERING &&
+                                            (currentTime === undefined || currentTime === 0);
+                                        if (!stuck) return;
+                                        sawRestrictive = true;
+                                        hangCount += 1;
+                                        console.warn(
+                                            '[fs-video] Player loaded but never started — trying next candidate'
+                                        );
+                                        if (state.player) {
+                                            try {
+                                                state.player.destroy();
+                                            } catch {
+                                                /* already destroyed */
+                                            }
+                                            state.player = null;
+                                        }
+                                        wrap.innerHTML = '';
+                                        if (hangCount >= 2) {
+                                            showSignInModal(
+                                                event.target.getVideoUrl ? event.target.getVideoUrl() : lastVideoId
+                                            );
+                                            return;
+                                        }
+                                        tryCandidate(index + 1);
+                                    }, 5000);
                                 },
                                 onApiChange: () => disableCaptions(),
                                 onError: (event) => fail(event.data),
@@ -2857,6 +2864,7 @@ export class UIRenderer {
                 state.player = null;
             }
             wrap.innerHTML = '';
+            dismissSignInModal();
         };
 
         const enable = async () => {
@@ -2866,12 +2874,12 @@ export class UIRenderer {
                 const key = getTrackKey();
                 if (!key) throw new Error('No current track');
                 state.trackKey = key;
-                // Video search and iframe-API bootstrap run concurrently.
-                const track = this.player?.currentTrack;
-                const [candidates] = await Promise.all([
-                    searchVideoCandidates(getTrackArtist(), track?.title || key, track?.duration),
-                    loadYoutubeApi(),
-                ]);
+                // Build candidates (current track's video + addon-search
+                // alternates, no /results scraping), then ensure the iframe
+                // API is bootstrapped.
+                const candidates = await buildVideoCandidates();
+                if (!candidates.length) throw new Error('Current track has no video');
+                await loadYoutubeApi();
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
                 const audio = document.getElementById('audio-player');
                 await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
@@ -2879,6 +2887,7 @@ export class UIRenderer {
                 overlay.classList.add('video-bg-active');
                 btn.title = 'Music Video Background';
                 startSync();
+                dismissSignInModal();
                 const currentKey = getTrackKey();
                 if (currentKey && currentKey !== key) {
                     state.trackKey = currentKey;
@@ -2888,6 +2897,12 @@ export class UIRenderer {
                 console.warn('[fs-video] Failed to start music video background:', error);
                 btn.classList.remove('active');
                 btn.title = 'Music Video Background';
+                // Don't spam a toast on background auto-retries while the
+                // sign-in modal is already telling the user what's happening.
+                if (!document.getElementById('fs-video-signin-modal')) {
+                    showNotification(`Music video failed: ${error?.message || error}`, 'warning');
+                }
+                showSignInModal(currentTrackVideoId());
             }
         };
 

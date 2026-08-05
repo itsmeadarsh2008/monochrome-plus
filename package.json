@@ -59,7 +59,6 @@
         "fuse.js": "^7.5.0",
         "howler": "^2.2.4",
         "mailchecker": "^6.0.21",
-        "shaka-player": "^5.2.4",
-        "youtube-search-api": "^2.0.1"
+        "shaka-player": "^5.2.4"
     }
 }
