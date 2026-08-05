@@ -2401,18 +2401,52 @@ export class UIRenderer {
                 .replace(/[^\p{L}\p{N}]+/gu, ' ')
                 .trim();
 
+        // Channel search results include an owner badge for official artist
+        // channels (music-note). The youtube-search-api package strips it, so
+        // parse the raw results page; fall back to the package on failure.
+        const fetchRawChannelResults = async (artist) => {
+            const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(
+                artist
+            )}&sp=${encodeURIComponent('EgIQAg%3D%3D')}`;
+            const res = await fetch(url, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
+            if (!res.ok) throw new Error(`channel fetch ${res.status}`);
+            const html = await res.text();
+            const part = html.split('var ytInitialData = ')[1];
+            if (!part) return [];
+            const data = JSON.parse(part.split('</script>')[0].trim().replace(/;$/, ''));
+            const sects =
+                data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+            const channels = [];
+            for (const sec of sects) {
+                const items = sec?.itemSectionRenderer?.contents || [];
+                for (const item of items) {
+                    const c = item?.channelRenderer;
+                    if (c?.channelId) {
+                        channels.push({
+                            id: c.channelId,
+                            title: c.title?.simpleText || '',
+                            verified: (c.ownerBadges || []).some(
+                                (b) => b?.metadataBadgeRenderer?.style === 'BADGE_STYLE_TYPE_VERIFIED_ARTIST'
+                            ),
+                        });
+                    }
+                }
+            }
+            return channels;
+        };
+
         const findArtistChannel = async (artist) => {
             const norm = normalizeName(artist);
             if (!norm) return null;
             if (state.channelCache.has(norm)) return state.channelCache.get(norm);
             let channel = null;
             try {
-                const mod = await import('youtube-search-api');
-                const api = mod.default ?? mod;
-                const result = await api.GetListByKeyword(artist, false, 5, [{ type: 'channel' }]);
-                const channels = (result?.items || []).filter((item) => item.type === 'channel' && item.id);
+                const channels = await fetchRawChannelResults(artist);
                 const exact = channels.find((c) => normalizeName(c.title) === norm);
                 channel =
+                    (exact?.verified ? exact : null) ??
+                    channels.find((c) => c.verified && normalizeName(c.title) === norm) ??
+                    channels.find((c) => c.verified) ??
                     exact ??
                     channels.find((c) => {
                         const cn = normalizeName(c.title);
@@ -2421,6 +2455,24 @@ export class UIRenderer {
                     null;
             } catch {
                 channel = null;
+            }
+            if (!channel) {
+                try {
+                    const mod = await import('youtube-search-api');
+                    const api = mod.default ?? mod;
+                    const result = await api.GetListByKeyword(artist, false, 5, [{ type: 'channel' }]);
+                    const channels = (result?.items || []).filter((item) => item.type === 'channel' && item.id);
+                    const exact = channels.find((c) => normalizeName(c.title) === norm);
+                    channel =
+                        exact ??
+                        channels.find((c) => {
+                            const cn = normalizeName(c.title);
+                            return cn.startsWith(norm) && cn.length > norm.length;
+                        }) ??
+                        null;
+                } catch {
+                    channel = null;
+                }
             }
             state.channelCache.set(norm, channel);
             return channel;
@@ -2520,7 +2572,7 @@ export class UIRenderer {
                     channelClean &&
                     artistChannelTitleNorm &&
                     (channelClean === artistChannelTitleNorm || channelClean.includes(artistChannelTitleNorm));
-                if (artistChannelId && itemChannelId === artistChannelId) score += 25;
+                if (artistChannelId && itemChannelId === artistChannelId) score += artistChannel?.verified ? 30 : 25;
                 else if (channelMatchesArtist) score += 25;
                 else if (/vevo/.test(channelClean)) score += 22;
                 else if (artistNorm && channelClean && channelClean.includes(artistNorm)) score += 18;
@@ -2533,12 +2585,14 @@ export class UIRenderer {
                     if (/visualizer/.test(itemTitle)) return 10;
                     if (/official audio/.test(itemTitle)) return 8;
                     if (/nightcore/.test(itemTitle)) return -50;
+                    if (/lyrics?|lyric video/.test(itemTitle)) return -40;
                     if (/cover/.test(itemTitle)) return -40;
                     if (/live/.test(itemTitle)) return -15;
-                    if (/lyrics?/.test(itemTitle)) return -10;
                     return 0;
                 })();
                 score += typeBonus;
+                // A lyric video must never beat a real music video of the song.
+                const lyric = /lyrics?|lyric video/.test(itemTitle);
 
                 // 5 · Duration closeness
                 if (Number.isFinite(durationSec)) {
@@ -2560,7 +2614,7 @@ export class UIRenderer {
 
                 const official = typeBonus >= 15;
                 const songMatch = (songNorm ? songPos >= 0 : true) || clean === songNorm;
-                return { score, songMatch, official };
+                return { score, songMatch, official, lyric };
             };
 
             const fetchVideos = (query) =>
@@ -2581,6 +2635,13 @@ export class UIRenderer {
                 fetchVideos(cacheKey).catch(() => []),
                 findArtistChannel(artist),
             ]);
+            if (artistChannel) {
+                console.debug(
+                    `[fs-video] Artist channel for "${artist}": ${artistChannel.title} (verified: ${
+                        artistChannel.verified ? 'yes' : 'no'
+                    })`
+                );
+            }
 
             const seen = new Set();
             const merged = [];
@@ -2595,15 +2656,26 @@ export class UIRenderer {
                 .map((item, index) => ({ item, index, ...scoreVideo(item, artistChannel) }))
                 .sort((a, b) => b.score - a.score || a.index - b.index);
 
-            // Pick the highest-scoring candidates for the right song. Official
-            // MVs tend to score highest; if none exists, the best available
-            // upload is chosen instead.
+            // Pick the highest-scoring candidates for the right song. Lyric
+            // videos only qualify when no real music video of the song exists.
+            const lyricPool = [];
             const candidates = [];
             for (const rankedItem of ranked) {
                 if (!rankedItem.songMatch) continue;
+                if (rankedItem.lyric) {
+                    lyricPool.push(rankedItem);
+                    continue;
+                }
                 const { item, official } = rankedItem;
                 candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
                 if (candidates.length >= 6) break;
+            }
+            if (candidates.length === 0) {
+                for (const rankedItem of lyricPool) {
+                    const { item, official } = rankedItem;
+                    candidates.push({ id: item.id, title: item.title, channelTitle: item.channelTitle, official });
+                    if (candidates.length >= 6) break;
+                }
             }
             if (candidates.length === 0) throw new Error('No video found on YouTube');
             state.searchCache.set(cacheKey, candidates);
