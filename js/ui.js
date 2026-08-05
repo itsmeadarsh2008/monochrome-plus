@@ -1404,6 +1404,12 @@ export class UIRenderer {
             console.warn('Failed to initialize fullscreen controls:', error);
         }
 
+        // Resume the music-video background if it was enabled during a previous
+        // fullscreen session (it survives fullscreen close/reopen).
+        if (this.fsVideoController) {
+            this.fsVideoController.show();
+        }
+
         const startVisualizer = () => {
             if (!visualizerSettings.isEnabled()) {
                 if (this.visualizer) this.visualizer.stop();
@@ -1480,8 +1486,12 @@ export class UIRenderer {
             this.visualizer.stop();
         }
 
+        // Pause the music-video background but keep it enabled so it stays
+        // active for the whole tab session (survives closing/reopening
+        // fullscreen and switching tracks). It resumes on the next
+        // showFullscreenCover() call.
         if (this.fsVideoController) {
-            this.fsVideoController.disable();
+            this.fsVideoController.hide();
         }
     }
 
@@ -2377,6 +2387,7 @@ export class UIRenderer {
 
         const state = {
             enabled: false,
+            hidden: false,
             player: null,
             apiReady: false,
             syncTimer: null,
@@ -2550,7 +2561,7 @@ export class UIRenderer {
             if (!player?.playVideo) return;
             state.suppressSync = false;
             try {
-                if (audio?.paused) {
+                if (state.hidden || audio?.paused) {
                     player.pauseVideo();
                 } else {
                     if (Number.isFinite(audio?.currentTime)) {
@@ -2585,6 +2596,13 @@ export class UIRenderer {
 
         const showSignInModal = (videoId = '') => {
             if (document.getElementById('fs-video-signin-modal')) return;
+            // Only surface sign-in while the fullscreen cover is visible —
+            // with the video now persisting across sessions, a failed track
+            // change must not pop a modal into the main UI.
+            if (!this.isFullscreenCoverOpen()) {
+                console.warn('[fs-video] Skipping sign-in modal: fullscreen not open');
+                return;
+            }
             // Mirror the app player's embed surface but on the nocookie host —
             // a separate session context that often bypasses the gate that
             // makes the www.youtube.com embed show "An error occurred".
@@ -2760,7 +2778,7 @@ export class UIRenderer {
                                     // point the user at sign-in.
                                     setTimeout(() => {
                                         const audio = document.getElementById('audio-player');
-                                        if (state.player !== event.target || audio?.paused) return;
+                                        if (state.player !== event.target || audio?.paused || state.hidden) return;
                                         let playerState;
                                         let currentTime;
                                         try {
@@ -2832,7 +2850,7 @@ export class UIRenderer {
             state.syncTimer = setInterval(() => {
                 const player = state.player;
                 const audio = document.getElementById('audio-player');
-                if (!player?.getCurrentTime || !audio || audio.paused || state.suppressSync) return;
+                if (!player?.getCurrentTime || !audio || audio.paused || state.suppressSync || state.hidden) return;
                 const videoTime = player.getCurrentTime();
                 if (!Number.isFinite(videoTime)) return;
                 const audioTime = audio.currentTime || 0;
@@ -2848,6 +2866,7 @@ export class UIRenderer {
 
         const disable = () => {
             state.enabled = false;
+            state.hidden = false;
             btn.classList.remove('active');
             btn.title = 'Music Video Background';
             overlay.classList.remove('video-bg-active');
@@ -2865,6 +2884,36 @@ export class UIRenderer {
             }
             wrap.innerHTML = '';
             dismissSignInModal();
+        };
+
+        // Pause the background video when the fullscreen cover is closed, but
+        // keep the feature enabled so it persists for the whole tab session.
+        const hide = () => {
+            if (!state.enabled) return;
+            state.hidden = true;
+            try {
+                state.player?.pauseVideo?.();
+            } catch {
+                /* ignore */
+            }
+            dismissSignInModal();
+        };
+
+        // Resume the background video when the fullscreen cover reopens. If no
+        // player survived (e.g. a track change failed while closed), rebuild it.
+        const show = async () => {
+            if (!state.enabled) return;
+            state.hidden = false;
+            try {
+                if (state.player?.playVideo) {
+                    syncVideoPlayback();
+                } else {
+                    const key = getTrackKey();
+                    if (key) await switchVideoForTrack(key);
+                }
+            } catch (error) {
+                console.warn('[fs-video] Failed to resume music video:', error);
+            }
         };
 
         const enable = async () => {
@@ -2939,7 +2988,7 @@ export class UIRenderer {
             });
         }
 
-        this.fsVideoController = { disable, isEnabled: () => state.enabled };
+        this.fsVideoController = { disable, isEnabled: () => state.enabled, hide, show, dismissSignInModal };
     }
 
     showPage(pageId) {
