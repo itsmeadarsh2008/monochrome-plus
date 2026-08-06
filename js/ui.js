@@ -2457,7 +2457,6 @@ export class UIRenderer {
             if (/\bofficial\b/.test(title)) score += 60;
             if (title.includes('music video')) score += 45;
             if (/\bvideo\b/.test(title)) score += 25;
-            if (/\baudio\b/.test(title)) score += 20;
             if (title.includes('visualizer')) score += 10;
             // Exact "artist - title" pairing is very likely the official video.
             if (trackArtist && trackTitle && titleNorm.includes(`${trackArtist}${trackTitle}`)) score += 40;
@@ -2465,6 +2464,7 @@ export class UIRenderer {
             // These are never the artist's official music video.
             if (/\blyrics?\b/.test(title)) score -= 200;
             if (/\bkaraoke\b/.test(title)) score -= 200;
+            if (/\baudio\b/.test(title)) score -= 200;
             if (/\bcover\b/.test(title)) score -= 90;
             if (/\blive\b/.test(title)) score -= 70;
             if (/\bremix\b/.test(title)) score -= 60;
@@ -2581,15 +2581,21 @@ export class UIRenderer {
             }
 
             // Rank candidates: the track's own video stays first, the rest are
-            // ordered so official music videos win and lyric/cover/karaoke
-            // re-uploads drop to the bottom (or out entirely).
+            // ordered so official music videos win and lyric/audio/cover/
+            // karaoke re-uploads drop to the bottom (or out entirely).
             if (candidates.length > 1) {
                 const keepPrimary = isYouTubeVideoId(track.id);
                 const head = keepPrimary ? candidates.slice(0, 1) : [];
                 const rest = (keepPrimary ? candidates.slice(1) : candidates)
                     .map((candidate) => ({ candidate, score: scoreVideoCandidate(candidate, track) }))
                     .sort((a, b) => b.score - a.score);
-                const usable = rest.filter((entry) => entry.score > -100);
+                // Audio-only uploads and lyric/karaoke videos are never the
+                // music video; exclude them as long as a real one exists.
+                const isNotMusicVideo = (candidate) => {
+                    const title = String(candidate.title || '').toLowerCase();
+                    return /\blyrics?\b/.test(title) || /\bkaraoke\b/.test(title) || /\baudio\b/.test(title);
+                };
+                const usable = rest.filter((entry) => entry.score > -100 && !isNotMusicVideo(entry.candidate));
                 const pool = usable.length ? usable : rest;
                 candidates.length = 0;
                 candidates.push(...head, ...pool.map((entry) => entry.candidate));
