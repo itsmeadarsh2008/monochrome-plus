@@ -2211,40 +2211,22 @@
                                 Refresh with new tracks
                             </button>
                         </section>
-                        <div id="home-reco-collab-row">
-                            <section class="content-section" id="home-recommended-albums-section">
-                                <div
-                                    style="
-                                        display: flex;
-                                        align-items: center;
-                                        justify-content: space-between;
-                                        margin-bottom: 1rem;
-                                    "
-                                >
-                                    <h2 class="section-title" style="margin-bottom: 0">Recommended Albums</h2>
-                                </div>
-                                <div class="card-grid" id="home-recommended-albums"></div>
-                                <button class="btn-link" id="refresh-albums-btn" style="margin-top: var(--space-4)">
-                                    Refresh with new tracks
-                                </button>
-                            </section>
-                            <section class="content-section" id="home-collab-playlists-section">
-                                <div
-                                    style="
-                                        display: flex;
-                                        align-items: center;
-                                        justify-content: space-between;
-                                        margin-bottom: 1rem;
-                                    "
-                                >
-                                    <h2 class="section-title" style="margin-bottom: 0">Collaborative Playlists</h2>
-                                </div>
-                                <div class="card-grid" id="home-collab-playlists-grid"></div>
-                                <div id="home-collab-playlists-empty" class="empty-state" style="display: none">
-                                    <p>No collaborative playlists yet. Create one from Friends.</p>
-                                </div>
-                            </section>
-                        </div>
+                        <section class="content-section" id="home-recommended-albums-section">
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    margin-bottom: 1rem;
+                                "
+                            >
+                                <h2 class="section-title" style="margin-bottom: 0">Recommended Albums</h2>
+                            </div>
+                            <div class="card-grid" id="home-recommended-albums"></div>
+                            <button class="btn-link" id="refresh-albums-btn" style="margin-top: var(--space-4)">
+                                Refresh with new tracks
+                            </button>
+                        </section>
                         <section
                             class="content-section home-friends-activity-section"
                             id="home-friends-activity-section"
@@ -2511,6 +2493,16 @@
                         </div>
                         <div class="card-grid" id="my-folders-container"></div>
                         <div class="card-grid" id="my-playlists-container"></div>
+                    </section>
+
+                    <section class="content-section" id="library-collab-playlists-section">
+                        <div class="library-header">
+                            <h2>Collaborative Playlists</h2>
+                        </div>
+                        <div class="card-grid" id="library-collab-playlists-grid"></div>
+                        <div id="library-collab-playlists-empty" class="empty-state" style="display: none">
+                            <p>No collaborative playlists yet. Create one from Friends.</p>
+                        </div>
                     </section>
 
                     <section class="content-section">

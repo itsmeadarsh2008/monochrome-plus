@@ -3295,6 +3295,8 @@ export class UIRenderer {
 
         // Render Local Files
         this.renderLocalFiles(localContainer);
+
+        this.renderLibraryCollaborativePlaylists();
     }
 
     async renderLocalFiles(container) {
@@ -3442,7 +3444,6 @@ export class UIRenderer {
             console.warn('[Home] Recommendation sections failed to load in parallel:', error);
         });
 
-        this.renderHomeCollaborativePlaylists();
         this.renderHomeFriendsActivity();
         this.renderHomeRecent();
         this.renderHomeDiscoverySections().catch((error) => {
@@ -4530,10 +4531,10 @@ export class UIRenderer {
         }
     }
 
-    async renderHomeCollaborativePlaylists(forceRefresh = false) {
-        const section = document.getElementById('home-collab-playlists-section');
-        const grid = document.getElementById('home-collab-playlists-grid');
-        const empty = document.getElementById('home-collab-playlists-empty');
+    async renderLibraryCollaborativePlaylists(forceRefresh = false) {
+        const section = document.getElementById('library-collab-playlists-section');
+        const grid = document.getElementById('library-collab-playlists-grid');
+        const empty = document.getElementById('library-collab-playlists-empty');
         if (!section || !grid || !empty) return;
 
         if (forceRefresh || grid.children.length === 0) {
@@ -4548,7 +4549,6 @@ export class UIRenderer {
                 section.style.display = '';
                 grid.innerHTML = '';
                 empty.style.display = '';
-                this.resetHomePanelSlideFx(grid);
                 return;
             }
 
@@ -4576,7 +4576,6 @@ export class UIRenderer {
                     `;
                 })
                 .join('');
-            grid.classList.add('home-panel-carousel');
 
             grid.querySelectorAll('.collab-playlist-card').forEach((card, index) => {
                 const playlist = top[index];
@@ -4605,14 +4604,12 @@ export class UIRenderer {
 
             empty.style.display = 'none';
             section.style.display = '';
-            this.applyHomePanelSlideFx(grid);
         } catch (error) {
-            console.error('[Home] Failed to load collaborative playlists:', error);
+            console.error('[Library] Failed to load collaborative playlists:', error);
             section.style.display = '';
             grid.innerHTML = '';
             empty.innerHTML = '<p>Failed to load collaborative playlists.</p>';
             empty.style.display = '';
-            this.resetHomePanelSlideFx(grid);
         }
     }
 

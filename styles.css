@@ -7305,7 +7305,7 @@ input:checked + .slider::before {
 /* Skeleton grids for recommended sections */
 #home-recommended-albums .skeleton-container,
 #home-recommended-artists .skeleton-container,
-#home-collab-playlists-grid .skeleton-container {
+#library-collab-playlists-grid .skeleton-container {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
     gap: var(--spacing-md);
@@ -12805,21 +12805,13 @@ textarea:focus {
     box-shadow: 0 8px 24px rgb(0, 0, 0, 0.16);
 }
 
-#home-reco-collab-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.7rem;
-    margin-bottom: 0.7rem;
-}
-
-#home-recommended-albums-section,
-#home-collab-playlists-section {
+#home-recommended-albums-section {
     position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.42rem;
     padding: 0.72rem 0.72rem 0.56rem;
-    margin-bottom: 0;
+    margin-bottom: var(--spacing-2xl);
     border-radius: 1rem;
     border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
     background:
@@ -12832,18 +12824,13 @@ textarea:focus {
     box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
 }
 
-#home-recommended-albums-section #home-recommended-albums,
-#home-collab-playlists-section #home-collab-playlists-grid {
+#home-recommended-albums-section #home-recommended-albums {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 0.56rem;
 }
 
 #home-recommended-albums-section > div:first-child {
     order: 1;
-    margin-bottom: 0.28rem !important;
-}
-
-#home-collab-playlists-section > div:first-child {
     margin-bottom: 0.28rem !important;
 }
 
@@ -12865,14 +12852,6 @@ textarea:focus {
     #home-recommended-albums-section > div:first-child {
         margin-bottom: 0.24rem !important;
     }
-
-    #home-collab-playlists-section > div:first-child {
-        margin-bottom: 0.24rem !important;
-    }
-}
-
-#home-reco-collab-row + .home-recommended-artists-section {
-    margin-top: 0 !important;
 }
 
 .home-friends-activity-section {
@@ -13067,82 +13046,55 @@ textarea:focus {
     }
 }
 
-#home-collab-playlists-section .empty-state {
-    margin-top: 0.32rem;
-    padding: 1rem 0.4rem 0.25rem;
-    text-align: left;
-}
-
 @media (max-width: 768px) {
-    #home-reco-collab-row {
-        gap: var(--spacing-md);
+    #home-recommended-albums-section {
+        margin-left: calc(-1 * var(--carousel-bleed));
+        margin-right: calc(-1 * var(--carousel-bleed));
+        border-radius: 0;
+        padding-left: var(--carousel-bleed);
+        padding-right: 0;
     }
 
-    #home-recommended-albums-section,
-    #home-collab-playlists-section {
-        padding: 0.64rem;
-        border-radius: 0.88rem;
-    }
-
-    #home-recommended-albums-section #home-recommended-albums,
-    #home-collab-playlists-section #home-collab-playlists-grid {
+    #home-recommended-albums-section #home-recommended-albums {
         grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
-    }
-}
-
-@media (min-width: 1024px) {
-    #home-reco-collab-row {
-        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-        gap: 0.75rem;
-        align-items: start;
-    }
-}
-
-@media (min-width: 1440px) {
-    #home-reco-collab-row {
-        grid-template-columns: minmax(0, 1.618fr) minmax(0, 1fr);
-        gap: 0.75rem;
-        align-items: start;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
 }
 
 /* Desktop panel carousels with explicit spacing */
 @media (min-width: 1024px) {
     #home-recommended-albums-section #home-recommended-albums,
-    #home-collab-playlists-section #home-collab-playlists-grid,
     html.carousel-mode #home-recommended-albums,
-    html.carousel-mode #home-collab-playlists-grid,
-    .carousel-mode #home-recommended-albums,
-    .carousel-mode #home-collab-playlists-grid {
+    .carousel-mode #home-recommended-albums {
         display: flex !important;
         flex-wrap: nowrap !important;
         gap: 0.7rem !important;
         margin: 0 !important;
-        padding: 0.1rem 0.1rem 0.22rem;
+        padding: 0.1rem 0 0.22rem;
         overflow-x: auto !important;
         overflow-y: visible !important;
         scroll-padding-left: 0.15rem;
-        scroll-padding-right: 0.15rem;
+        scroll-padding-right: 0;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         -ms-overflow-style: none;
     }
 
-    #home-recommended-albums-section #home-recommended-albums::-webkit-scrollbar,
-    #home-collab-playlists-section #home-collab-playlists-grid::-webkit-scrollbar {
+    #home-recommended-albums-section #home-recommended-albums::-webkit-scrollbar {
         display: none;
     }
 
-    #home-recommended-albums-section #home-recommended-albums > .card,
-    #home-collab-playlists-section #home-collab-playlists-grid > .card {
+    #home-recommended-albums-section #home-recommended-albums > .card {
         flex: 0 0 clamp(180px, 20vw, 255px);
         min-width: clamp(180px, 20vw, 255px);
         max-width: clamp(180px, 20vw, 255px);
     }
 }
 
-#home-recommended-albums.home-panel-carousel > .card,
-#home-collab-playlists-grid.home-panel-carousel > .card {
+#home-recommended-albums.home-panel-carousel > .card {
     opacity: var(--slide-card-opacity, 1);
     transform: translateY(var(--slide-card-raise, 0)) scale(var(--slide-card-scale, 1));
     transition:
@@ -13150,8 +13102,7 @@ textarea:focus {
         transform 220ms ease;
 }
 
-#home-recommended-albums.home-panel-carousel > .card:hover,
-#home-collab-playlists-grid.home-panel-carousel > .card:hover {
+#home-recommended-albums.home-panel-carousel > .card:hover {
     opacity: 1;
     transform: translateY(0) scale(1);
 }
