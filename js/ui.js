@@ -4074,6 +4074,44 @@ export class UIRenderer {
         return Array.from(byKey.values());
     }
 
+    _normalizeArtistKey(item) {
+        if (!item || typeof item !== 'object') return '';
+        return String(item.artist?.name || item.artists?.[0]?.name || item.name || item.uploaderName || '')
+            .trim()
+            .toLowerCase();
+    }
+
+    // Promote artist diversity in recommendation lists. Keeps at most
+    // `perArtistCap` items per artist at the front (preserving order), and only
+    // fills the tail from same-artist leftovers when `target` is finite and the
+    // pool is artist-poor — so a user who mostly listens to one artist still
+    // gets a diverse spread plus enough items to fill the row.
+    _diversifyByArtist(items = [], perArtistCap = 2, target = null) {
+        if (!Array.isArray(items) || items.length === 0) return items;
+        const counts = new Map();
+        const diversified = [];
+        const overflow = [];
+        for (const item of items) {
+            if (!item || typeof item !== 'object') continue;
+            const key = this._normalizeArtistKey(item);
+            if (!key) {
+                diversified.push(item);
+                continue;
+            }
+            const count = counts.get(key) || 0;
+            if (count >= perArtistCap) {
+                overflow.push(item);
+                continue;
+            }
+            counts.set(key, count + 1);
+            diversified.push(item);
+        }
+        if (target != null && diversified.length < target && overflow.length) {
+            diversified.push(...overflow.slice(0, target - diversified.length));
+        }
+        return target != null ? diversified.slice(0, target) : diversified;
+    }
+
     _isArtistIdCompatibleWithProvider(artistId, provider = null) {
         if (artistId === null || typeof artistId === 'undefined' || artistId === '') return false;
         if (!provider) return true;
@@ -4340,10 +4378,17 @@ export class UIRenderer {
                 const totalTarget = 20;
                 const unheardTarget = 12;
                 const listenedTarget = totalTarget - unheardTarget;
+                const diversityCap = 2;
 
-                const mixedTracks = [
-                    ...unheardCandidates.slice(0, unheardTarget),
-                    ...listenedCandidates.slice(0, listenedTarget),
+                // Artist diversity: cap how many tracks any single artist can
+                // contribute so recommendations aren't dominated by a handful
+                // of seed artists.
+                const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap);
+                const diversifiedListened = this._diversifyByArtist(listenedCandidates, diversityCap);
+
+                let mixedTracks = [
+                    ...diversifiedUnheard.slice(0, unheardTarget),
+                    ...diversifiedListened.slice(0, listenedTarget),
                 ];
 
                 const backfillPool = this._dedupeTracks([...unheardCandidates, ...listenedCandidates]);
@@ -4353,6 +4398,10 @@ export class UIRenderer {
                     if (!nextTrack?.id || mixedTracks.some((track) => track?.id === nextTrack.id)) continue;
                     mixedTracks.push(nextTrack);
                 }
+
+                // Enforce the per-artist cap across the final mix, filling the
+                // tail from same-artist leftovers only if the pool is too thin.
+                mixedTracks = this._diversifyByArtist(mixedTracks, diversityCap, totalTarget);
 
                 const shuffledMixedTracks = [...mixedTracks].sort(() => Math.random() - 0.5);
                 const filteredTracks = await this.filterUserContent(shuffledMixedTracks, 'track');
@@ -4522,7 +4571,9 @@ export class UIRenderer {
                 const filteredAlbums = await this.filterUserContent(candidateAlbums, 'album');
 
                 if (filteredAlbums.length > 0) {
-                    renderAlbums(filteredAlbums.slice(0, 12));
+                    // Prefer albums from a spread of artists rather than several
+                    // releases from the same handful of artists.
+                    renderAlbums(this._diversifyByArtist(filteredAlbums, 2, 12));
                 } else {
                     albumsContainer.innerHTML = `<div style="grid-column: 1/-1; padding: 2rem 0;">${createPlaceholder('No album recommendations found from your recent tracks yet.')}</div>`;
                     this.resetHomePanelSlideFx(albumsContainer);
@@ -6765,7 +6816,7 @@ export class UIRenderer {
             recommendedTracks = contentBlockingSettings.filterTracks(recommendedTracks);
 
             if (recommendedTracks.length > 0) {
-                renderRecommendedTracks(recommendedTracks);
+                renderRecommendedTracks(this._diversifyByArtist(recommendedTracks, 2, 20));
 
                 if (recommendedSearchInput) {
                     recommendedSearchInput.value = '';
