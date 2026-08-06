@@ -67,7 +67,7 @@ class CommandPalette {
         this.flatItems = [];
         this.allSettings = [];
         this.musicSearchAbort = null;
-        this.debouncedMusicSearch = debounce(this.searchMusic.bind(this), 300);
+        this.debouncedMusicSearch = debounce(this.searchMusic.bind(this), 200);
         this.commands = this.buildCommands();
         this.fuse = new Fuse(this.commands, {
             keys: [
@@ -335,7 +335,7 @@ class CommandPalette {
 
     init() {
         document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
                 e.preventDefault();
                 this.toggle();
             }
@@ -473,11 +473,13 @@ class CommandPalette {
         this.showMusicLoading();
 
         try {
-            // Adapted search logic for MusicAPI
+            // Adapted search logic for MusicAPI. priority: true lets the search
+            // jump the addon request queue, and the AbortSignal cancels stale
+            // in-flight requests as the user keeps typing.
             const [tracks, albums, artists] = await Promise.all([
-                api.searchTracks(query, { limit: 4 }),
-                api.searchAlbums(query, { limit: 4 }),
-                api.searchArtists(query, { limit: 4 }),
+                api.searchTracks(query, { limit: 4, priority: true, signal: controller.signal }),
+                api.searchAlbums(query, { limit: 4, priority: true, signal: controller.signal }),
+                api.searchArtists(query, { limit: 4, priority: true, signal: controller.signal }),
             ]);
 
             if (controller.signal.aborted || !this.isOpen) return;

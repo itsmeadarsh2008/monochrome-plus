@@ -137,6 +137,28 @@ export class EclipseAPI {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
+    // Build fetch options that combine the caller's AbortSignal (so stale
+    // requests like command-palette keystrokes cancel immediately) with the
+    // 15s hung-addon timeout.
+    _fetchOptions(signal, useTimeout) {
+        if (!useTimeout) return undefined;
+        if (!signal) return { signal: AbortSignal.timeout(15000) };
+        if (typeof AbortSignal.any === 'function') {
+            return { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) };
+        }
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        signal.addEventListener(
+            'abort',
+            () => {
+                clearTimeout(timer);
+                controller.abort();
+            },
+            { once: true }
+        );
+        return { signal: controller.signal };
+    }
+
     // Serialize addon requests with a minimum gap between them so parallel
     // callers (home sections, search page, command palette) don't trip the
     // addon's rate limiter. Failures never break the queue.
@@ -145,9 +167,9 @@ export class EclipseAPI {
     // Background requests (billboard resolution, non-visible prefetches) go
     // through a separate lane that only runs when the interactive queues are
     // idle, so they never delay user-facing work.
-    _enqueueRequest(fn, priority = false, background = false) {
+    _enqueueRequest(fn, priority = false, background = false, signal = null) {
         return new Promise((resolve, reject) => {
-            const item = { fn, resolve, reject };
+            const item = { fn, resolve, reject, signal };
             if (background) {
                 this._backgroundQueue.push(item);
                 this._pumpBackgroundQueue();
@@ -164,6 +186,10 @@ export class EclipseAPI {
         try {
             while (this._priorityQueue.length || this._requestQueue.length) {
                 const item = this._priorityQueue.shift() || this._requestQueue.shift();
+                if (item.signal?.aborted) {
+                    item.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+                    continue;
+                }
                 try {
                     const now = performance.now();
                     const waitMs = Math.max(0, this._lastRequestAt + MIN_REQUEST_GAP_MS - now);
@@ -191,6 +217,10 @@ export class EclipseAPI {
                     continue;
                 }
                 const item = this._backgroundQueue.shift();
+                if (item.signal?.aborted) {
+                    item.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+                    continue;
+                }
                 try {
                     const now = performance.now();
                     const waitMs = Math.max(0, this._lastRequestAt + BACKGROUND_REQUEST_GAP_MS - now);
@@ -212,7 +242,8 @@ export class EclipseAPI {
         priority = false,
         background = false,
         persistent = false,
-        attempt = 0
+        attempt = 0,
+        signal = null
     ) {
         const addon = await eclipseAddonStorage.ensureInstalled();
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
@@ -224,11 +255,14 @@ export class EclipseAPI {
         try {
             // A hung addon must never stall the queue forever: every fetch is
             // aborted after 15s so the pump moves on and sections can fall back.
+            // A caller-supplied AbortSignal (command palette keystrokes) cancels
+            // stale requests so they never sit in the queue consuming slots.
             const useTimeout = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function';
             res = await this._enqueueRequest(
-                () => fetch(url, useTimeout ? { signal: AbortSignal.timeout(15000) } : undefined),
+                () => fetch(url, this._fetchOptions(signal, useTimeout)),
                 priority,
-                background
+                background,
+                signal
             );
         } catch (error) {
             if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
@@ -252,10 +286,10 @@ export class EclipseAPI {
             }
             await this._sleep(Math.max(backoffMs, 0));
             if (persistent) {
-                return this._request(path, retries, priority, background, persistent, attempt + 1);
+                return this._request(path, retries, priority, background, persistent, attempt + 1, signal);
             }
             if (retries > 0) {
-                return this._request(path, retries - 1, priority, background);
+                return this._request(path, retries - 1, priority, background, false, 0, signal);
             }
             throw new Error(RATE_LIMIT_ERROR_MESSAGE);
         }
@@ -282,9 +316,11 @@ export class EclipseAPI {
             const data = await this._request(
                 `search?q=${encodeURIComponent(q)}`,
                 MAX_429_RETRIES,
-                false,
+                options?.priority === true,
                 options?.background === true,
-                options?.retry === true
+                options?.retry === true,
+                0,
+                options?.signal || null
             );
             const result = {
                 tracks: (data.tracks || []).map((t) => this.mapSearchTrack(t)),

@@ -218,12 +218,6 @@ function initializeCasting(audioPlayer, castBtn, player) {
 
 function initializeKeyboardShortcuts(player, audioPlayer) {
     document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-            e.preventDefault();
-            window.dispatchEvent(new CustomEvent('open-command-palette'));
-            return;
-        }
-
         if (e.target.matches('input, textarea')) return;
 
         switch (e.key.toLowerCase()) {
@@ -309,124 +303,6 @@ async function startInfiniteRadioFromSeeds(player, api, seeds = [], limit = 40) 
     document.getElementById('shuffle-btn')?.classList.remove('active');
     player.playTrackFromQueue();
     return true;
-}
-
-function initializeCommandPalette(player, api) {
-    const overlay = document.getElementById('command-palette-overlay');
-    const input = document.getElementById('command-palette-input');
-    const results = document.getElementById('command-palette-results');
-    const closeBtn = document.getElementById('close-command-palette-btn');
-    if (!overlay || !input || !results) return;
-
-    const commands = [
-        { key: 'home', desc: 'Go to Home', run: () => navigate('/') },
-        { key: 'library', desc: 'Go to Library', run: () => navigate('/library') },
-        { key: 'settings', desc: 'Go to Settings', run: () => navigate('/settings') },
-        { key: 'recent', desc: 'Go to Recent', run: () => navigate('/recent') },
-        { key: 'queue', desc: 'Open queue panel', run: () => document.getElementById('queue-btn')?.click() },
-        { key: 'play', desc: 'Play/Pause', run: () => player.handlePlayPause() },
-        { key: 'next', desc: 'Next track', run: () => player.playNext() },
-        { key: 'previous', desc: 'Previous track', run: () => player.playPrev() },
-        { key: 'shuffle', desc: 'Toggle shuffle', run: () => document.getElementById('shuffle-btn')?.click() },
-        { key: 'repeat', desc: 'Toggle repeat mode', run: () => document.getElementById('repeat-btn')?.click() },
-        {
-            key: 'lyrics',
-            desc: 'Toggle lyrics panel',
-            run: () => document.querySelector('.now-playing-bar .cover')?.click(),
-        },
-        {
-            key: 'infinite radio',
-            desc: 'Start Infinite Radio from current track/history',
-            run: async () => {
-                const { showNotification } = await loadDownloadsModule();
-                const history = await db.getHistory();
-                const seeds = player.currentTrack ? [player.currentTrack] : history.slice(0, 5);
-                const ok = await startInfiniteRadioFromSeeds(player, api, seeds, 40);
-                showNotification(ok ? 'Infinite Radio started' : 'No recommendations available right now');
-            },
-        },
-    ];
-
-    let selectedIndex = 0;
-    let visibleCommands = [...commands];
-
-    const close = () => {
-        overlay.style.display = 'none';
-        selectedIndex = 0;
-    };
-
-    const open = () => {
-        overlay.style.display = 'flex';
-        input.value = '';
-        selectedIndex = 0;
-        render();
-        input.focus();
-    };
-
-    const render = () => {
-        const q = input.value.trim().toLowerCase();
-        visibleCommands = q
-            ? commands.filter((c) => c.key.includes(q) || c.desc.toLowerCase().includes(q))
-            : [...commands];
-        if (selectedIndex >= visibleCommands.length) selectedIndex = 0;
-
-        if (!visibleCommands.length) {
-            results.innerHTML = `<div class="command-palette-item empty">No commands found</div>`;
-            return;
-        }
-
-        results.innerHTML = visibleCommands
-            .map((command, index) => {
-                const selected = index === selectedIndex ? 'selected' : '';
-                return `<button class="command-palette-item ${selected}" data-index="${index}" type="button"><span class="name">${command.key}</span><span class="desc">${command.desc}</span></button>`;
-            })
-            .join('');
-    };
-
-    const execute = async () => {
-        const command = visibleCommands[selectedIndex];
-        if (!command) return;
-        await command.run();
-        close();
-    };
-
-    window.addEventListener('open-command-palette', open);
-    closeBtn?.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) close();
-    });
-    input.addEventListener('input', () => {
-        selectedIndex = 0;
-        render();
-    });
-    input.addEventListener('keydown', async (e) => {
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            selectedIndex = Math.min(selectedIndex + 1, Math.max(visibleCommands.length - 1, 0));
-            render();
-            return;
-        }
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            selectedIndex = Math.max(selectedIndex - 1, 0);
-            render();
-            return;
-        }
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            await execute();
-            return;
-        }
-        if (e.key === 'Escape') {
-            close();
-        }
-    });
-    results.addEventListener('click', async (e) => {
-        const button = e.target.closest('.command-palette-item[data-index]');
-        if (!button) return;
-        selectedIndex = Number.parseInt(button.dataset.index, 10) || 0;
-        await execute();
-    });
 }
 
 function showOfflineNotification() {
@@ -826,7 +702,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     initializeUIInteractions(player, api, ui);
     initializeKeyboardShortcuts(player, audioPlayer);
-    initializeCommandPalette(player, api);
 
     document.getElementById('home-start-infinite-radio-btn')?.addEventListener('click', async () => {
         const { showNotification } = await loadDownloadsModule();
@@ -3197,9 +3072,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             ui.renderFriendsPage(friendParam);
         }
 
-        // Refresh home page collab section
-        if (path === '/' || path === '/home') {
-            ui.renderHomeCollaborativePlaylists(true);
+        // Refresh library collab section
+        if (path === '/library' || path.startsWith('/library/')) {
+            ui.renderLibraryCollaborativePlaylists(true);
         }
     });
 
