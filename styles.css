@@ -2500,11 +2500,36 @@ input[type='search']::-webkit-search-cancel-button {
    CAROUSEL COMPONENT - YouTube Music Style
    ========================================= */
 
+/* Bleed amount so horizontal carousels reach the content-area screen edges
+   instead of being cut off by the padded box. Matches .main-content padding. */
+:root {
+    --carousel-bleed: var(--spacing-xl);
+}
+
+@media (max-width: 1024px) {
+    :root {
+        --carousel-bleed: var(--spacing-lg);
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --carousel-bleed: var(--spacing-sm);
+    }
+}
+
+@media (hover: none) and (pointer: coarse) {
+    :root {
+        --carousel-bleed: var(--spacing-sm);
+    }
+}
+
 .carousel-container {
     position: relative;
-    width: 100%;
+    width: auto;
+    margin: 0 calc(-1 * var(--carousel-bleed));
+    padding: var(--space-fluid-sm) var(--carousel-bleed);
     overflow: hidden;
-    padding: var(--space-fluid-sm) 0;
 }
 
 .carousel-header {
@@ -2512,7 +2537,7 @@ input[type='search']::-webkit-search-cancel-button {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
-    padding: 0 var(--container-padding);
+    padding: 0 var(--carousel-bleed);
 }
 
 .carousel-title {
@@ -2554,7 +2579,6 @@ input[type='search']::-webkit-search-cancel-button {
 .carousel-track {
     display: flex;
     gap: var(--card-gap-fluid);
-    padding: 0 var(--container-padding);
     overflow-x: auto;
     scroll-behavior: smooth;
     scrollbar-width: none;
@@ -2697,9 +2721,12 @@ html.carousel-mode .card-grid,
     gap: var(--card-gap-fluid);
     padding-top: var(--space-2);
     padding-bottom: var(--space-2);
-    margin: calc(-1 * var(--space-2)) calc(-1 * var(--container-padding)) 0;
-    padding-left: var(--container-padding);
-    padding-right: var(--container-padding);
+    margin-top: calc(-1 * var(--space-2));
+    margin-bottom: 0;
+    margin-left: calc(-1 * var(--carousel-bleed));
+    margin-right: calc(-1 * var(--carousel-bleed));
+    padding-left: var(--carousel-bleed);
+    padding-right: 0;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -16553,7 +16580,7 @@ input[type='search']::-webkit-search-results-decoration {
 .jump-back-carousel-wrapper {
     position: relative;
     z-index: 1;
-    margin: 0 -0.5rem;
+    margin: 0 calc(-1 * var(--carousel-bleed));
 }
 
 .jump-back-carousel {
@@ -16564,7 +16591,7 @@ input[type='search']::-webkit-search-results-decoration {
     scroll-behavior: smooth;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    padding: 0.25rem 0.5rem 0.5rem 0;
+    padding: 0.25rem 0 0.5rem var(--carousel-bleed);
 }
 
 .jump-back-carousel::-webkit-scrollbar {
