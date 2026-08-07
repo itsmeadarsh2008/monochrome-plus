@@ -7,7 +7,7 @@
 <h1 align="center">Monochrome+</h1>
 
 <p align="center">
-  <strong>An open-source, privacy-respecting, ad-free Hi-Fi client.</strong>
+  <strong>An open-source, privacy-respecting, ad-free Hi-Fi client. Bring your own source.</strong>
 </p>
 
 <p align="center">
@@ -35,23 +35,18 @@
 ## What is Monochrome+?
 
 **Monochrome+** is an open-source, privacy-respecting, ad-free Hi-Fi client forked from
-[Monochrome](https://github.com/monochrome-music/monochrome). Instead of a hard-coded API,
-it is powered by an **Eclipse addon** ([eclipsemusic.app](https://eclipsemusic.app/docs)) —
-a self-hostable Cloudflare Worker that provides search, streaming and catalog endpoints
-for services such as TIDAL and Qobuz. You install one addon URL in Settings and the app
-does the rest.
+[Monochrome](https://github.com/monochrome-music/monochrome). It is **bring-your-own-source**:
+the app ships with no music provider built in and no hard-coded API. Instead, it is a fully
+**Eclipse-compatible** music app — any addon that speaks the
+[Eclipse addon protocol](https://eclipsemusic.app/docs) works as your stream source.
+
+Deploy (or pick) an addon — a self-hostable server or Cloudflare Worker that provides search,
+streaming and catalog endpoints for services such as TIDAL and Qobuz. Paste one addon URL in
+**Settings → Eclipse Addon** and the app does the rest. Your music source is your choice:
+switch addons any time, no account lock-in, no vendor tie-in.
 
 It provides a clean, minimalist interface for streaming high-quality music without the
 clutter of traditional platforms.
-
-## Images Preview
-
-<p align="center">
-  <img src="https://i.postimg.cc/nzrxgL0C/image.png" alt="Preview 1" width="80%"/>
-</p>
-<p align="center">
-  <img src="https://i.postimg.cc/L6tszn7B/image.png" alt="Preview 2" width="80%"/>
-</p>
 
 ---
 
@@ -95,7 +90,7 @@ clutter of traditional platforms.
 
 - Account system for cross-device syncing (Powered by Appwrite)
 - Last.fm, ListenBrainz, Maloja and LibreFM support for scrobbling
-- Eclipse addon backend — bring your own stream provider
+- Eclipse-compatible addon backend — bring your own stream source
 
 ### Download
 

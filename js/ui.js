@@ -2487,6 +2487,7 @@ export class UIRenderer {
             if (/\bkaraoke\b/.test(title)) score -= 200;
             if (/\baudio\b/.test(title)) score -= 200;
             if (/\bcover\b/.test(title)) score -= 90;
+            if (/\bmaking\b/.test(title)) score -= 90;
             if (/\blive\b/.test(title)) score -= 70;
             if (/\bremix\b/.test(title)) score -= 60;
             if (/\bextended\b/.test(title)) score -= 40;
@@ -2635,7 +2636,12 @@ export class UIRenderer {
                 // music video; exclude them while a real one exists.
                 const isNotMusicVideo = (candidate) => {
                     const title = String(candidate.title || '').toLowerCase();
-                    return /\blyrics?\b/.test(title) || /\bkaraoke\b/.test(title) || /\baudio\b/.test(title);
+                    return (
+                        /\blyrics?\b/.test(title) ||
+                        /\bkaraoke\b/.test(title) ||
+                        /\baudio\b/.test(title) ||
+                        /\bmaking\b/.test(title)
+                    );
                 };
                 let pool = rest.filter(
                     (entry) => namesTrack(entry) && entry.score > -100 && !isNotMusicVideo(entry.candidate)
