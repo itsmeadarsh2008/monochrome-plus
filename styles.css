@@ -19138,6 +19138,8 @@ button:active {
 .account-stat-card,
 .account-stats-list-card,
 .recently-played-cards .card,
-.recently-played-cards .card-image-wrapper {
+.recently-played-cards .card-image-wrapper,
+.carousel-item-large .card-image,
+.carousel-item-album .card-image {
     border-radius: 15px;
 }
