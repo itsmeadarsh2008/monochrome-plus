@@ -66,9 +66,23 @@ export const NO_ADDON_MESSAGE = 'No Eclipse addon installed. Add one in Settings
 
 const SEARCH_CACHE_TTL = 15 * 60 * 1000;
 
+// Resolved stream URLs are persisted to localStorage so replaying a track
+// (even after a page reload) skips the addon round-trip entirely. Entries are
+// only reused while comfortably inside their server-reported expiry, and any
+// stale URL that fails to load is re-resolved once (see player loaderror retry).
+const STREAM_CACHE_LOCAL_PREFIX = 'mc_stream_v1_';
+// Cap local persistence at 24h even if the addon reports a longer expiry, to
+// bound the chance of replaying a URL the server has since invalidated.
+const STREAM_CACHE_LOCAL_MAX_TTL_MS = 24 * 60 * 60 * 1000;
+// Margin before the server expiry after which we stop reusing an entry.
+const STREAM_CACHE_EXPIRY_MARGIN_S = 120;
+
 // Minimum gap between addon requests. The addon rate-limits aggressively,
 // and the app fires bursts (home = 7 parallel searches, search page = 4).
 const MIN_REQUEST_GAP_MS = 180;
+// Stream URL resolutions (playback) use a faster lane so a freshly-queued play
+// never waits a full 180ms behind search/catalog pacing.
+const PRIORITY_REQUEST_GAP_MS = 60;
 // Background work (billboard resolution, etc.) uses a more polite pace and
 // only runs when the interactive queues are idle.
 const BACKGROUND_REQUEST_GAP_MS = 450;
@@ -185,14 +199,19 @@ export class EclipseAPI {
         this._queueRunning = true;
         try {
             while (this._priorityQueue.length || this._requestQueue.length) {
-                const item = this._priorityQueue.shift() || this._requestQueue.shift();
+                // Drain priority (stream/playback) requests first; each lane
+                // enforces its own pacing so priority fetches only wait a short
+                // gap while regular search/catalog traffic stays polite.
+                const fromPriority = this._priorityQueue.length > 0;
+                const item = fromPriority ? this._priorityQueue.shift() : this._requestQueue.shift();
+                const gapMs = fromPriority ? PRIORITY_REQUEST_GAP_MS : MIN_REQUEST_GAP_MS;
                 if (item.signal?.aborted) {
                     item.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
                     continue;
                 }
                 try {
                     const now = performance.now();
-                    const waitMs = Math.max(0, this._lastRequestAt + MIN_REQUEST_GAP_MS - now);
+                    const waitMs = Math.max(0, this._lastRequestAt + gapMs - now);
                     if (waitMs > 0) await this._sleep(waitMs);
                     this._lastRequestAt = performance.now();
                     item.resolve(await item.fn());
@@ -563,14 +582,94 @@ export class EclipseAPI {
 
     // ---- streaming ------------------------------------------------------
 
+    // A stream entry is reusable only while comfortably inside its server
+    // reported expiry (same margin for memory and persistent copies).
+    _streamEntryUsable(entry) {
+        return Boolean(
+            entry && entry.expiresAt && Math.floor(Date.now() / 1000) < entry.expiresAt - STREAM_CACHE_EXPIRY_MARGIN_S
+        );
+    }
+
+    _getStreamCacheLocal(key) {
+        try {
+            const raw = localStorage.getItem(STREAM_CACHE_LOCAL_PREFIX + key);
+            if (!raw) return null;
+            const entry = JSON.parse(raw);
+            return this._streamEntryUsable(entry) ? entry : null;
+        } catch {
+            return null;
+        }
+    }
+
+    _setStreamCacheLocal(key, entry) {
+        try {
+            if (!entry) return;
+            const nowMs = Date.now();
+            const serverExpiryMs = (entry.expiresAt || 0) * 1000;
+            const maxExpiryMs = Math.min(serverExpiryMs, nowMs + STREAM_CACHE_LOCAL_MAX_TTL_MS);
+            localStorage.setItem(
+                STREAM_CACHE_LOCAL_PREFIX + key,
+                JSON.stringify({ ...entry, expiresAt: Math.floor(maxExpiryMs / 1000) })
+            );
+        } catch {
+            // Quota exceeded / storage disabled — fall back to in-memory only.
+        }
+    }
+
+    _forgetStreamCacheLocal(key) {
+        try {
+            localStorage.removeItem(STREAM_CACHE_LOCAL_PREFIX + key);
+        } catch {
+            /* ignore */
+        }
+    }
+
+    _pruneStreamCacheLocal() {
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            for (let i = 0; i < localStorage.length; i++) {
+                const storageKey = localStorage.key(i);
+                if (!storageKey || !storageKey.startsWith(STREAM_CACHE_LOCAL_PREFIX)) continue;
+                try {
+                    const entry = JSON.parse(localStorage.getItem(storageKey));
+                    if (!entry || !entry.expiresAt || now >= entry.expiresAt) {
+                        localStorage.removeItem(storageKey);
+                    }
+                } catch {
+                    localStorage.removeItem(storageKey);
+                }
+            }
+        } catch {
+            /* ignore */
+        }
+    }
+
+    /**
+     * Remove a single cached stream URL (memory + persistent) so the next
+     * resolution fetches a fresh one.
+     */
+    forgetStreamUrl(id, quality) {
+        const key = `stream_${String(id)}_${quality || 'LOSSLESS'}`;
+        this.streamCache.delete(key);
+        this._forgetStreamCacheLocal(key);
+    }
+
     async getStreamUrl(id, quality = 'LOSSLESS') {
         const trackId = String(id);
         const key = `stream_${trackId}_${quality || 'LOSSLESS'}`;
         const now = Math.floor(Date.now() / 1000);
 
+        // In-memory cache (fastest).
         const cached = this.streamCache.get(key);
-        if (cached && cached.expiresAt && now < cached.expiresAt - 120) {
+        if (this._streamEntryUsable(cached)) {
             return cached;
+        }
+
+        // Persistent cache: instant replay across sessions without an addon hit.
+        const local = this._getStreamCacheLocal(key);
+        if (local) {
+            this.streamCache.set(key, local);
+            return local;
         }
 
         const data = await this._request(`stream/${trackId}`, MAX_429_RETRIES, true);
@@ -589,6 +688,7 @@ export class EclipseAPI {
             bitrateKbps: extractBitrateKbps(data),
         };
         this.streamCache.set(key, stream);
+        this._setStreamCacheLocal(key, stream);
         return stream;
     }
 
@@ -633,6 +733,7 @@ export class EclipseAPI {
                 this.streamCache.delete(key);
             }
         }
+        this._pruneStreamCacheLocal();
     }
 
     // ---- recommendations (synthesized from addon search) ----------------
@@ -1174,6 +1275,7 @@ export class EclipseAPI {
         this.streamCache.clear();
         this._searchCache.clear();
         this.trackRegistry.clear();
+        this._clearStreamCacheLocalAll();
     }
 
     getCacheStats() {
@@ -1185,5 +1287,23 @@ export class EclipseAPI {
 
     async clearStreamCache() {
         this.streamCache.clear();
+        this._clearStreamCacheLocalAll();
+    }
+
+    _clearStreamCacheLocalAll() {
+        try {
+            const removals = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const storageKey = localStorage.key(i);
+                if (storageKey && storageKey.startsWith(STREAM_CACHE_LOCAL_PREFIX)) {
+                    removals.push(storageKey);
+                }
+            }
+            for (const storageKey of removals) {
+                localStorage.removeItem(storageKey);
+            }
+        } catch {
+            /* ignore */
+        }
     }
 }

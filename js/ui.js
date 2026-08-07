@@ -2395,6 +2395,10 @@ export class UIRenderer {
             trackKey: null,
             signInRetryTimer: null,
             suppressSync: false,
+            // Incremented on every switch/enable/disable so a stale, in-flight
+            // video build (slow addon search, candidate cycling) can never
+            // destroy or overwrite the player a newer switch just created.
+            switchGeneration: 0,
         };
 
         const getTrackKey = () => {
@@ -2461,6 +2465,23 @@ export class UIRenderer {
             // Exact "artist - title" pairing is very likely the official video.
             if (trackArtist && trackTitle && titleNorm.includes(`${trackArtist}${trackTitle}`)) score += 40;
             if (trackTitle && titleNorm.replace(trackArtist, '').includes(trackTitle)) score += 15;
+            // Title names BOTH the artist and the exact track title (any order).
+            // This is the strongest signal that the video is for THIS song and
+            // not another track by the same artist.
+            if (trackArtist && trackTitle && titleNorm.includes(trackArtist) && titleNorm.includes(trackTitle)) {
+                score += 55;
+            } else if (trackTitle && titleNorm.includes(trackTitle)) {
+                score += 20;
+            }
+            // Duration close to the track length strongly implies the right song.
+            const trackDur = Number(track.duration) || 0;
+            const candDur = Number(candidate.duration) || 0;
+            if (trackDur > 30 && candDur > 0) {
+                const diff = Math.abs(candDur - trackDur);
+                if (diff <= 8) score += 35;
+                else if (diff <= 20) score += 15;
+                else if (diff <= 45) score += 5;
+            }
             // These are never the artist's official music video.
             if (/\blyrics?\b/.test(title)) score -= 200;
             if (/\bkaraoke\b/.test(title)) score -= 200;
@@ -2520,6 +2541,21 @@ export class UIRenderer {
             return [];
         };
 
+        // The current track's own YouTube video (its audio stream source ID),
+        // when it is a real YouTube video ID. Imported tracks (Tidal, Spotify,
+        // …) carry foreign IDs that can never play on YouTube.
+        const getPrimaryCandidate = () => {
+            const track = this.player?.currentTrack;
+            if (!track?.id || !isYouTubeVideoId(track.id)) return null;
+            return {
+                id: track.id,
+                title: track.title || '',
+                channelTitle: track.artist?.name || '',
+                duration: track.duration || 0,
+                isOfficialChannel: true,
+            };
+        };
+
         // Build a candidate list for the background video. The current track's
         // own YouTube video is tried first — but only if its ID is a real
         // YouTube video ID. Imported tracks (Tidal, Spotify, …) carry foreign
@@ -2535,16 +2571,11 @@ export class UIRenderer {
             const artist = track.artist?.name || '';
             const query = `${artist} ${track.title}`.trim();
 
-            if (isYouTubeVideoId(track.id)) {
-                candidates.push({
-                    id: track.id,
-                    title: track.title || '',
-                    channelTitle: artist,
-                    duration: track.duration || 0,
-                    isOfficialChannel: true,
-                });
-                seen.add(track.id);
-                console.log('[fs-video] Primary video (current track):', track.title, '|', track.id);
+            const primary = getPrimaryCandidate();
+            if (primary) {
+                candidates.push(primary);
+                seen.add(primary.id);
+                console.log('[fs-video] Primary video (current track):', track.title, '|', primary.id);
             } else {
                 console.warn('[fs-video] Track ID is not a YouTube video ID, skipping as primary:', track.id);
             }
@@ -2572,7 +2603,12 @@ export class UIRenderer {
 
             if (candidates.length < 3 && query) {
                 console.log('[fs-video] Addon search gave few candidates, trying Piped fallback');
-                const piped = await searchYouTubeVideos(query, 8, artist);
+                // Quote the exact title so search engines rank the exact song;
+                // the strict title filter below drops anything that names a
+                // different track anyway. Fetch more so a matching video has a
+                // better chance of being present after the filter.
+                const pipedQuery = `${artist} "${track.title}"`;
+                const piped = await searchYouTubeVideos(pipedQuery, 20, artist);
                 for (const video of piped) {
                     if (seen.has(video.id)) continue;
                     seen.add(video.id);
@@ -2589,14 +2625,22 @@ export class UIRenderer {
                 const rest = (keepPrimary ? candidates.slice(1) : candidates)
                     .map((candidate) => ({ candidate, score: scoreVideoCandidate(candidate, track) }))
                     .sort((a, b) => b.score - a.score);
+                // HARD RULE: the video title must name the current track.
+                // Videos for other songs by the same artist are never
+                // acceptable, so non-matching candidates are dropped entirely.
+                const trackTitleNorm = normalizeName(track.title);
+                const namesTrack = (entry) =>
+                    Boolean(trackTitleNorm && normalizeName(entry.candidate.title).includes(trackTitleNorm));
                 // Audio-only uploads and lyric/karaoke videos are never the
-                // music video; exclude them as long as a real one exists.
+                // music video; exclude them while a real one exists.
                 const isNotMusicVideo = (candidate) => {
                     const title = String(candidate.title || '').toLowerCase();
                     return /\blyrics?\b/.test(title) || /\bkaraoke\b/.test(title) || /\baudio\b/.test(title);
                 };
-                const usable = rest.filter((entry) => entry.score > -100 && !isNotMusicVideo(entry.candidate));
-                const pool = usable.length ? usable : rest;
+                let pool = rest.filter(
+                    (entry) => namesTrack(entry) && entry.score > -100 && !isNotMusicVideo(entry.candidate)
+                );
+                if (!pool.length) pool = rest.filter(namesTrack);
                 candidates.length = 0;
                 candidates.push(...head, ...pool.map((entry) => entry.candidate));
                 if (candidates.length > 6) candidates.length = 6;
@@ -2610,14 +2654,61 @@ export class UIRenderer {
             return candidates;
         };
 
-        const switchVideoForTrack = async (_key) => {
+        const switchVideoForTrack = async () => {
+            const generation = ++state.switchGeneration;
             try {
-                const audio = document.getElementById('audio-player');
-                await createPlayer(await buildVideoCandidates(), Math.floor(audio?.currentTime || 0));
+                const audioEl = document.getElementById('audio-player');
+                const start = Math.floor(audioEl?.currentTime || 0);
+                const primary = getPrimaryCandidate();
+
+                if (primary) {
+                    // Instant path: play the track's own video right away
+                    // (no addon search round-trip) so track changes switch the
+                    // background immediately. Enrich with alternates in the
+                    // background only when the primary is already playing.
+                    await loadYoutubeApi();
+                    if (generation !== state.switchGeneration) return;
+                    try {
+                        await createPlayer([primary], start, generation);
+                        dismissSignInModal();
+                        buildVideoCandidates()
+                            .then((candidates) => {
+                                if (generation !== state.switchGeneration || candidates.length <= 1) return;
+                                try {
+                                    if (state.player?.getVideoData?.()?.video_id === primary.id) return;
+                                } catch {
+                                    /* ignore */
+                                }
+                                createPlayer(candidates, start, generation);
+                            })
+                            .catch(() => {});
+                        return;
+                    } catch (error) {
+                        if (generation !== state.switchGeneration) return;
+                        console.warn('[fs-video] Primary video failed, trying alternates:', error);
+                    }
+                }
+
+                const candidates = await buildVideoCandidates();
+                if (generation !== state.switchGeneration) return;
+                if (!candidates.length) {
+                    // No video title names this track — clear the previous
+                    // track's clip rather than playing a wrong song's video
+                    // over the new track.
+                    console.warn('[fs-video] No matching video for current track; clearing background video');
+                    clearPlayer();
+                    return;
+                }
+                await loadYoutubeApi();
+                if (generation !== state.switchGeneration) return;
+                await createPlayer(candidates, start, generation);
+                dismissSignInModal();
             } catch (error) {
+                if (generation !== state.switchGeneration) return;
                 console.warn('[fs-video] Failed to switch music video:', error);
                 showNotification(`Music video failed: ${error?.message || error}`, 'warning');
-                showSignInModal(currentTrackVideoId());
+                const videoId = currentTrackVideoId();
+                if (videoId) showSignInModal(videoId);
             }
         };
 
@@ -2735,12 +2826,16 @@ export class UIRenderer {
             }
         };
 
-        const createPlayer = (candidates, start) =>
+        const createPlayer = (candidates, start, generation = state.switchGeneration) =>
             new Promise((resolve, reject) => {
                 let sawRestrictive = false;
                 let lastVideoId = '';
                 let hangCount = 0;
+                const isStale = () => generation !== state.switchGeneration;
                 const tryCandidate = (index) => {
+                    // A newer switch/enable/disable took over — never destroy
+                    // its player or create a video for the old track.
+                    if (isStale()) return;
                     const candidate = candidates[index];
                     if (!candidate) {
                         if (sawRestrictive) {
@@ -2773,7 +2868,7 @@ export class UIRenderer {
                     // may be gated (embedding disabled / sign-in). Cycle to the
                     // next candidate; only give up after two consecutive hangs.
                     const watchdog = setTimeout(() => {
-                        if (settled) return;
+                        if (settled || isStale()) return;
                         settled = true;
                         sawRestrictive = true;
                         hangCount += 1;
@@ -2796,7 +2891,7 @@ export class UIRenderer {
                         tryCandidate(index + 1);
                     }, 8000);
                     const fail = (code) => {
-                        if (settled) return;
+                        if (settled || isStale()) return;
                         settled = true;
                         clearTimeout(watchdog);
                         if (code === 101 || code === 150) sawRestrictive = true;
@@ -2938,16 +3033,7 @@ export class UIRenderer {
             }, 1000);
         };
 
-        const disable = () => {
-            state.enabled = false;
-            state.hidden = false;
-            btn.classList.remove('active');
-            btn.title = 'Music Video Background';
-            overlay.classList.remove('video-bg-active');
-            if (state.syncTimer) {
-                clearInterval(state.syncTimer);
-                state.syncTimer = null;
-            }
+        const clearPlayer = () => {
             if (state.player) {
                 try {
                     state.player.destroy();
@@ -2957,6 +3043,22 @@ export class UIRenderer {
                 state.player = null;
             }
             wrap.innerHTML = '';
+        };
+
+        const disable = () => {
+            // Invalidate any in-flight switch/build so a stale async build can
+            // never recreate a player after the user disabled the feature.
+            state.switchGeneration += 1;
+            state.enabled = false;
+            state.hidden = false;
+            btn.classList.remove('active');
+            btn.title = 'Music Video Background';
+            overlay.classList.remove('video-bg-active');
+            if (state.syncTimer) {
+                clearInterval(state.syncTimer);
+                state.syncTimer = null;
+            }
+            clearPlayer();
             dismissSignInModal();
         };
 
@@ -2983,7 +3085,7 @@ export class UIRenderer {
                     syncVideoPlayback();
                 } else {
                     const key = getTrackKey();
-                    if (key) await switchVideoForTrack(key);
+                    if (key) await switchVideoForTrack();
                 }
             } catch (error) {
                 console.warn('[fs-video] Failed to resume music video:', error);
@@ -2993,30 +3095,53 @@ export class UIRenderer {
         const enable = async () => {
             btn.classList.add('active');
             btn.title = 'Finding video…';
+            const generation = ++state.switchGeneration;
             try {
                 const key = getTrackKey();
                 if (!key) throw new Error('No current track');
                 state.trackKey = key;
-                // Build candidates (current track's video + addon-search
-                // alternates, no /results scraping), then ensure the iframe
-                // API is bootstrapped.
-                const candidates = await buildVideoCandidates();
-                if (!candidates.length) throw new Error('Current track has no video');
                 await loadYoutubeApi();
+                if (generation !== state.switchGeneration) return;
                 if (!this.isFullscreenCoverOpen()) throw new Error('Fullscreen closed while loading');
                 const audio = document.getElementById('audio-player');
-                await createPlayer(candidates, Math.floor(audio?.currentTime || 0));
+                const start = Math.floor(audio?.currentTime || 0);
+                const primary = getPrimaryCandidate();
+                let candidates = primary ? [primary] : null;
+                if (!candidates?.length) {
+                    candidates = await buildVideoCandidates();
+                    if (generation !== state.switchGeneration) return;
+                }
+                if (!candidates.length) throw new Error('Current track has no video');
+                await createPlayer(candidates, start, generation);
+                if (generation !== state.switchGeneration) return;
                 state.enabled = true;
                 overlay.classList.add('video-bg-active');
                 btn.title = 'Music Video Background';
                 startSync();
                 dismissSignInModal();
+                // If the track changed while we were enabling, switch to it.
                 const currentKey = getTrackKey();
                 if (currentKey && currentKey !== key) {
                     state.trackKey = currentKey;
-                    switchVideoForTrack(currentKey);
+                    switchVideoForTrack();
+                }
+                // With only the primary loaded, enrich with alternates in the
+                // background so a restricted/blocked primary can fall through.
+                if (candidates.length <= 1 && primary) {
+                    buildVideoCandidates()
+                        .then((full) => {
+                            if (generation !== state.switchGeneration || full.length <= 1) return;
+                            try {
+                                if (state.player?.getVideoData?.()?.video_id === primary.id) return;
+                            } catch {
+                                /* ignore */
+                            }
+                            createPlayer(full, start, generation);
+                        })
+                        .catch(() => {});
                 }
             } catch (error) {
+                if (generation !== state.switchGeneration) return;
                 console.warn('[fs-video] Failed to start music video background:', error);
                 btn.classList.remove('active');
                 btn.title = 'Music Video Background';
@@ -3025,7 +3150,8 @@ export class UIRenderer {
                 if (!document.getElementById('fs-video-signin-modal')) {
                     showNotification(`Music video failed: ${error?.message || error}`, 'warning');
                 }
-                showSignInModal(currentTrackVideoId());
+                const videoId = currentTrackVideoId();
+                if (videoId) showSignInModal(videoId);
             }
         };
 
@@ -3058,7 +3184,7 @@ export class UIRenderer {
                 const key = getTrackKey();
                 if (!key || key === state.trackKey) return;
                 state.trackKey = key;
-                switchVideoForTrack(key);
+                switchVideoForTrack();
             });
         }
 

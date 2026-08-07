@@ -65,6 +65,7 @@ export class Player {
         this._advanceLockTimer = null;
         this._transitionState = 'idle';
         this._preloadFailureCounts = new Map();
+        this._streamLoadRetries = new Map();
         this._atmosUnsupportedInBrowser = false;
         this._atmosSupportChecked = false;
         this._atmosSupported = false;
@@ -527,11 +528,10 @@ export class Player {
         }
 
         this._currentTrackWarmupAbortController = new AbortController();
-        // Run in background after playback has started to avoid delaying initial audio start.
-        setTimeout(() => {
-            if (this._currentTrackWarmupAbortController?.signal.aborted) return;
-            this._warmupStream(url, this._currentTrackWarmupAbortController.signal, 393215).catch(() => {});
-        }, 280);
+        // Fire immediately (not after playback starts) so the head bytes land in
+        // the browser cache before the audio element requests them. This makes
+        // the initial 'canplay' fire almost instantly for the first track too.
+        this._warmupStream(url, this._currentTrackWarmupAbortController.signal, 1048575).catch(() => {});
     }
 
     scheduleBackgroundPreload(delayMs = 600) {
@@ -942,7 +942,7 @@ export class Player {
                     }
 
                     // The nearest upcoming track gets a larger warmup window for near-instant start.
-                    const warmupBytes = taskIndex === 0 ? 262143 : 131071;
+                    const warmupBytes = taskIndex === 0 ? 1048575 : 393215;
                     this._warmupStream(url, signal, warmupBytes).catch(() => {});
                 } catch (error) {
                     if (error.name !== 'AbortError') {
@@ -1181,6 +1181,14 @@ export class Player {
             // the stream — abort instead of starting a second audio instance.
             if (isStalePlay()) return;
 
+            // Prime the browser cache with the head of the stream the moment we
+            // know the URL. Howler's html5 audio element (and any cached-start
+            // path below) then reads the first chunk from disk cache instead of
+            // the network, cutting perceived buffering to near zero. Non-blocking.
+            if (typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
+                this._warmupCurrentTrack(streamUrl);
+            }
+
             // Dolby Atmos (E-AC3-JOC/AC-4) can't be decoded by most browsers.
             // Fail fast with a clear message and skip to the next track instead
             // of hanging in buffering or erroring silently.
@@ -1265,7 +1273,7 @@ export class Player {
             }
 
             // Post-playback tasks
-            this.scheduleBackgroundPreload();
+            this.scheduleBackgroundPreload(200);
             this._setAdvanceInFlight(false);
         } catch (error) {
             // A newer play request superseded this one — ignore errors (and
@@ -2099,6 +2107,14 @@ export class Player {
             Howler.html5PoolSize = 20;
         }
 
+        // Start html5 audio as soon as the browser has buffered enough data to
+        // begin playback ('canplay') instead of waiting for 'canplaythrough'.
+        // 'canplaythrough' only fires once the whole file (or a very large
+        // chunk) is buffered, which makes lossless/Hi-Res tracks take seconds
+        // to start. 'canplay' gives near-instant start while the browser keeps
+        // streaming the rest in the background.
+        Howler._canPlayEvent = 'canplay';
+
         // Clean up previous Howler sound with fade to prevent jitter
         this._cleanupHowler();
 
@@ -2141,13 +2157,27 @@ export class Player {
                 }
 
                 // If this sound is still the active one and never started
-                // playing (e.g. the browser can't decode the format), skip to
-                // the next track instead of hanging forever.
-                setTimeout(() => {
-                    if (this._howlerSound === failedSound && !failedSound.playing()) {
-                        this._cleanupHowler();
-                        this.playNext(1);
+                // playing (e.g. a cached stream URL was invalidated server-side
+                // before its nominal expiry, or the browser can't decode the
+                // format), recover or skip to the next track instead of hanging.
+                setTimeout(async () => {
+                    if (this._howlerSound !== failedSound || failedSound.playing()) return;
+
+                    const track = this.currentTrack;
+                    if (track && !track.isLocal && !this._streamLoadRetries?.get(String(track.id))) {
+                        (this._streamLoadRetries ||= new Map()).set(String(track.id), true);
+                        try {
+                            const pos = typeof failedSound.seek === 'function' ? failedSound.seek() : 0;
+                            this._cleanupHowler();
+                            await this._recoverWithFreshStream(Math.max(0, pos || 0));
+                            return;
+                        } catch (err) {
+                            console.warn('[Howler] Fresh stream retry failed:', err);
+                        }
                     }
+
+                    this._cleanupHowler();
+                    this.playNext(1);
                 }, 400);
             },
             onplayerror: (id, error) => {
@@ -2191,7 +2221,7 @@ export class Player {
                 this._howlerPlaybackMonitor();
                 this.startPlaybackMonitor();
                 this._warmupCurrentTrack(streamUrl);
-                this.scheduleBackgroundPreload(350);
+                this.scheduleBackgroundPreload(150);
             },
             onpause: () => {
                 try {
@@ -2332,6 +2362,7 @@ export class Player {
             const cacheKey = `stream_${trackId}_${effectiveQuality}`;
             if (this.api?.tidalAPI?.streamCache) {
                 this.api.tidalAPI.streamCache.delete(cacheKey);
+                this.api.tidalAPI.forgetStreamUrl?.(trackId, effectiveQuality);
             } else if (this.api?.streamCache) {
                 this.api.streamCache.delete(cacheKey);
             }

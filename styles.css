@@ -6944,6 +6944,10 @@ input:checked + .slider::before {
         gap: 0.35rem;
     }
 
+    #fullscreen-cover-overlay.video-bg-active .fullscreen-main-view {
+        justify-content: center;
+    }
+
     #fullscreen-cover-overlay #fullscreen-cover-image {
         max-width: min(62vw, 300px);
         max-height: min(34vh, 240px);
@@ -6974,6 +6978,10 @@ input:checked + .slider::before {
         justify-content: flex-start;
         padding-top: 3.2rem;
         padding-bottom: 0.5rem;
+    }
+
+    #fullscreen-cover-overlay.video-bg-active .fullscreen-main-view {
+        justify-content: center;
     }
 
     #fullscreen-cover-overlay #fullscreen-cover-image {
