@@ -3556,13 +3556,11 @@ export class UIRenderer {
         if (contentEl) contentEl.style.display = 'block';
 
         const refreshSongsBtn = document.getElementById('refresh-songs-btn');
-        const refreshAlbumsBtn = document.getElementById('refresh-albums-btn');
         const refreshArtistsBtn = document.getElementById('refresh-artists-btn');
         const openFriendsBtn = document.getElementById('home-friends-open-btn');
         const clearRecentBtn = document.getElementById('clear-recent-btn');
 
         if (refreshSongsBtn) refreshSongsBtn.onclick = () => this.renderHomeSongs(true);
-        if (refreshAlbumsBtn) refreshAlbumsBtn.onclick = () => this.renderHomeAlbums(true);
         if (refreshArtistsBtn) refreshArtistsBtn.onclick = () => this.renderHomeArtists(true);
         if (openFriendsBtn) openFriendsBtn.onclick = () => navigate('/friends');
         if (clearRecentBtn)

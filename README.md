@@ -30,6 +30,9 @@
   <a href="https://github.com/itsmeadarsh2008/monochrome-plus/commits/master">
     <img src="https://img.shields.io/github/last-commit/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=git&logoColor=ffffff&color=000000&labelColor=000000" alt="Last commit">
   </a>
+  <a href="https://discord.gg/ncKKpJpZbk">
+    <img src="https://img.shields.io/badge/join-000000?style=for-the-badge&logo=discord&logoColor=ffffff&label=Discord" alt="Discord">
+  </a>
 </p>
 
 <p align="center">
@@ -38,7 +41,8 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#usage">Usage</a> •
   <a href="#self-hosting">Self-Hosting</a> •
-  <a href="docs/CONTRIBUTE.md">Contributing</a>
+  <a href="docs/CONTRIBUTE.md">Contributing</a> •
+  <a href="https://discord.gg/ncKKpJpZbk">Discord</a>
 </p>
 
 ---
