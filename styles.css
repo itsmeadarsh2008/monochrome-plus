@@ -19119,3 +19119,25 @@ button:active {
         height: 48px;
     }
 }
+
+/* Unified 15px card radius */
+.card,
+.card-image-wrapper,
+.card-image,
+.card-collage,
+.addon-card,
+.billboard-album-card,
+.collab-playlist-card,
+.friend-card,
+.friend-card-shell,
+.home-friend-activity-card,
+.home-recent-card,
+.jump-back-card,
+.profile-card,
+.search-artist-card,
+.account-stat-card,
+.account-stats-list-card,
+.recently-played-cards .card,
+.recently-played-cards .card-image-wrapper {
+    border-radius: 15px;
+}
