@@ -2973,56 +2973,6 @@ html.carousel-mode .card-grid > *,
     transform: translateY(-12px) scale(1.025);
 }
 
-.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
-    animation: ultra-butter-wave var(--motion-wave-duration, 6s) cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
-.disable-gpu-acceleration.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
-    animation-name: ultra-butter-wave-2d;
-}
-
-.thermal-adaptive.animations-ultra .now-playing-bar .cover-shell:not(.rotating, :hover) {
-    animation-duration: calc(var(--motion-wave-duration, 6s) * 1.2);
-}
-
-@keyframes ultra-butter-wave {
-    0%,
-    100% {
-        transform: translate3d(0, 0, 0) rotate(0deg);
-    }
-
-    25% {
-        transform: translate3d(0, calc(var(--motion-wave-amplitude, 4px) * -1), 0) rotate(-0.35deg);
-    }
-
-    50% {
-        transform: translate3d(0, 0, 0) rotate(0deg);
-    }
-
-    75% {
-        transform: translate3d(0, var(--motion-wave-amplitude, 4px), 0) rotate(0.35deg);
-    }
-}
-
-@keyframes ultra-butter-wave-2d {
-    0%,
-    100% {
-        transform: translateY(0) rotate(0deg);
-    }
-
-    25% {
-        transform: translateY(calc(var(--motion-wave-amplitude, 4px) * -1)) rotate(-0.35deg);
-    }
-
-    50% {
-        transform: translateY(0) rotate(0deg);
-    }
-
-    75% {
-        transform: translateY(var(--motion-wave-amplitude, 4px)) rotate(0.35deg);
-    }
-}
-
 .animate-spin {
     animation: spin 1s linear infinite;
 }
@@ -5466,6 +5416,7 @@ input:checked + .slider::before {
     height: 6px;
     background-color: var(--secondary);
     border-radius: var(--radius-xs);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
 }
 
 .progress-bar:hover {
@@ -5475,29 +5426,42 @@ input:checked + .slider::before {
 .progress-bar .progress-fill {
     width: 0;
     height: 100%;
-    background-color: var(--muted-foreground);
+    background-color: var(--highlight);
     border-radius: var(--radius-xs);
     transition: background-color 0.2s ease;
     position: relative;
     pointer-events: none;
 }
 
-.progress-bar:hover .progress-fill {
+/* Crisp, always-visible handle on the fill edge */
+.progress-bar .progress-fill::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: var(--radius-full);
     background-color: var(--highlight);
+    box-shadow:
+        inset 0 0 0 2px var(--background),
+        0 1px 3px rgb(0 0 0 / 0.4);
+    transition:
+        width 0.15s ease,
+        height 0.15s ease,
+        box-shadow 0.15s ease;
+    pointer-events: none;
 }
 
 .progress-bar:hover .progress-fill::after,
 .progress-bar:active .progress-fill::after {
-    content: '';
-    position: absolute;
-    right: -6px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 12px;
-    height: 12px;
-    background-color: var(--highlight);
-    border-radius: var(--radius-full);
-    box-shadow: 0 2px 4px rgb(0, 0, 0, 0.3);
+    width: 14px;
+    height: 14px;
+    box-shadow:
+        inset 0 0 0 2px var(--background),
+        0 0 0 4px color-mix(in srgb, var(--highlight) 16%, transparent),
+        0 2px 8px rgb(0 0 0 / 0.45);
 }
 
 .progress-bar.has-waveform.waveform-loaded {
@@ -5569,19 +5533,21 @@ input:checked + .slider::before {
     .now-playing-bar #progress-bar .progress-fill::after {
         content: '';
         position: absolute;
-        right: -1px;
+        right: -2px;
         top: 50%;
         width: 4px;
-        height: 22px;
-        border-radius: 2px;
+        height: 20px;
+        border-radius: var(--radius-xs);
         transform: translateY(-50%);
         background: var(--highlight);
         box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--background) 45%, transparent),
-            0 2px 8px color-mix(in srgb, var(--highlight) 42%, transparent);
+            inset 0 0 0 1px color-mix(in srgb, var(--background) 30%, transparent),
+            0 0 0 1px color-mix(in srgb, var(--background) 55%, transparent),
+            0 2px 6px color-mix(in srgb, var(--highlight) 40%, transparent);
         pointer-events: none;
         z-index: 4;
         transition:
+            height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
             transform 0.36s cubic-bezier(0.25, 0.46, 0.45, 0.94),
             background-color 0.2s ease;
     }
@@ -5646,19 +5612,21 @@ input:checked + .slider::before {
     #fs-progress-fill::after {
         content: '';
         position: absolute;
-        right: -1px;
+        right: -2px;
         top: 50%;
         width: 4px;
         height: 22px;
-        border-radius: 2px;
+        border-radius: var(--radius-xs);
         transform: translateY(-50%);
         background: #fff;
         box-shadow:
-            0 0 0 1px rgb(0 0 0 / 0.35),
+            inset 0 0 0 1px rgb(0 0 0 / 0.35),
+            0 0 0 1px rgb(0 0 0 / 0.4),
             0 2px 8px rgb(255 255 255 / 0.3);
         pointer-events: none;
         z-index: 4;
         transition:
+            height 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94),
             transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94),
             background-color 0.2s ease;
     }
