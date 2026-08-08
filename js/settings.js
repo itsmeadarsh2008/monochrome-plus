@@ -1209,9 +1209,29 @@ export function initializeSettings(scrobbler, player, api, ui) {
     // Streaming Quality setting
     const streamingQualitySetting = document.getElementById('streaming-quality-setting');
     if (streamingQualitySetting) {
+        // Dolby Atmos needs E-AC3/AC-4 decoding, which most browsers lack
+        // (every desktop Chrome/Chromium, Firefox, etc.). When unsupported,
+        // disable the option so it can't be picked, and revert a previously
+        // saved Atmos preference to Hi-Res FLAC so playback never has to
+        // silently downgrade or show a fallback notice.
+        const atmosOption = streamingQualitySetting.querySelector('option[value="DOLBY_ATMOS"]');
+        const atmosPlayable = !!player._supportsDolbyAtmosWebPlayback?.();
+        if (atmosOption && !atmosPlayable) {
+            atmosOption.disabled = true;
+            atmosOption.textContent = 'Dolby Atmos (not supported in this browser)';
+            atmosOption.title = "This browser can't decode E-AC3/AC-4 (Dolby Atmos).";
+        }
+
         const savedQuality = localStorage.getItem('playback-quality') || 'HI_RES_LOSSLESS';
-        streamingQualitySetting.value = savedQuality;
-        player.setQuality(savedQuality);
+        let effectiveQuality = savedQuality;
+        if (effectiveQuality === 'DOLBY_ATMOS' && !atmosPlayable) {
+            effectiveQuality = 'HI_RES_LOSSLESS';
+        }
+        streamingQualitySetting.value = effectiveQuality;
+        player.setQuality(effectiveQuality);
+        if (effectiveQuality !== savedQuality) {
+            localStorage.setItem('playback-quality', effectiveQuality);
+        }
 
         streamingQualitySetting.addEventListener('change', (e) => {
             const newQuality = e.target.value;

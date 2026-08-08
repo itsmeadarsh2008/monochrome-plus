@@ -1181,32 +1181,32 @@ export class Player {
             // the stream — abort instead of starting a second audio instance.
             if (isStalePlay()) return;
 
-            // Prime the browser cache with the head of the stream the moment we
-            // know the URL. Howler's html5 audio element (and any cached-start
-            // path below) then reads the first chunk from disk cache instead of
-            // the network, cutting perceived buffering to near zero. Non-blocking.
-            if (typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
-                this._warmupCurrentTrack(streamUrl);
-            }
-
             // Dolby Atmos (E-AC3-JOC/AC-4) can't be decoded by most browsers.
-            // Fail fast with a clear message and skip to the next track instead
-            // of hanging in buffering or erroring silently.
+            // There is no fallback tier to play here — the stream is Atmos and
+            // this browser simply can't render it, so refuse honestly instead
+            // of silently downgrading or hanging in buffering.
             if (streamInfo && this._isAtmosStream(streamInfo, streamUrl) && !this._supportsDolbyAtmosWebPlayback()) {
+                console.warn(`[Dolby Atmos] Cannot play "${trackTitle}" — this browser can't decode E-AC3/AC-4.`);
+                showNotification('Cannot Play Dolby Audio', 4000);
                 try {
                     this.audio.dispatchEvent(new Event('error'));
                 } catch {
                     /* ignore */
                 }
-                showNotification(
-                    `"${trackTitle}" is only available in Dolby Atmos, which this browser can't play. Skipping to the next track.`
-                );
                 this.api.clearStreamCache?.(track.id);
                 this.preloadCache.delete(track.id);
                 if (recursiveCount < currentQueue.length) {
                     setTimeout(() => this.playNext(recursiveCount + 1), 800);
                 }
                 return;
+            }
+
+            // Prime the browser cache with the head of the stream the moment we
+            // know the URL. Howler's html5 audio element (and any cached-start
+            // path below) then reads the first chunk from disk cache instead of
+            // the network, cutting perceived buffering to near zero. Non-blocking.
+            if (typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
+                this._warmupCurrentTrack(streamUrl);
             }
 
             // Handle DASH/HLS streams via dash.js or Shaka Player, use Howler for regular files
