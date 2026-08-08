@@ -478,82 +478,17 @@ export class Player {
         }
     }
 
-    _getPreloadConcurrency() {
-        const mode = performanceModeSettings.getMode();
-        switch (mode) {
-            case 'extreme':
-                return 3;
-            case 'performance':
-                return 2;
-            case 'balanced':
-                return 2;
-            case 'quality':
-            default:
-                return 1;
-        }
+    _warmupStream() {
+        // Preloading is disabled — never fetch audio ahead of playback.
+        return Promise.resolve();
     }
 
-    _warmupStream(url, signal, bytes = 524287) {
-        if (!url || typeof url !== 'string' || url.startsWith('blob:')) {
-            return Promise.resolve();
-        }
-
-        const normalizedBytes = Math.max(65535, Math.floor(bytes));
-        const inflightKey = `${url}|${normalizedBytes}`;
-        if (this._prefetchInflight.has(inflightKey)) {
-            return this._prefetchInflight.get(inflightKey);
-        }
-
-        const warmupPromise = fetch(url, {
-            method: 'GET',
-            headers: { Range: `bytes=0-${normalizedBytes}` },
-            signal,
-            cache: 'force-cache',
-        })
-            .then(() => undefined)
-            .catch(() => undefined)
-            .finally(() => {
-                if (this._prefetchInflight.get(inflightKey) === warmupPromise) {
-                    this._prefetchInflight.delete(inflightKey);
-                }
-            });
-
-        this._prefetchInflight.set(inflightKey, warmupPromise);
-        return warmupPromise;
+    _warmupCurrentTrack() {
+        // Preloading is disabled — do not warm the browser cache before play.
     }
 
-    _warmupCurrentTrack(url) {
-        if (this._currentTrackWarmupAbortController) {
-            this._currentTrackWarmupAbortController.abort();
-        }
-
-        this._currentTrackWarmupAbortController = new AbortController();
-        // Fire immediately (not after playback starts) so the head bytes land in
-        // the browser cache before the audio element requests them. This makes
-        // the initial 'canplay' fire almost instantly for the first track too.
-        this._warmupStream(url, this._currentTrackWarmupAbortController.signal, 1048575).catch(() => {});
-    }
-
-    scheduleBackgroundPreload(delayMs = 600) {
-        if (this._backgroundPreloadTimer) {
-            clearTimeout(this._backgroundPreloadTimer);
-        }
-
-        this._backgroundPreloadTimer = setTimeout(
-            () => {
-                this._backgroundPreloadTimer = null;
-                const run = () => {
-                    this.preloadNextTracks().catch(() => {});
-                };
-
-                if (typeof requestIdleCallback === 'function') {
-                    requestIdleCallback(run, { timeout: 1200 });
-                } else {
-                    setTimeout(run, 0);
-                }
-            },
-            Math.max(0, delayMs)
-        );
+    scheduleBackgroundPreload() {
+        // Preloading is disabled — no background fetch of upcoming tracks.
     }
 
     _updateTrackInfoUI(track) {
@@ -888,93 +823,9 @@ export class Player {
     }
 
     async preloadNextTracks() {
-        if (this.preloadAbortController) {
-            this.preloadAbortController.abort();
-        }
-
-        this.preloadAbortController = new AbortController();
-        const currentQueue = this.shuffleActive ? this.shuffledQueue : this.queue;
-        const tracksToPreload = [];
-
-        // Get preload count from performance mode (2-5 tracks based on mode)
-        const preloadCount = this.getPreloadCount();
-
-        for (let i = 1; i <= preloadCount; i++) {
-            const nextIndex = this.currentQueueIndex + i;
-            if (nextIndex < currentQueue.length) {
-                tracksToPreload.push({ track: currentQueue[nextIndex], index: nextIndex });
-            }
-        }
-
-        const preloadCandidates = tracksToPreload.filter(({ track }) => {
-            if (!track || this.preloadCache.has(track.id)) return false;
-            const isTracker = track.isTracker || (track.id && String(track.id).startsWith('tracker-'));
-            return !(track.isLocal || isTracker || (track.audioUrl && !track.isLocal));
-        });
-
-        if (!preloadCandidates.length) return;
-
-        const signal = this.preloadAbortController.signal;
-        const concurrency = Math.min(this._getPreloadConcurrency(), preloadCandidates.length);
-        let cursor = 0;
-
-        const worker = async () => {
-            while (cursor < preloadCandidates.length) {
-                if (signal.aborted) return;
-                const taskIndex = cursor++;
-                const { track } = preloadCandidates[taskIndex];
-
-                try {
-                    const streamUrl = await this._resolveStreamUrlWithRetry(track, 3, 160);
-                    if (signal.aborted) return;
-
-                    let url = streamUrl;
-                    if (typeof streamUrl === 'object' && streamUrl.url) {
-                        url = streamUrl.url;
-                    }
-
-                    // _resolveStreamUrlWithRetry already cached the full stream
-                    // info; ensure the entry keeps it (don't overwrite with the
-                    // bare URL so exact quality metadata survives preload).
-                    const cachedEntry = this.preloadCache.get(track.id);
-                    if (!cachedEntry) {
-                        this.preloadCache.set(track.id, url);
-                    }
-
-                    // The nearest upcoming track gets a larger warmup window for near-instant start.
-                    const warmupBytes = taskIndex === 0 ? 1048575 : 393215;
-                    this._warmupStream(url, signal, warmupBytes).catch(() => {});
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        const failureCount = this._preloadFailureCounts.get(String(track.id)) || 0;
-                        if (failureCount > 3) {
-                            track.isUnavailable = true;
-                        }
-                    }
-                }
-            }
-        };
-
-        await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    }
-
-    /**
-     * Get the number of tracks to preload based on performance mode
-     * @returns {number} Number of tracks to preload
-     */
-    getPreloadCount() {
-        const mode = performanceModeSettings.getMode();
-        switch (mode) {
-            case 'extreme':
-                return 8; // Aggressive preloading for best performance
-            case 'performance':
-                return 5;
-            case 'balanced':
-                return 3;
-            case 'quality':
-            default:
-                return 3;
-        }
+        // Preloading is disabled — stream URLs are only resolved when a track
+        // is actually played.
+        return Promise.resolve();
     }
 
     /**
