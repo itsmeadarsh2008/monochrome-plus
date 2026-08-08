@@ -64,6 +64,86 @@ export const eclipseAddonStorage = {
 
 export const NO_ADDON_MESSAGE = 'No Eclipse addon installed. Add one in Settings → Eclipse Addon.';
 
+// Classifies an addon's base URL to explain why it works on one origin (the
+// dev monitor) but not another (a deployed/hosted site).
+export function classifyAddonHost(baseUrl) {
+    try {
+        const u = new URL(String(baseUrl || '').split('#')[0]);
+        const hostname = u.hostname.toLowerCase();
+        const isLoopback =
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '::1' ||
+            hostname === '[::1]' ||
+            /^127\./.test(hostname);
+        const isPrivateIp =
+            !isLoopback &&
+            (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname) ||
+                hostname.endsWith('.local') ||
+                hostname.endsWith('.lan') ||
+                hostname.endsWith('.internal'));
+        const isInsecure = u.protocol === 'http:' && hostname !== 'localhost' && hostname !== '127.0.0.1';
+        return {
+            protocol: u.protocol,
+            hostname,
+            isLoopback,
+            isPrivateIp,
+            isInsecure,
+        };
+    } catch {
+        return { protocol: '', hostname: '', isLoopback: false, isPrivateIp: false, isInsecure: false };
+    }
+}
+
+// Probes whether this browser can actually reach an installed addon. Returns a
+// classification plus a fetched flag so the UI can explain the failure.
+export async function probeAddonReachability(addon) {
+    const baseUrl = String(addon?.baseUrl || '').replace(/\/+$/, '');
+    const host = classifyAddonHost(baseUrl);
+    if (!baseUrl) return { reachable: false, ...host, error: 'No addon URL configured.', hint: null };
+    const manifestUrl = `${baseUrl}/manifest.json`;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 7000) : null;
+    try {
+        const res = await fetch(manifestUrl, controller ? { signal: controller.signal } : undefined);
+        if (res.ok) {
+            return { reachable: true, ...host, manifestUrl };
+        }
+        return { reachable: false, ...host, error: `HTTP ${res.status}`, manifestUrl };
+    } catch (error) {
+        let branch = null;
+        let errorName = 'network error';
+        if (error && (error.name === 'AbortError' || error.name === 'TimeoutError')) errorName = 'timed out';
+        if (host.isLoopback || host.isPrivateIp) branch = 'localhost-or-lan';
+        else if (host.isInsecure) branch = 'http-on-https';
+        return {
+            reachable: false,
+            ...host,
+            error: `${errorName}: ${error && error.message ? String(error.message) : ''}`,
+            branch,
+            manifestUrl,
+        };
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+// Registers an addon-returned stream URL's host with the global CORS bypass.
+// Addons may surface CDNs the app has never seen (e.g. a new Tidal/Qobuz host
+// or an addon-hosted DASH/HLS manifest), so the host is added at runtime to the
+// proxied set instead of waiting for a source redeploy.
+function registerStreamHostForProxy(streamUrl) {
+    if (typeof window === 'undefined' || !window.__corsBypass || !streamUrl) return;
+    try {
+        const parsed = new URL(streamUrl, window.location.href);
+        if (!/^https?:$/i.test(parsed.protocol)) return;
+        if (parsed.origin === window.location.origin) return;
+        window.__corsBypass.addProxyHost(parsed.hostname);
+    } catch {
+        /* ignore malformed URLs */
+    }
+}
+
 const SEARCH_CACHE_TTL = 15 * 60 * 1000;
 
 // Resolved stream URLs are persisted to localStorage so replaying a track
@@ -672,7 +752,15 @@ export class EclipseAPI {
             return local;
         }
 
-        const data = await this._request(`stream/${trackId}`, MAX_429_RETRIES, true);
+        // Some addons (TIDAL/Qobuz) honor a quality hint and can serve higher
+        // tiers like Dolby Atmos when asked; the hint is a no-op for addons that
+        // always pick a single canonical stream. The cache key already includes
+        // the quality, so a fresh tier is requested (and cached) independently.
+        const data = await this._request(
+            `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+            MAX_429_RETRIES,
+            true
+        );
         const stream = {
             url: data.url,
             format: data.format,
@@ -681,14 +769,18 @@ export class EclipseAPI {
             expiresAt: data.expiresAt || now + 3600,
             bitDepth: extractBitDepth(data),
             sampleRate: extractSampleRate(data),
-            audioQuality: data.streamQuality || data.quality || null,
-            audioMode: null,
+            audioQuality: data.streamQuality || data.quality || data.audioQuality || null,
+            audioMode:
+                data.audioMode ||
+                (Array.isArray(data.audioModes) ? data.audioModes.find((m) => /atmos|dolby/i.test(String(m))) : null) ||
+                null,
             mediaType: data.format || null,
             mimeType: data.mimeType || null,
             bitrateKbps: extractBitrateKbps(data),
         };
         this.streamCache.set(key, stream);
         this._setStreamCacheLocal(key, stream);
+        registerStreamHostForProxy(stream.url);
         return stream;
     }
 
@@ -712,7 +804,7 @@ export class EclipseAPI {
             bitDepth: stream.bitDepth,
             sampleRate: stream.sampleRate,
             audioQuality: stream.audioQuality,
-            audioMode: null,
+            audioMode: stream.audioMode,
             mediaType: stream.format,
             mimeType: stream.mimeType,
             bitrateKbps: stream.bitrateKbps,

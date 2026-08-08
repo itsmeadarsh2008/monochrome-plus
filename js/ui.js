@@ -41,7 +41,7 @@ import {
     rotatingCoverSettings,
     backgroundVideoQualitySettings,
 } from './storage.js';
-import { eclipseAddonStorage } from './eclipse.js';
+import { eclipseAddonStorage, probeAddonReachability } from './eclipse.js';
 import { db } from './db.js';
 import { applyPaletteFromImage, resetPalette } from './palette.js';
 import { syncManager } from './accounts/appwrite-sync.js';
@@ -3816,7 +3816,83 @@ export class UIRenderer {
 
         const hasAny =
             hasSpotlight || hasHotTracks || hasNewTracks || hasHotAlbums || hasNewAlbums || hasFeatured || hasEditors;
-        section.style.display = hasAny ? '' : 'none';
+        const noticeEl = document.getElementById('home-discovery-notice');
+        if (hasAny) {
+            section.style.display = '';
+            if (noticeEl) noticeEl.hidden = true;
+        } else if (noticeEl) {
+            section.style.display = '';
+            noticeEl.hidden = false;
+            this._renderDiscoveryNotice(noticeEl);
+        }
+
+        void this._renderDiscoveryReach(hasAny);
+    }
+
+    _renderDiscoveryNotice(noticeEl) {
+        noticeEl.className = 'home-discovery-notice';
+        const addon = eclipseAddonStorage.getAddon();
+        if (!addon) {
+            noticeEl.innerHTML = `
+                <div class="discovery-notice-title">Discovery Deck is off</div>
+                <div class="discovery-notice-text">
+                    The Discovery Deck, Search and streaming are all powered by an Eclipse addon.
+                    Addon settings are stored per site — installing one on the development monitor won't carry over here.
+                    Install the addon (or enter a public <code>https://</code> addon URL) to bring the catalog home.
+                </div>
+                <a class="discovery-notice-link" href="/settings/system" onclick="event.preventDefault();window.navigate('/settings/system')">Open Settings → Eclipse Addon</a>
+            `;
+            return;
+        }
+        noticeEl.innerHTML = this._discoveryProbeHtml || null;
+    }
+
+    async _renderDiscoveryReach(hasAny) {
+        if (hasAny) return;
+        const addon = eclipseAddonStorage.getAddon();
+        const noticeEl = document.getElementById('home-discovery-notice');
+        if (!addon || !noticeEl) return;
+        const baseKey = String(addon.baseUrl || '');
+        const now = Date.now();
+        if (this._homeDiscoveryProbeKey === baseKey && now - (this._homeDiscoveryProbeAt || 0) < 15000) return;
+        this._homeDiscoveryProbeKey = baseKey;
+        this._homeDiscoveryProbeAt = now;
+        const probe = await probeAddonReachability(addon);
+        if (probe.reachable) {
+            this._discoveryProbeHtml = `
+                <div class="discovery-notice-title">Your addon is reachable, but it returned no Discovery content</div>
+                <div class="discovery-notice-text">
+                    ${escapeHtml(probe.hostname)} responded, but the Spotlight / Hot / New modules came back empty.
+                    Check that your addon is configured to surface trending content on this origin.
+                </div>
+                <a class="discovery-notice-link" href="/settings/system" onclick="event.preventDefault();window.navigate('/settings/system')">Check addon settings</a>
+            `;
+        } else if (probe.branch === 'localhost-or-lan') {
+            this._discoveryProbeHtml = `
+                <div class="discovery-notice-title">Your addon runs on ${escapeHtml(probe.hostname)}</div>
+                <div class="discovery-notice-text">
+                    That address is only reachable from your own machine or network, so this deployed site can't load it.
+                    Deploy the addon to a public <code>https://</code> URL and use that URL here.
+                </div>
+            `;
+        } else if (probe.branch === 'http-on-https') {
+            this._discoveryProbeHtml = `
+                <div class="discovery-notice-title">Addon URL is insecure</div>
+                <div class="discovery-notice-text">
+                    Your addon uses ${escapeHtml(probe.protocol + '//')} but this site is served over https,
+                    and browsers block insecure (mixed) content. Use an <code>https://</code> addon URL.
+                </div>
+            `;
+        } else {
+            this._discoveryProbeHtml = `
+                <div class="discovery-notice-title">Addon isn't reachable from this site</div>
+                <div class="discovery-notice-text">
+                    ${escapeHtml(probe.error)}. The addon may be offline or it may block cross-origin requests (CORS).
+                </div>
+                <a class="discovery-notice-link" href="/settings/system" onclick="event.preventDefault();window.navigate('/settings/system')">Check addon settings</a>
+            `;
+        }
+        if (noticeEl) noticeEl.innerHTML = this._discoveryProbeHtml;
     }
 
     async renderProfilePage() {
@@ -9424,6 +9500,7 @@ export class UIRenderer {
                     </div>
                     <h4 class="addon-empty-title">No addon installed</h4>
                     <p class="addon-empty-text">Search, streaming and catalog are powered by an Eclipse addon. Paste an addon URL below to get started.</p>
+                    <p class="addon-empty-text">Addon settings are stored per site. If you installed one on the development monitor, you'll need to install it here too — Home and Search only load when the addon is reachable from this site.</p>
                 </div>
             `;
             if (actions) actions.hidden = true;
@@ -9455,8 +9532,31 @@ export class UIRenderer {
                     ${resources ? `<div class="addon-card-badges">${resources}</div>` : ''}
                 </div>
             </div>
+            <div class="addon-card-status addon-card-status-checking" id="addon-reachability">
+                Checking addon reachability from this site…
+            </div>
         `;
         if (actions) actions.hidden = false;
+        void this._checkReachability(addon);
+    }
+
+    async _checkReachability(addon) {
+        const reachEl = document.getElementById('addon-reachability');
+        const probe = await probeAddonReachability(addon);
+        if (!reachEl) return;
+        if (probe.reachable) {
+            reachEl.className = 'addon-card-status addon-card-status-ok';
+            reachEl.textContent = 'Addon is reachable from this site.';
+            return;
+        }
+        reachEl.className = 'addon-card-status addon-card-status-error';
+        if (probe.branch === 'localhost-or-lan') {
+            reachEl.textContent = `Can't reach from here: this site runs over https, but your addon lives on ${probe.hostname} (only reachable on your own machine/network). Deploy the addon to a public https:// URL to use it on this site.`;
+        } else if (probe.branch === 'http-on-https') {
+            reachEl.textContent = `Blocked: your addon URL uses ${probe.protocol}//. This site is served over https, so browsers block insecure requests to ${probe.hostname}. Use an https:// addon URL.`;
+        } else {
+            reachEl.textContent = `Addon unreachable from this site (${probe.error}). The addon may be offline, or it may block cross-origin requests (CORS).`;
+        }
     }
 
     renderCacheStats() {
