@@ -8,6 +8,12 @@
 const CORS_PROXY_PREFIX = '/cors-proxy/';
 const PROXY_STORAGE_KEY = 'mono-cors-proxy-index';
 const PROXY_DEAD_KEY = 'mono-cors-proxy-dead';
+// Optional self-hosted proxy. When set (any HTTPS url), it becomes the first
+// entry of the proxy chain — public proxies are only used as a fallback. Set
+// it once from the console:
+//   localStorage.setItem('mono-cors-proxy-custom', 'https://your-proxy.example/cors/')
+// A deployable Cloudflare Worker is in cors-proxy-worker.js.
+const CUSTOM_PROXY_KEY = 'mono-cors-proxy-custom';
 // A proxy is quarantined for this long after it fails twice in a row. Public
 // proxies often stay broken (403s / DNS death) for hours, so the quarantine
 // is deliberately long; a working proxy is remembered anyway on success.
@@ -19,6 +25,30 @@ const PROXY_TEMPLATES = [
     (encoded) => `https://api.allorigins.win/raw?url=${encoded}`,
     (encoded) => `https://cors-proxy.htmldriven.com/?url=${encoded}`,
 ];
+
+// A self-hosted proxy configured by the user becomes the first entry of the
+// chain (index 0), so every proxied request tries it before the public ones.
+// Existing quarantine/remembered-index state self-corrects on the next probe.
+const customProxyTemplate = getCustomProxyTemplate();
+if (customProxyTemplate) {
+    PROXY_TEMPLATES.unshift(customProxyTemplate);
+}
+
+// A custom self-hosted proxy (set via localStorage) is prepended to the chain
+// so every proxied request tries it first. It never needs CORS itself because
+// browsers request it through the same-origin /cors-proxy/ route in dev and the
+// same-origin rule on hosted deploys.
+function getCustomProxyTemplate() {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    try {
+        const url = window.localStorage.getItem(CUSTOM_PROXY_KEY);
+        if (!url || !/^https?:\/\//i.test(String(url))) return null;
+        const normalized = String(url).replace(/\/+$/, '');
+        return (encoded) => `${normalized}?url=${encoded}`;
+    } catch {
+        return null;
+    }
+}
 
 // Hosts that need proxying. This Set is used by rewriteUrl/needsProxy and can
 // grow at runtime — addProxyHost() registers unknown stream hosts on the fly so
@@ -64,7 +94,17 @@ const CORS_SUPPORTED_HOSTS = new Set([
     'eu-central.monochrome.tf',
     'ohio-1.monochrome.tf',
     'us-west.monochrome.tf',
+    'manifest.tidal.com',
 ]);
+
+// Media manifest hosts send Access-Control-Allow-Origin: * on every region
+// (im-fa/eu-fa/us-fa/ne-fa.manifest.tidal.com), so DASH/MPD manifests are
+// fetched directly instead of through the (flaky) CORS proxy chain. Segment
+// hosts (sp-ad-fa.audio.tidal.com etc.) do NOT send CORS headers and stay
+// proxied. `manifest.tidal.com` is listed above for exact-match hosts.
+function isTidalManifestHost(host) {
+    return host === 'manifest.tidal.com' || host.endsWith('.manifest.tidal.com');
+}
 
 function isLocalBrowserDev() {
     if (typeof window === 'undefined' || !window.location) return false;
@@ -190,6 +230,7 @@ function sanitizeHost(hostname) {
 function addProxyHost(hostname) {
     const host = sanitizeHost(hostname);
     if (!host || host === window.location.hostname || CORS_SUPPORTED_HOSTS.has(host)) return false;
+    if (isTidalManifestHost(host)) return false;
     if (NEEDS_PROXY_HOSTS.has(host)) return true;
     NEEDS_PROXY_HOSTS.add(host);
     return true;
@@ -199,6 +240,7 @@ function needsProxy(hostname) {
     const host = hostname.toLowerCase();
     if (host === window.location.hostname) return false;
     if (CORS_SUPPORTED_HOSTS.has(host)) return false;
+    if (isTidalManifestHost(host)) return false;
     if (host.endsWith('.cloud.appwrite.io')) return false;
     if (host.endsWith('.monochrome.tf')) return false;
     if (NEEDS_PROXY_HOSTS.has(host)) return true;
