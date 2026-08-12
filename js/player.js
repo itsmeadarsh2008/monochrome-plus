@@ -85,6 +85,17 @@ export class Player {
                 buffer: {
                     fastSwitchEnabled: true,
                 },
+                // Manifest/segment requests travel through the CORS proxy chain
+                // on hosted deploys, which is slower than a direct CDN hit —
+                // give them a generous timeout and several retries so a slow
+                // or flaky proxy doesn't kill high-quality playback.
+                requestTimeout: 20000,
+                retryAttempts: {
+                    MPD: 3,
+                    Fragment: 5,
+                    SchemeLoader: 3,
+                    XLink: 3,
+                },
             },
         });
         this.dashInitialized = false;

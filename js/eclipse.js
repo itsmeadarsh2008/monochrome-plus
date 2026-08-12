@@ -168,6 +168,11 @@ const PRIORITY_REQUEST_GAP_MS = 60;
 const BACKGROUND_REQUEST_GAP_MS = 450;
 const MAX_429_RETRIES = 2;
 
+// Wall-clock budget for persistent requests stuck behind a rate limit. Stream
+// resolution and user-facing searches keep retrying until the window clears,
+// but never stall the queue longer than this.
+const MAX_PERSISTENT_WALL_MS = 45 * 1000;
+
 // Global rate-limit freeze: once the addon answers 429, every queued request
 // pauses until the limits clear instead of each failing and retrying on its
 // own (bursts of parallel searches hammer the limit harder).
@@ -359,7 +364,8 @@ export class EclipseAPI {
         background = false,
         persistent = false,
         attempt = 0,
-        signal = null
+        signal = null,
+        startedAt = null
     ) {
         const addon = await eclipseAddonStorage.ensureInstalled();
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
@@ -403,10 +409,17 @@ export class EclipseAPI {
             // Freeze the whole queue behind this backoff so sibling requests
             // (parallel searches) don't keep re-tripping the addon's limiter.
             addonRateLimitUntil = Math.max(addonRateLimitUntil, Date.now() + Math.max(backoffMs, 2000));
-            if (!persistent) notifyRateLimitedOnce();
             await this._sleep(Math.max(backoffMs, 0));
+            // Persistent requests (stream resolution, user-facing searches)
+            // only give up after a wall-clock budget, so transient rate
+            // windows don't kill playback mid-queue.
             if (persistent) {
-                return this._request(path, retries, priority, background, persistent, attempt + 1, signal);
+                const start = startedAt ?? Date.now();
+                if (Date.now() - start > MAX_PERSISTENT_WALL_MS) {
+                    notifyRateLimitedOnce();
+                    throw new Error(RATE_LIMIT_ERROR_MESSAGE);
+                }
+                return this._request(path, retries, priority, background, persistent, attempt + 1, signal, start);
             }
             if (retries > 0) {
                 return this._request(path, retries - 1, priority, background, false, 0, signal);
@@ -781,6 +794,8 @@ export class EclipseAPI {
         const data = await this._request(
             `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
             MAX_429_RETRIES,
+            true,
+            false,
             true
         );
         const stream = {

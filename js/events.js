@@ -388,6 +388,11 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
                             player.dashInitialized = false;
                         }
 
+                        // #audio-player carries crossorigin="anonymous" for
+                        // dash.js; a direct CDN file (no CORS headers) would
+                        // be blocked when loaded on that element, so clear the
+                        // attribute for plain-file fallback playback.
+                        audioPlayer.removeAttribute('crossorigin');
                         audioPlayer.src = actualUrl;
                         audioPlayer.load();
                         await audioPlayer.play();
