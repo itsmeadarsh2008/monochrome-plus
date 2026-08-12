@@ -57,6 +57,7 @@
         "butterchurn-presets": "^2.4.7",
         "dashjs": "^5.2.0",
         "fuse.js": "^7.5.0",
+        "hls.js": "^1.6.18",
         "howler": "^2.2.4",
         "mailchecker": "^6.0.21",
         "shaka-player": "^5.2.4"

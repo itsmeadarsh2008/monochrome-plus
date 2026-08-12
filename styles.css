@@ -7370,21 +7370,50 @@ input:checked + .slider::before {
     max-width: 34ch;
 }
 
-/* Installed addon card */
+/* Installed addon cards and priority controls */
+.addon-priority-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
 .addon-card {
     display: flex;
-    gap: 0.9rem;
-    padding: 1rem;
-    margin-bottom: 0.9rem;
+    align-items: flex-start;
+    gap: 0.7rem;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0;
     background: var(--secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     animation: addon-enter 220ms var(--ease-out) both;
 }
 
+.addon-card-active {
+    border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+
+.addon-card-disabled {
+    opacity: 0.58;
+}
+
+.addon-priority-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted-foreground);
+    background: var(--muted);
+    border-radius: 50%;
+}
+
 .addon-card-icon {
-    width: 56px;
-    height: 56px;
+    width: 44px;
+    height: 44px;
     border-radius: var(--radius-md);
     object-fit: cover;
     flex-shrink: 0;
@@ -7399,10 +7428,11 @@ input:checked + .slider::before {
 }
 
 .addon-card-title {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     font-weight: 600;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
 }
 
@@ -7416,8 +7446,17 @@ input:checked + .slider::before {
     flex-shrink: 0;
 }
 
+.addon-active-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--success, #22c55e);
+    background: color-mix(in srgb, #22c55e 12%, transparent);
+    padding: 0.12rem 0.5rem;
+    border-radius: var(--radius-full);
+}
+
 .addon-card-desc {
-    font-size: 0.82rem;
+    font-size: 0.76rem;
     color: var(--muted-foreground);
     line-height: 1.45;
     overflow: hidden;
@@ -7427,34 +7466,79 @@ input:checked + .slider::before {
 
 .addon-card-url {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     color: var(--muted-foreground);
     word-break: break-all;
 }
 
 .addon-card-badges {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.4rem;
-    margin-top: 0.15rem;
+    margin-top: 0.05rem;
+}
+
+.addon-card-count {
+    margin: 0.4rem 0 0.7rem;
+    font-size: 0.7rem;
+    color: var(--muted-foreground);
+}
+
+.addon-card-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.addon-enabled-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-right: auto;
+    font-size: 0.7rem;
+    color: var(--muted-foreground);
+}
+
+.addon-card-controls button {
+    min-width: 2rem;
+    min-height: 1.65rem;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.72rem;
+}
+
+.addon-card-controls button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.addon-enabled-toggle input {
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    accent-color: var(--primary);
 }
 
 .addon-badge {
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--primary);
     background: color-mix(in srgb, var(--primary) 12%, transparent);
-    padding: 0.14rem 0.55rem;
+    padding: 0.1rem 0.45rem;
     border-radius: var(--radius-full);
 }
 
 .addon-card-status {
-    margin-top: -0.35rem;
-    margin-bottom: 0.9rem;
-    padding: 0.6rem 0.85rem;
-    font-size: 0.78rem;
-    line-height: 1.5;
+    margin-top: 0.35rem;
+    margin-bottom: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.7rem;
+    line-height: 1.35;
     border-radius: var(--radius-md);
 }
 
@@ -7546,6 +7630,54 @@ input:checked + .slider::before {
     padding: 0.6rem 1.25rem;
     font-size: 0.88rem;
     border-radius: var(--radius-full);
+}
+
+@media (max-width: 600px) {
+    .addon-card {
+        gap: 0.65rem;
+        padding: 0.8rem;
+    }
+
+    .addon-priority-number {
+        width: 1.35rem;
+        height: 1.35rem;
+    }
+
+    .addon-card-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .addon-card-title {
+        font-size: 0.88rem;
+        gap: 0.35rem;
+    }
+
+    .addon-card-desc {
+        white-space: normal;
+    }
+
+    .addon-card-controls {
+        align-items: stretch;
+    }
+
+    .addon-enabled-toggle {
+        width: 100%;
+        margin-right: 0;
+        padding-bottom: 0.15rem;
+    }
+
+    .addon-card-controls button {
+        flex: 1;
+    }
+
+    .addon-install-row {
+        flex-direction: column;
+    }
+
+    .addon-install-btn {
+        width: 100%;
+    }
 }
 
 .addon-help {

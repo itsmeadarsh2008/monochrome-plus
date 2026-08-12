@@ -6,9 +6,9 @@ import {
     equalizerSettings,
     monoAudioSettings,
     performanceModeSettings,
-    visualizerSettings,
     audioProcessingSettings,
 } from './storage.js';
+import { isFirefox } from './platform-detection.js';
 
 // Generate frequency array for given number of bands using logarithmic spacing
 function generateFrequencies(bandCount, minFreq = 20, maxFreq = 20000) {
@@ -363,11 +363,12 @@ class AudioContextManager {
             return;
         }
 
-        const isPure = typeof audioProcessingSettings !== 'undefined' && audioProcessingSettings.isPure();
-        const needsVisualizer = typeof visualizerSettings !== 'undefined' && visualizerSettings.isEnabled();
-        // Pure mode bypass if no features need AudioContext
-        if (isPure && !needsVisualizer && !this.isEQEnabled && !this.isMonoAudioEnabled) {
-            console.log('[AudioContext] Bypassing Web Audio entirely for Pure lossless output');
+        // Keep Firefox's native media output path for FLAC fMP4/MSE streams.
+        // Intercepting these streams with MediaElementAudioSourceNode can make
+        // 96 kHz playback fail even though the same stream works natively.
+        // Chrome and other browsers continue to use the full Web Audio graph.
+        if (isFirefox) {
+            console.log('[AudioContext] Firefox native media path enabled for FLAC/MSE compatibility');
             return;
         }
 
@@ -382,19 +383,11 @@ class AudioContextManager {
                 // Removed forced 48kHz sampleRate to preserve bit-perfect native sample rate support
             });
 
-            // Zero-gain tap check
-            // Fallback to mozCaptureStream for firefox just in case
-            const captureFn = audioElement.captureStream || audioElement.mozCaptureStream;
-            if (isPure && !this.isEQEnabled && !this.isMonoAudioEnabled && typeof captureFn === 'function') {
-                const stream = captureFn.call(audioElement);
-                this.source = this.audioContext.createMediaStreamSource(stream);
-                this.isStreamCaptured = true;
-                console.log('[AudioContext] Using zero-gain captureStream for visualizer tap');
-            } else {
-                // Create the media element source
-                this.source = this.audioContext.createMediaElementSource(audioElement);
-                this.isStreamCaptured = false;
-            }
+            // Route the browser-decoded media element through the native Web
+            // Audio graph. The element still owns network/HLS transport; Web
+            // Audio owns gain, EQ, analyser, and output routing.
+            this.source = this.audioContext.createMediaElementSource(audioElement);
+            this.isStreamCaptured = false;
 
             // Create analyser for visualizer
             this.analyser = this.audioContext.createAnalyser();

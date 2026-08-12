@@ -3544,6 +3544,41 @@ export function initializeSettings(scrobbler, player, api, ui) {
         addonStatus.className = `addon-status${type ? ` addon-status-${type}` : ''}`;
     };
 
+    // Delegate from the stable manager so handlers survive priority-list rerenders.
+    const addonManager = document.getElementById('addon-manager');
+    const refreshAddonRouting = async (message) => {
+        await api.clearCache();
+        ui.renderAddonSettings();
+        setAddonStatus(message, 'ok');
+    };
+
+    addonManager?.addEventListener('change', async (event) => {
+        if (event.target?.dataset?.addonAction !== 'enabled') return;
+        const addonId = event.target.dataset.addonId;
+        if (!eclipseAddonStorage.setAddonEnabled(addonId, event.target.checked)) {
+            event.target.checked = true;
+            setAddonStatus('At least one addon must remain enabled.', 'error');
+            return;
+        }
+        await refreshAddonRouting(event.target.checked ? 'Addon enabled.' : 'Addon disabled.');
+    });
+
+    addonManager?.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-addon-action]');
+        if (!button || button.dataset.addonAction === 'enabled') return;
+        const addonId = button.dataset.addonId;
+        let changed = false;
+        let message = '';
+        if (button.dataset.addonAction === 'activate') {
+            changed = eclipseAddonStorage.setActiveAddon(addonId);
+            message = 'Priority fallback started with this addon.';
+        } else if (button.dataset.addonAction === 'move') {
+            changed = eclipseAddonStorage.moveAddon(addonId, button.dataset.addonDirection);
+            message = 'Addon priority updated.';
+        }
+        if (changed) await refreshAddonRouting(message);
+    });
+
     const updateInstallBtnState = () => {
         const url = addonUrlInput?.value.trim() || '';
         addonInstallBtn.disabled = !/^https?:\/\//i.test(url);
@@ -3572,10 +3607,11 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 manifest,
                 installedAt: Date.now(),
             });
+            await api.clearCache();
             addonUrlInput.value = '';
             updateInstallBtnState();
-            setAddonStatus(`“${manifest.name}” installed`, 'ok');
             ui.renderAddonSettings();
+            setAddonStatus(`“${manifest.name}” installed or updated`, 'ok');
         } catch (error) {
             setAddonStatus(error.message, 'error');
             addonUrlInput.focus();
@@ -3589,7 +3625,8 @@ export function initializeSettings(scrobbler, player, api, ui) {
     document.getElementById('addon-remove-btn')?.addEventListener('click', async () => {
         const addon = eclipseAddonStorage.getAddon();
         const name = addon?.manifest?.name || 'this addon';
-        if (!window.confirm(`Remove ${name}? Music search and streaming will stop until you install another addon.`)) {
+        const remaining = Math.max(0, eclipseAddonStorage.getAddons().length - 1);
+        if (!window.confirm(`Remove ${name}?${remaining ? ` The next installed addon will become active.` : ' Music search and streaming will stop until you install another addon.'}`)) {
             return;
         }
         eclipseAddonStorage.clearAddon();

@@ -9,25 +9,127 @@ import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
 import { getExtensionFromBlob, isLossyCodec, isLossyContainer, RATE_LIMIT_ERROR_MESSAGE } from './utils.js';
 
-const ADDON_STORAGE_KEY = 'monochrome-eclipse-addon-v2';
+const ADDON_STORAGE_KEY = 'monochrome-eclipse-addons-v1';
+const LEGACY_ADDON_STORAGE_KEY = 'monochrome-eclipse-addon-v2';
+const ACTIVE_ADDON_STORAGE_KEY = 'monochrome-eclipse-active-addon';
+
+function addonIdentity(addon) {
+    return String(addon?.manifest?.id || addon?.id || addon?.baseUrl || '').trim();
+}
 
 export const eclipseAddonStorage = {
-    getAddon() {
+    getAddons() {
         try {
             const raw = localStorage.getItem(ADDON_STORAGE_KEY);
-            if (!raw) return null;
-            return JSON.parse(raw);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed.filter((addon) => addon?.baseUrl && addon?.manifest);
+            }
+
+            const legacyRaw = localStorage.getItem(LEGACY_ADDON_STORAGE_KEY);
+            if (!legacyRaw) return [];
+            const legacy = JSON.parse(legacyRaw);
+            return legacy?.baseUrl ? [legacy] : [];
         } catch {
-            return null;
+            return [];
         }
     },
 
+    getActiveAddonId() {
+        const addons = this.getAddons();
+        let activeId = null;
+        try {
+            activeId = localStorage.getItem(ACTIVE_ADDON_STORAGE_KEY);
+        } catch {
+            /* ignore storage errors */
+        }
+        const active = addons.find((addon) => addonIdentity(addon) === activeId && addon.enabled !== false);
+        return active ? activeId : addonIdentity(addons.find((addon) => addon.enabled !== false) || addons[0]);
+    },
+
+    getAddon() {
+        return this.getAddonById(this.getActiveAddonId());
+    },
+
+    getAddonById(addonId) {
+        const identity = String(addonId || '').trim();
+        return this.getAddons().find((addon) => addonIdentity(addon) === identity) || null;
+    },
+
+    getAddonCandidates() {
+        const addons = this.getAddons().filter((addon) => addon.enabled !== false);
+        const activeId = this.getActiveAddonId();
+        return addons.sort((a, b) => {
+            if (addonIdentity(a) === activeId) return -1;
+            if (addonIdentity(b) === activeId) return 1;
+            return 0;
+        });
+    },
+
     saveAddon(addon) {
-        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addon));
+        const identity = addonIdentity(addon);
+        if (!identity) throw new Error('Addon identity is required');
+        const addons = this.getAddons();
+        let activeId = null;
+        try {
+            activeId = localStorage.getItem(ACTIVE_ADDON_STORAGE_KEY);
+        } catch {
+            /* ignore storage errors */
+        }
+        const index = addons.findIndex((installed) => addonIdentity(installed) === identity);
+        const saved = { ...addon, id: identity };
+        if (index >= 0) addons[index] = saved;
+        else addons.push(saved);
+        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addons));
+        if (!activeId) this.setActiveAddon(identity);
+        return saved;
+    },
+
+    setActiveAddon(addonId) {
+        const identity = String(addonId || '').trim();
+        if (!this.getAddonById(identity)) return false;
+        localStorage.setItem(ACTIVE_ADDON_STORAGE_KEY, identity);
+        return true;
+    },
+
+    setAddonEnabled(addonId, enabled) {
+        const identity = String(addonId || '').trim();
+        const addons = this.getAddons();
+        const addon = addons.find((installed) => addonIdentity(installed) === identity);
+        if (!addon) return false;
+        if (!enabled && this.getAddonCandidates().length <= 1) return false;
+        const wasActive = this.getActiveAddonId() === identity;
+        addon.enabled = Boolean(enabled);
+        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addons));
+        if (!addon.enabled && wasActive) {
+            const next = this.getAddonCandidates()[0];
+            if (next) this.setActiveAddon(addonIdentity(next));
+        }
+        return true;
+    },
+
+    moveAddon(addonId, direction) {
+        const identity = String(addonId || '').trim();
+        const addons = this.getAddons();
+        const index = addons.findIndex((addon) => addonIdentity(addon) === identity);
+        const nextIndex = index + Number(direction);
+        if (index < 0 || nextIndex < 0 || nextIndex >= addons.length) return false;
+        [addons[index], addons[nextIndex]] = [addons[nextIndex], addons[index]];
+        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addons));
+        return true;
+    },
+
+    removeAddon(addonId = this.getActiveAddonId()) {
+        const addons = this.getAddons().filter((addon) => addonIdentity(addon) !== String(addonId || ''));
+        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addons));
+        const next = addons[0];
+        if (next) this.setActiveAddon(addonIdentity(next));
+        else localStorage.removeItem(ACTIVE_ADDON_STORAGE_KEY);
+        return next || null;
     },
 
     clearAddon() {
-        localStorage.removeItem(ADDON_STORAGE_KEY);
+        this.removeAddon();
     },
 
     async fetchManifest(baseUrl) {
@@ -57,8 +159,8 @@ export const eclipseAddonStorage = {
         return { ...manifest, rootUrl, manifestUrl };
     },
 
-    async ensureInstalled() {
-        return this.getAddon();
+    async ensureInstalled(addonId = null) {
+        return addonId ? this.getAddonById(addonId) : this.getAddon();
     },
 };
 
@@ -412,9 +514,57 @@ export class EclipseAPI {
         persistent = false,
         attempt = 0,
         signal = null,
-        startedAt = null
+        startedAt = null,
+        allowFallback = true,
+        requestedAddonId = null
     ) {
-        const addon = await eclipseAddonStorage.ensureInstalled();
+        const candidates = requestedAddonId
+            ? [eclipseAddonStorage.getAddonById(requestedAddonId)].filter(Boolean)
+            : allowFallback
+              ? eclipseAddonStorage.getAddonCandidates()
+              : [eclipseAddonStorage.getAddon()].filter(Boolean);
+        if (!candidates.length) throw new Error(NO_ADDON_MESSAGE);
+
+        let lastError = null;
+        for (const addon of candidates) {
+            const addonId = addonIdentity(addon);
+            try {
+                const result = await this._requestWithAddon(
+                    path,
+                    retries,
+                    priority,
+                    background,
+                    persistent,
+                    attempt,
+                    signal,
+                    startedAt,
+                    addonId
+                );
+                if (eclipseAddonStorage.getActiveAddonId() !== addonId) {
+                    eclipseAddonStorage.setActiveAddon(addonId);
+                }
+                return result;
+            } catch (error) {
+                if (error?.name === 'AbortError' || signal?.aborted) throw error;
+                lastError = error;
+                console.warn(`[Eclipse] addon failed, trying next priority addon: ${addonId}`, error);
+            }
+        }
+        throw lastError || new Error('All installed Eclipse addons failed');
+    }
+
+    async _requestWithAddon(
+        path,
+        retries = MAX_429_RETRIES,
+        priority = false,
+        background = false,
+        persistent = false,
+        attempt = 0,
+        signal = null,
+        startedAt = null,
+        addonId = null
+    ) {
+        const addon = await eclipseAddonStorage.ensureInstalled(addonId);
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
 
         const baseUrl = (addon.baseUrl || '').replace(/\/manifest\.json$/i, '').replace(/\/+$/, '');
@@ -435,6 +585,7 @@ export class EclipseAPI {
                 persistent
             );
         } catch (error) {
+            if (signal?.aborted) throw error;
             if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
                 // A rate-limited addon can stall requests so long they trip the
                 // fetch timeout. Persistent requests treat that like a 429 and
@@ -443,7 +594,7 @@ export class EclipseAPI {
                     const start = startedAt ?? Date.now();
                     if (Date.now() - start <= MAX_PERSISTENT_WALL_MS) {
                         addonRateLimitUntil = Math.max(addonRateLimitUntil, Date.now() + 3000);
-                        return this._request(
+                        return this._requestWithAddon(
                             path,
                             retries,
                             priority,
@@ -451,7 +602,8 @@ export class EclipseAPI {
                             persistent,
                             attempt + 1,
                             signal,
-                            start
+                            start,
+                            addonId
                         );
                     }
                 }
@@ -487,10 +639,10 @@ export class EclipseAPI {
                     notifyRateLimitedOnce();
                     throw new Error(RATE_LIMIT_ERROR_MESSAGE);
                 }
-                return this._request(path, retries, priority, background, persistent, attempt + 1, signal, start);
+                return this._requestWithAddon(path, retries, priority, background, persistent, attempt + 1, signal, start, addonId);
             }
             if (retries > 0) {
-                return this._request(path, retries - 1, priority, background, false, 0, signal);
+                return this._requestWithAddon(path, retries - 1, priority, background, false, 0, signal, null, addonId);
             }
             notifyRateLimitedOnce();
             throw new Error(RATE_LIMIT_ERROR_MESSAGE);
@@ -506,7 +658,14 @@ export class EclipseAPI {
         const q = String(query || '').trim();
         if (!q) return { tracks: [], albums: [], artists: [], playlists: [] };
 
-        const cacheKey = q.toLowerCase();
+        // Eclipse addons use the explicit `isrc:` search form. Accept both
+        // pasted bare ISRCs and already-prefixed identifiers from the main
+        // Search for Music field.
+        const isrcMatch = q.match(/^(?:isrc\s*:\s*)?([A-Z]{2}[A-Z0-9]{3}\d{7})$/i);
+        const requestedIsrc = isrcMatch ? isrcMatch[1].toUpperCase() : null;
+        const searchQuery = requestedIsrc ? `isrc:${requestedIsrc}` : q;
+
+        const cacheKey = `${this._addonCacheScope()}_search_${searchQuery.toLowerCase()}`;
         const cached = this._searchCache.get(cacheKey);
         if (cached) return cached;
 
@@ -515,20 +674,69 @@ export class EclipseAPI {
         if (this._searchInflight.has(cacheKey)) return this._searchInflight.get(cacheKey);
 
         const inflight = (async () => {
-            const data = await this._request(
-                `search?q=${encodeURIComponent(q)}`,
-                MAX_429_RETRIES,
-                options?.priority === true,
-                options?.background === true,
-                options?.retry === true,
-                0,
-                options?.signal || null
-            );
+            const requestSearch = (searchQuery, addonId) =>
+                this._request(
+                    `search?q=${encodeURIComponent(searchQuery)}`,
+                    MAX_429_RETRIES,
+                    options?.priority === true,
+                    options?.background === true,
+                    options?.retry === true,
+                    0,
+                    options?.signal || null,
+                    null,
+                    false,
+                    addonId
+                );
+
+            const addons = eclipseAddonStorage.getAddonCandidates();
+            const activeAddon = eclipseAddonStorage.getAddon();
+            const addonKey = (addon) => addon?.id || addon?.manifest?.id || addon?.baseUrl;
+            const orderedAddons = [
+                activeAddon,
+                ...addons.filter((addon) => addonKey(addon) !== addonKey(activeAddon)),
+            ].filter(Boolean);
+            const searchRequests = orderedAddons.map(async (addon) => {
+                const results = [{ data: await requestSearch(searchQuery, addonKey(addon)), addon }];
+                // MaxMusic's Deezer index exposes the official RADWIMPS/Toaka
+                // recording under the contributor query.
+                if (addon.manifest?.id === 'com.ultramax.eclipse.music' && /^suzume$/i.test(searchQuery)) {
+                    try {
+                        results.push({ data: await requestSearch('Toaka', addonKey(addon)), addon });
+                    } catch (error) {
+                        console.warn('[Eclipse] Supplemental MaxMusic search failed:', error);
+                    }
+                }
+                return results;
+            });
+            const settled = await Promise.allSettled(searchRequests);
+            const successful = settled.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
+            if (!successful.length) {
+                throw settled.find((result) => result.status === 'rejected')?.reason || new Error('Search failed');
+            }
+            const data = {
+                tracks: successful.flatMap(({ data: result }) => result?.tracks || []),
+                albums: successful.flatMap(({ data: result }) => result?.albums || []),
+                artists: successful.flatMap(({ data: result }) => result?.artists || []),
+                playlists: successful.flatMap(({ data: result }) => result?.playlists || []),
+            };
+            if (requestedIsrc) {
+                data.tracks = data.tracks.filter(
+                    (track) => String(track?.isrc || '').replace(/-/g, '').toUpperCase() === requestedIsrc
+                );
+            }
             const result = {
-                tracks: (data.tracks || []).map((t) => this.mapSearchTrack(t)),
-                albums: (data.albums || []).map((a) => this.mapSearchAlbum(a)),
-                artists: (data.artists || []).map((a) => this.mapSearchArtist(a)),
-                playlists: (data.playlists || []).map((p) => this.mapSearchPlaylist(p)),
+                tracks: Array.from(
+                    new Map(data.tracks.map((track) => [String(track.isrc || track.id), track])).values()
+                ).map((t) => this.mapSearchTrack(t)),
+                albums: Array.from(new Map(data.albums.map((album) => [String(album.id), album])).values()).map((a) =>
+                    this.mapSearchAlbum(a)
+                ),
+                artists: Array.from(new Map(data.artists.map((artist) => [String(artist.id), artist])).values()).map((a) =>
+                    this.mapSearchArtist(a)
+                ),
+                playlists: Array.from(new Map(data.playlists.map((playlist) => [String(playlist.id), playlist])).values()).map((p) =>
+                    this.mapSearchPlaylist(p)
+                ),
             };
 
             this._searchCache.set(cacheKey, result);
@@ -709,6 +917,29 @@ export class EclipseAPI {
 
     async getArtist(id) {
         const data = await this._request(`artist/${id}`);
+        let fallbackTracks = [];
+        if (!Array.isArray(data.topTracks) || data.topTracks.length === 0) {
+            try {
+                const searchResults = await this.searchTracks(data.name, { limit: 50, retry: true });
+                const artistName = String(data.name || '').trim().toLowerCase();
+                fallbackTracks = (searchResults.items || []).filter((track) => {
+                    const names = (track.artists || []).map((artist) => artist?.name).filter(Boolean);
+                    return names.some((name) => String(name).trim().toLowerCase() === artistName);
+                });
+            } catch (error) {
+                console.warn('[Eclipse] Artist track fallback search failed:', error);
+            }
+        }
+        const sourceTracks = Array.isArray(data.topTracks) && data.topTracks.length ? data.topTracks : fallbackTracks;
+        const sourceAlbums = Array.isArray(data.albums) && data.albums.length
+            ? data.albums
+            : Array.from(
+                  new Map(
+                      fallbackTracks
+                          .filter((track) => track.album?.id)
+                          .map((track) => [track.album.id, track.album])
+                  ).values()
+              );
         const artist = {
             id: String(data.id),
             name: data.name,
@@ -719,7 +950,7 @@ export class EclipseAPI {
             genres: Array.isArray(data.genres)
                 ? data.genres.map((genre) => String(genre || '').trim()).filter(Boolean)
                 : [],
-            albums: (data.albums || []).map((a) => ({
+            albums: sourceAlbums.map((a) => ({
                 id: String(a.id),
                 title: a.title,
                 cover: a.artworkURL,
@@ -730,8 +961,10 @@ export class EclipseAPI {
                 artwork: a.artworkURL ? [{ url: a.artworkURL }] : [],
             })),
             eps: [],
-            tracks: (data.topTracks || []).map((t) =>
-                this.mapDetailTrack(t, { id: '', title: '', cover: t.artworkURL }, data.name)
+            tracks: sourceTracks.map((t) =>
+                t?.artist?.name
+                    ? t
+                    : this.mapDetailTrack(t, { id: '', title: '', cover: t.artworkURL }, data.name)
             ),
             mixes: {},
         };
@@ -863,14 +1096,14 @@ export class EclipseAPI {
      * resolution fetches a fresh one.
      */
     forgetStreamUrl(id, quality) {
-        const key = `stream_${String(id)}_${quality || 'LOSSLESS'}`;
+        const key = `${this._addonCacheScope()}_stream_${String(id)}_${quality || 'LOSSLESS'}`;
         this.streamCache.delete(key);
         this._forgetStreamCacheLocal(key);
     }
 
     async getStreamUrl(id, quality = 'LOSSLESS') {
         const trackId = String(id);
-        const key = `stream_${trackId}_${quality || 'LOSSLESS'}`;
+        const key = `${this._addonCacheScope()}_stream_${trackId}_${quality || 'LOSSLESS'}`;
         const now = Math.floor(Date.now() / 1000);
 
         // In-memory cache (fastest).
@@ -957,6 +1190,10 @@ export class EclipseAPI {
         return stream;
     }
 
+    _addonCacheScope() {
+        return encodeURIComponent(addonIdentity(eclipseAddonStorage.getAddon()) || 'no-addon');
+    }
+
     async getTrack(id, quality) {
         const trackId = String(id);
         const stream = await this.getStreamUrl(trackId, quality);
@@ -1021,7 +1258,7 @@ export class EclipseAPI {
             return [];
         }
 
-        const cacheKey = `similar_artists_${seedId}`;
+        const cacheKey = `${this._addonCacheScope()}_similar_artists_${seedId}`;
         const cached = this._similarCache.get(cacheKey);
         if (cached && !options.skipCache && Date.now() - cached.at < 10 * 60 * 1000) {
             return cached.items;
@@ -1076,7 +1313,7 @@ export class EclipseAPI {
         const seedId = String(albumId || '');
         if (!seedId) return [];
 
-        const cacheKey = `similar_albums_${seedId}`;
+        const cacheKey = `${this._addonCacheScope()}_similar_albums_${seedId}`;
         const cached = this._similarCache.get(cacheKey);
         if (cached && !options.skipCache && Date.now() - cached.at < 10 * 60 * 1000) {
             return cached.items;

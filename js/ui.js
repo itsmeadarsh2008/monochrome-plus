@@ -9489,6 +9489,7 @@ export class UIRenderer {
             status.className = 'addon-status';
         }
 
+        const addons = eclipseAddonStorage.getAddons();
         const addon = eclipseAddonStorage.getAddon();
         if (!addon) {
             container.innerHTML = `
@@ -9507,41 +9508,52 @@ export class UIRenderer {
             return;
         }
 
-        const manifest = addon.manifest || {};
-        const resources = Array.isArray(manifest.resources)
-            ? manifest.resources.map((resource) => `<span class="addon-badge">${escapeHtml(resource)}</span>`).join('')
-            : '';
-        const icon = manifest.icon
-            ? `<img class="addon-card-icon" src="${escapeHtml(manifest.icon)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
-            : '';
-
-        container.innerHTML = `
-            <div class="addon-card">
-                ${icon}
-                <div class="addon-card-body">
-                    <div class="addon-card-title">
-                        ${escapeHtml(manifest.name || 'Eclipse Addon')}
-                        <span class="addon-card-version">v${escapeHtml(manifest.version || '?')}</span>
-                    </div>
-                    ${
-                        manifest.description
-                            ? `<div class="addon-card-desc">${escapeHtml(manifest.description)}</div>`
-                            : ''
-                    }
-                    <div class="addon-card-url">${escapeHtml(addon.baseUrl)}</div>
-                    ${resources ? `<div class="addon-card-badges">${resources}</div>` : ''}
-                </div>
-            </div>
-            <div class="addon-card-status addon-card-status-checking" id="addon-reachability">
-                Checking addon reachability from this site…
-            </div>
-        `;
+        const activeId = eclipseAddonStorage.getActiveAddonId();
+        container.innerHTML = `<div class="addon-priority-list">
+            ${addons
+                .map((installed, index) => {
+                    const installedId = installed.id || installed.manifest?.id || installed.baseUrl;
+                    const manifest = installed.manifest || {};
+                    const resources = Array.isArray(manifest.resources)
+                        ? manifest.resources.map((resource) => `<span class="addon-badge">${escapeHtml(resource)}</span>`).join('')
+                        : '';
+                    const icon = manifest.icon
+                        ? `<img class="addon-card-icon" src="${escapeHtml(manifest.icon)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+                        : '';
+                    const isActive = installedId === activeId;
+                    const statusId = `addon-reachability-${index}`;
+                    return `
+                        <div class="addon-card${isActive ? ' addon-card-active' : ''}${installed.enabled === false ? ' addon-card-disabled' : ''}">
+                            <div class="addon-priority-number">${index + 1}</div>
+                            ${icon}
+                            <div class="addon-card-body">
+                                <div class="addon-card-title">
+                                    ${escapeHtml(manifest.name || 'Eclipse Addon')}
+                                    <span class="addon-card-version">v${escapeHtml(manifest.version || '?')}</span>
+                                    ${isActive ? '<span class="addon-active-badge">Active</span>' : ''}
+                                </div>
+                                ${manifest.description ? `<div class="addon-card-desc">${escapeHtml(manifest.description)}</div>` : ''}
+                                <div class="addon-card-url">${escapeHtml(installed.baseUrl)}</div>
+                                ${resources ? `<div class="addon-card-badges">${resources}</div>` : ''}
+                                <div class="addon-card-status addon-card-status-checking" id="${statusId}">Checking addon reachability from this site…</div>
+                                <div class="addon-card-controls">
+                                    <label class="addon-enabled-toggle"><input type="checkbox" data-addon-action="enabled" data-addon-id="${escapeHtml(installedId)}" ${installed.enabled !== false ? 'checked' : ''} /> Enabled</label>
+                                    <button type="button" class="btn-ghost" data-addon-action="activate" data-addon-id="${escapeHtml(installedId)}" ${isActive || installed.enabled === false ? 'disabled' : ''}>Use</button>
+                                    <button type="button" class="btn-ghost" data-addon-action="move" data-addon-direction="-1" data-addon-id="${escapeHtml(installedId)}" ${index === 0 ? 'disabled' : ''} aria-label="Move addon up">↑</button>
+                                    <button type="button" class="btn-ghost" data-addon-action="move" data-addon-direction="1" data-addon-id="${escapeHtml(installedId)}" ${index === addons.length - 1 ? 'disabled' : ''} aria-label="Move addon down">↓</button>
+                                </div>
+                            </div>
+                        </div>`;
+                })
+                .join('')}
+        </div>
+        <div class="addon-card-count">Priority is top to bottom. Failed requests automatically try the next enabled addon.</div>`;
         if (actions) actions.hidden = false;
-        void this._checkReachability(addon);
+        addons.forEach((installed, index) => void this._checkReachability(installed, `addon-reachability-${index}`));
     }
 
-    async _checkReachability(addon) {
-        const reachEl = document.getElementById('addon-reachability');
+    async _checkReachability(addon, statusId = 'addon-reachability') {
+        const reachEl = document.getElementById(statusId);
         const probe = await probeAddonReachability(addon);
         if (!reachEl) return;
         if (probe.reachable) {
