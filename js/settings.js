@@ -63,6 +63,7 @@ export function initializeSettings(scrobbler, player, api, ui) {
                 ? __APP_REPO_URL__
                 : 'https://github.com/itsmeadarsh2008/monochrome-plus';
         const text = typeof __APP_COMMIT_SHORT__ !== 'undefined' ? __APP_COMMIT_SHORT__ : sha;
+        const source = typeof __APP_COMMIT_SOURCE__ !== 'undefined' ? __APP_COMMIT_SOURCE__ : 'git';
         if (sha !== 'unknown') {
             commitEl.innerHTML = '';
             const anchor = document.createElement('a');
@@ -70,9 +71,20 @@ export function initializeSettings(scrobbler, player, api, ui) {
             anchor.target = '_blank';
             anchor.rel = 'noopener noreferrer';
             anchor.textContent = sha;
-            anchor.title = `Open commit ${sha} on GitHub`;
+            anchor.title =
+                source === 'github'
+                    ? 'Commit fetched from GitHub master at build time (built outside a git checkout)'
+                    : `Open commit ${sha} on GitHub`;
             anchor.style.color = 'var(--accent, inherit)';
             commitEl.appendChild(anchor);
+            if (source === 'github') {
+                const note = document.createElement('div');
+                note.textContent = 'From GitHub master at build time (no local git checkout)';
+                note.style.fontSize = '0.75rem';
+                note.style.marginTop = '0.25rem';
+                note.style.fontFamily = 'inherit';
+                commitEl.appendChild(note);
+            }
         } else {
             commitEl.textContent = text;
             commitEl.title = 'Build ran outside a git checkout — rebuild from the repo to embed the commit SHA';

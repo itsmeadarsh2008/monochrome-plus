@@ -18,6 +18,7 @@ export default [
                 __APP_COMMIT__: 'readonly',
                 __APP_COMMIT_SHORT__: 'readonly',
                 __APP_REPO_URL__: 'readonly',
+                __APP_COMMIT_SOURCE__: 'readonly',
             },
         },
         rules: {
