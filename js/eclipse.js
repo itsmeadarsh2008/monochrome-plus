@@ -292,14 +292,14 @@ export class EclipseAPI {
     // Background requests (billboard resolution, non-visible prefetches) go
     // through a separate lane that only runs when the interactive queues are
     // idle, so they never delay user-facing work.
-    _enqueueRequest(fn, priority = false, background = false, signal = null) {
+    _enqueueRequest(fn, priority = false, background = false, signal = null, persistent = false) {
         // Under rate pressure, non-essential background work is dropped on
         // arrival — it would only re-trip the limiter and delay recovery.
         if (background && isAddonUnderRatePressure()) {
             return Promise.reject(new Error(RATE_LIMIT_ERROR_MESSAGE));
         }
         return new Promise((resolve, reject) => {
-            const item = { fn, resolve, reject, signal };
+            const item = { fn, resolve, reject, signal, persistent };
             if (background) {
                 this._backgroundQueue.push(item);
                 this._pumpBackgroundQueue();
@@ -321,6 +321,15 @@ export class EclipseAPI {
                 const fromPriority = this._priorityQueue.length > 0;
                 const item = fromPriority ? this._priorityQueue.shift() : this._requestQueue.shift();
                 const gapMs = fromPriority ? PRIORITY_REQUEST_GAP_MS : MIN_REQUEST_GAP_MS;
+                // While the addon is rate-limited, only persistent requests
+                // (stream resolution) keep trying — everything else is dropped
+                // instantly instead of queuing behind a doomed fetch that would
+                // only re-trip the limiter and extend the freeze.
+                if (isAddonUnderRatePressure() && !item.persistent) {
+                    notifyRateLimitedOnce();
+                    item.reject(new Error(RATE_LIMIT_ERROR_MESSAGE));
+                    continue;
+                }
                 if (item.signal?.aborted) {
                     item.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
                     continue;
@@ -353,6 +362,13 @@ export class EclipseAPI {
                     continue;
                 }
                 const item = this._backgroundQueue.shift();
+                // Same pressure gate as the interactive queues: background work
+                // enqueued before a rate-limit window must not fire into it.
+                if (isAddonUnderRatePressure() && !item.persistent) {
+                    notifyRateLimitedOnce();
+                    item.reject(new Error(RATE_LIMIT_ERROR_MESSAGE));
+                    continue;
+                }
                 if (item.signal?.aborted) {
                     item.reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
                     continue;
@@ -400,7 +416,8 @@ export class EclipseAPI {
                 () => fetch(url, this._fetchOptions(signal, useTimeout)),
                 priority,
                 background,
-                signal
+                signal,
+                persistent
             );
         } catch (error) {
             if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
@@ -976,6 +993,14 @@ export class EclipseAPI {
     async getSimilarArtists(artistId, options = {}) {
         const seedId = String(artistId || '');
         if (!seedId) return [];
+
+        // During rate-limit windows the whole synthesis cascade (seed detail +
+        // up to three searches per artist) is dropped at the source — it is
+        // invisible homepage decoration, not worth re-tripping the limiter.
+        if (isAddonUnderRatePressure()) {
+            console.warn('[Eclipse] Skipping similar-artist synthesis for', seedId, '— addon under rate pressure');
+            return [];
+        }
 
         const cacheKey = `similar_artists_${seedId}`;
         const cached = this._similarCache.get(cacheKey);
