@@ -15,3 +15,6 @@ export const isSafari =
     !lowerCaseOriginalUserAgent.includes('chrome') &&
     !lowerCaseOriginalUserAgent.includes('crios') &&
     !lowerCaseOriginalUserAgent.includes('android');
+
+/** Firefox has a fragile MSE/fMP4 FLAC path when intercepted by Web Audio. */
+export const isFirefox = lowerCaseOriginalUserAgent.includes('firefox');

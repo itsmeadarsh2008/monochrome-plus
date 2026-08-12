@@ -13,7 +13,7 @@ import {
     deriveTrackQuality,
     deriveQualityFromShakaVariant,
 } from './utils.js';
-import { isIos, isSafari } from './platform-detection.js';
+import { isFirefox, isIos, isSafari } from './platform-detection.js';
 import { SVG_CLOCK, SVG_ATMOS } from './icons.js';
 import { showNotification } from './downloads.js';
 import {
@@ -253,6 +253,13 @@ export class Player {
         }
 
         const hls = new Hls({
+            // Firefox can expose MSE while failing to infer the codec from an
+            // audio-only fMP4 init segment. The reference addon serves FLAC
+            // HLS without a CODECS attribute, so provide the codec explicitly.
+            // Running the remuxer on the main thread also avoids Firefox
+            // worker/MediaSource timing issues with high sample-rate FLAC.
+            defaultAudioCodec: 'flac',
+            enableWorker: false,
             autoStartLoad: true,
             startFragPrefetch: true,
             maxBufferLength: 60,
@@ -287,6 +294,13 @@ export class Player {
                 if (!data?.fatal) return;
                 if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                     hls.startLoad();
+                    return;
+                }
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !hls._monoMediaRecoveryAttempted) {
+                    hls._monoMediaRecoveryAttempted = true;
+                    console.warn('[HLS] Recovering Firefox/media decoder error once:', data.details);
+                    hls.recoverMediaError();
+                    return;
                 }
                 finish(new Error(`HLS ${data.details || 'fatal playback error'}`));
             };
@@ -1249,6 +1263,14 @@ export class Player {
             const isAdaptive = isDash || isHls;
 
             if (isAdaptive) {
+                if (!audioContextManager.isReady()) {
+                    audioContextManager.init(this.audio);
+                }
+                if (audioContextManager.isReady()) {
+                    await audioContextManager.resume();
+                    this.applyReplayGain();
+                }
+
                 // Switching to adaptive stream - clean up Howler first to restore native audio methods
                 this._cleanupHowler();
 
@@ -1283,16 +1305,48 @@ export class Player {
                         this._cleanupHls();
                         await this._loadWithHls(streamUrl, startTime);
                     } catch (hlsError) {
+                        // Firefox may report MSE support while rejecting the
+                        // FLAC fMP4 init segment at high sample rates. Keep
+                        // the track playable by retrying the same recording at
+                        // standard lossless before normal error handling skips.
+                        const isFirefoxHiResFailure =
+                            isFirefox &&
+                            this._getEffectivePlaybackQuality(this.quality) === 'HI_RES_LOSSLESS' &&
+                            /codec|media|buffer|fragment|source|unsupported|decode/i.test(String(hlsError?.message || hlsError));
+                        if (isFirefoxHiResFailure) {
+                            try {
+                                console.warn('[HLS] Firefox rejected Hi-Res FLAC; retrying standard Lossless:', hlsError);
+                                this.api.clearStreamCache?.(track.id);
+                                const fallbackInfo = await this.api.getStreamUrl(track.id, 'LOSSLESS');
+                                const fallbackUrl =
+                                    typeof fallbackInfo === 'object' && fallbackInfo.url ? fallbackInfo.url : fallbackInfo;
+                                if (fallbackUrl && isHlsStreamUrl(fallbackUrl)) {
+                                    streamUrl = fallbackUrl;
+                                    streamInfo = fallbackInfo;
+                                    track.streamedQuality = 'LOSSLESS';
+                                    await this._loadWithHls(fallbackUrl, startTime);
+                                    showNotification('Firefox playback uses standard Lossless for this track.', 3500);
+                                } else {
+                                    throw hlsError;
+                                }
+                            } catch (fallbackError) {
+                                console.warn('[HLS] Firefox Lossless fallback failed:', fallbackError);
+                                throw hlsError;
+                            }
+                        } else {
                         console.error('hls.js load failed, falling back to Shaka:', hlsError);
                         if (!this.shakaPlayer) await this.init();
                         if (!this.shakaPlayer) throw hlsError;
                         await this.shakaPlayer.load(streamUrl, null, 'application/x-mpegURL');
                         this.shakaInitialized = true;
                         await this.audio.play();
+                        }
                     }
                 }
             } else {
-                // Use Howler for regular audio files (FLAC, MP3, etc.)
+                // Use the native audio element + Web Audio graph for regular
+                // files. HLS/DASH still use their manifest engines above, but
+                // the decoded output shares the same native graph.
                 if (this.shakaInitialized && this.shakaPlayer) {
                     await this.shakaPlayer.unload();
                     this.shakaInitialized = false;
@@ -1302,7 +1356,7 @@ export class Player {
                     this.dashPlayer.reset();
                     this.dashInitialized = false;
                 }
-                await this.loadWithHowler(streamUrl, startTime);
+                await this.loadWithNativeAudio(streamUrl, startTime);
             }
 
             // Post-playback tasks
@@ -2149,6 +2203,34 @@ export class Player {
     }
 
     // Howler-based audio playback for better streaming support
+    async loadWithNativeAudio(streamUrl, startTime = 0) {
+        this._cleanupHowler();
+        this.audio.pause();
+        this.audio.preload = 'auto';
+        this.audio.src = streamUrl;
+        this.audio.load();
+
+        if (startTime > 0) {
+            await new Promise((resolve) => {
+                if (this.audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                    resolve();
+                    return;
+                }
+                this.audio.addEventListener('loadedmetadata', resolve, { once: true });
+            });
+            this.audio.currentTime = startTime;
+        }
+
+        if (!audioContextManager.isReady()) {
+            audioContextManager.init(this.audio);
+        }
+        await audioContextManager.resume();
+        this.applyReplayGain();
+        await this.audio.play();
+        this.startPlaybackMonitor();
+        return this.audio;
+    }
+
     async loadWithHowler(streamUrl, startTime = 0) {
         const { Howl, Howler } = await import('howler');
 
