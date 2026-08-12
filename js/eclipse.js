@@ -144,6 +144,21 @@ function registerStreamHostForProxy(streamUrl) {
     }
 }
 
+// Some Eclipse addons expose an HLS playlist through an extensionless
+// `/dash/:id` route. The route name is legacy terminology: the response is
+// still an HLS playlist, so the player must not treat it as a regular FLAC
+// file. Explicit HLS/MPD URLs and addon mediaType values remain authoritative.
+function isHlsStreamUrl(streamUrl) {
+    if (!streamUrl) return false;
+    try {
+        const pathname = new URL(streamUrl, window.location.href).pathname.toLowerCase();
+        return pathname.endsWith('.m3u8') || (/\/dash(?:\/|$)/.test(pathname) && !pathname.endsWith('.mpd'));
+    } catch {
+        const normalized = String(streamUrl).toLowerCase();
+        return normalized.includes('.m3u8') || /\/dash(?:\/|$)/.test(normalized);
+    }
+}
+
 const SEARCH_CACHE_TTL = 15 * 60 * 1000;
 
 // Resolved stream URLs are persisted to localStorage so replaying a track
@@ -926,7 +941,11 @@ export class EclipseAPI {
                 data.audioMode ||
                 (Array.isArray(data.audioModes) ? data.audioModes.find((m) => /atmos|dolby/i.test(String(m))) : null) ||
                 null,
-            mediaType: data.format || null,
+            // The reference addon serves an HLS playlist from an extensionless
+            // `/dash/:id` URL while reporting `format: "flac"`. Keep `format`
+            // for quality/codec metadata, but expose the transport separately
+            // so Eclipse playback goes through the HLS engine.
+            mediaType: data.mediaType || (isHlsStreamUrl(data.url) ? 'HLS' : data.format || null),
             mimeType: data.mimeType || null,
             codec: data.codec || data.fileCodec || null,
             containerFormat: data.containerFormat || null,

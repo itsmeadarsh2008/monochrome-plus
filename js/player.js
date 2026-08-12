@@ -28,6 +28,17 @@ import {
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
 
+function isHlsStreamUrl(streamUrl) {
+    if (!streamUrl) return false;
+    try {
+        const pathname = new URL(streamUrl, window.location.href).pathname.toLowerCase();
+        return pathname.endsWith('.m3u8') || (/\/dash(?:\/|$)/.test(pathname) && !pathname.endsWith('.mpd'));
+    } catch {
+        const normalized = String(streamUrl).toLowerCase();
+        return normalized.includes('.m3u8') || /\/dash(?:\/|$)/.test(normalized);
+    }
+}
+
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
         Player.instance = this;
@@ -1090,10 +1101,11 @@ export class Player {
             const isDash =
                 (typeof streamUrl === 'string' && streamUrl.includes('.mpd')) ||
                 (typeof streamUrl === 'string' && streamUrl.startsWith('blob:')) ||
-                (streamInfo && streamInfo.mediaType === 'DASH');
+                (streamInfo && String(streamInfo.mediaType || '').toUpperCase() === 'DASH');
             const isHls =
-                (typeof streamUrl === 'string' && streamUrl.includes('.m3u8')) ||
-                (streamInfo && streamInfo.mediaType === 'HLS');
+                (typeof streamUrl === 'string' && isHlsStreamUrl(streamUrl)) ||
+                (streamInfo && String(streamInfo.mediaType || '').toUpperCase() === 'HLS') ||
+                (streamInfo && /mpegurl|apple\.mpegurl/i.test(String(streamInfo.mimeType || '')));
             const isAdaptive = isDash || isHls;
 
             if (isAdaptive) {
@@ -1119,15 +1131,26 @@ export class Player {
                     }
                 } else {
                     // Use Shaka for HLS streams
+                    if (this.dashInitialized) {
+                        this.dashPlayer.reset();
+                        this.dashInitialized = false;
+                    }
                     if (!this.shakaPlayer) {
                         await this.init();
                     }
 
                     try {
                         if (this.shakaPlayer) {
+                            if (this.shakaInitialized) {
+                                await this.shakaPlayer.unload();
+                                this.shakaInitialized = false;
+                            }
                             const mimeType = 'application/x-mpegURL';
                             await this.shakaPlayer.load(streamUrl, null, mimeType);
                             this.shakaInitialized = true;
+                            // Shaka loads and buffers the manifest but does not
+                            // autoplay the attached media element for us.
+                            await this.audio.play();
                         } else {
                             throw new Error('Shaka Player not initialized');
                         }
