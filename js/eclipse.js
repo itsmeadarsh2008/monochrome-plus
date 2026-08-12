@@ -177,8 +177,17 @@ const MAX_PERSISTENT_WALL_MS = 45 * 1000;
 // pauses until the limits clear instead of each failing and retrying on its
 // own (bursts of parallel searches hammer the limit harder).
 let addonRateLimitUntil = 0;
+let lastRateLimitAt = 0;
 let rateLimitNotifiedAt = 0;
 const RATE_LIMIT_NOTIFY_THROTTLE_MS = 30 * 1000;
+
+// True while the addon is (or recently was) rate-limited. Non-essential
+// background traffic (home recommendations, billboards, import matching) is
+// dropped entirely under pressure so it can't keep re-tripping the limiter;
+// user-facing searches and stream resolution still go through.
+function isAddonUnderRatePressure() {
+    return addonRateLimitUntil > Date.now() || (lastRateLimitAt !== 0 && Date.now() - lastRateLimitAt < 60000);
+}
 
 function notifyRateLimitedOnce() {
     if (typeof window === 'undefined') return;
@@ -284,6 +293,11 @@ export class EclipseAPI {
     // through a separate lane that only runs when the interactive queues are
     // idle, so they never delay user-facing work.
     _enqueueRequest(fn, priority = false, background = false, signal = null) {
+        // Under rate pressure, non-essential background work is dropped on
+        // arrival — it would only re-trip the limiter and delay recovery.
+        if (background && isAddonUnderRatePressure()) {
+            return Promise.reject(new Error(RATE_LIMIT_ERROR_MESSAGE));
+        }
         return new Promise((resolve, reject) => {
             const item = { fn, resolve, reject, signal };
             if (background) {
@@ -415,6 +429,7 @@ export class EclipseAPI {
         }
 
         if (res.status === 429) {
+            lastRateLimitAt = Date.now();
             // Respect the addon's retry-after when provided; otherwise back off
             // exponentially (500ms → 1s → 2s …), capped so interactive requests
             // never sleep too long. Persistent searches (user-facing search page)
@@ -737,6 +752,19 @@ export class EclipseAPI {
         }
     }
 
+    // Reads a persisted stream entry even when it has expired (rate-limited
+    // resolution fallback). The entry is not treated as fresh — it is only a
+    // best-effort URL for a degraded play attempt.
+    _getStaleStreamCacheLocal(key) {
+        try {
+            const raw = localStorage.getItem(STREAM_CACHE_LOCAL_PREFIX + key);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch {
+            return null;
+        }
+    }
+
     _setStreamCacheLocal(key, entry) {
         try {
             if (!entry) return;
@@ -812,13 +840,31 @@ export class EclipseAPI {
         // tiers like Dolby Atmos when asked; the hint is a no-op for addons that
         // always pick a single canonical stream. The cache key already includes
         // the quality, so a fresh tier is requested (and cached) independently.
-        const data = await this._request(
-            `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
-            MAX_429_RETRIES,
-            true,
-            false,
-            true
-        );
+        let data;
+        try {
+            data = await this._request(
+                `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                MAX_429_RETRIES,
+                true,
+                false,
+                true
+            );
+        } catch (error) {
+            // Under rate pressure a cached URL (even past its nominal expiry)
+            // is worth trying — Tidal CDN URLs commonly outlive their expiry,
+            // and playback degrades gracefully instead of failing outright.
+            if (error?.message === RATE_LIMIT_ERROR_MESSAGE) {
+                const stale = this._getStaleStreamCacheLocal(key);
+                if (stale?.url) {
+                    console.warn('[Eclipse] Addon rate-limited — reusing stale stream URL for', trackId);
+                    data = stale;
+                } else {
+                    throw error;
+                }
+            } else {
+                throw error;
+            }
+        }
         const stream = {
             url: data.url,
             format: data.format,
@@ -1005,11 +1051,14 @@ export class EclipseAPI {
         const background = options?.background === true;
         const artistName = String(seed.artist?.name || seed.artists?.[0]?.name || '').trim();
         const title = String(seed.title || '').trim();
-        const queries = [artistName, `${artistName} ${title}`].filter(Boolean);
+        // Under rate pressure, only the artist query runs (the "artist title"
+        // combo query doubles volume for marginal relevance).
+        const queries = isAddonUnderRatePressure() ? [artistName] : [artistName, `${artistName} ${title}`];
+        const queriesToRun = queries.filter(Boolean).slice(0, 2);
 
         const seedId = String(id);
         const candidates = [];
-        for (const query of queries.slice(0, 2)) {
+        for (const query of queriesToRun) {
             try {
                 const results = await this.searchTracks(query, { limit: 24, background });
                 candidates.push(...(results.items || []));
@@ -1031,7 +1080,12 @@ export class EclipseAPI {
     }
 
     async getRecommendedTracksForPlaylist(tracks = [], limit = 30, options = {}) {
-        const seeds = (tracks || []).filter((track) => track?.id && (track.title || track.artist?.name)).slice(0, 3);
+        // Under rate pressure, cap to two seeds so the home page can't fan out
+        // into a fresh search burst while the addon is already throttled.
+        const maxSeeds = isAddonUnderRatePressure() ? 2 : 3;
+        const seeds = (tracks || [])
+            .filter((track) => track?.id && (track.title || track.artist?.name))
+            .slice(0, maxSeeds);
         if (seeds.length === 0) return [];
 
         const background = options?.background === true;
