@@ -8,6 +8,7 @@ import {
     getTrackArtistsHTML,
     getTrackYearDisplay,
     createQualityBadgeHTML,
+    createFullscreenQualityHTML,
     escapeHtml,
     deriveTrackQuality,
     deriveQualityFromShakaVariant,
@@ -65,6 +66,7 @@ export class Player {
         this._prefetchInflight = new Map();
         this._currentTrackWarmupAbortController = null;
         this._backgroundPreloadTimer = null;
+        this._nextStreamResolution = null;
         this.currentTrack = null;
         this.currentRgValues = null;
         this.userVolume = 1; // Always full volume
@@ -88,6 +90,8 @@ export class Player {
 
         this.shakaInitialized = false;
         this.shakaPlayer = null;
+        this.hlsInitialized = false;
+        this.hlsPlayer = null;
 
         // Initialize dash.js player for better DASH streaming
         this.dashPlayer = MediaPlayer().create();
@@ -179,9 +183,25 @@ export class Player {
             await this.shakaPlayer.attach(this.audio);
             this.shakaPlayer.configure({
                 streaming: {
+                    // The addon HLS segments travel through a CORS relay on
+                    // hosted builds. Keep a deep safety buffer so a slow
+                    // segment response does not become an audible dropout.
                     bufferingGoal: 60,
                     rebufferingGoal: 10,
                     bufferBehind: 60,
+                    retryParameters: {
+                        timeout: 20000,
+                        stallTimeout: 5000,
+                        maxAttempts: 5,
+                        baseDelay: 250,
+                        backoffFactor: 1.5,
+                        fuzzFactor: 0.5,
+                    },
+                    gapDetectionThreshold: 0.5,
+                    gapJumpTimerTime: 0.5,
+                    stallEnabled: true,
+                    stallThreshold: 0.5,
+                    stallSkip: 0,
                 },
                 abr: {
                     enabled: true,
@@ -208,6 +228,86 @@ export class Player {
 
         this.loadQueueState();
         this.setupMediaSession();
+    }
+
+    async _loadWithHls(streamUrl, startTime = 0) {
+        const module = await import('hls.js');
+        const Hls = module.default || module;
+
+        if (this.hlsPlayer) {
+            this.hlsPlayer.destroy();
+            this.hlsPlayer = null;
+            this.hlsInitialized = false;
+        }
+
+        // Safari/iOS can play HLS natively. Other browsers use hls.js/MSE.
+        if (!Hls.isSupported()) {
+            if (this.audio.canPlayType('application/vnd.apple.mpegurl')) {
+                this.audio.src = streamUrl;
+                this.audio.load();
+                await this.audio.play();
+                if (startTime > 0) this.audio.currentTime = startTime;
+                return;
+            }
+            throw new Error('HLS is not supported by this browser');
+        }
+
+        const hls = new Hls({
+            autoStartLoad: true,
+            startFragPrefetch: true,
+            maxBufferLength: 60,
+            maxMaxBufferLength: 120,
+            backBufferLength: 60,
+            lowLatencyMode: false,
+            fragLoadingTimeOut: 20000,
+            fragLoadingMaxRetry: 5,
+            fragLoadingRetryDelay: 250,
+            fragLoadingMaxRetryTimeout: 5000,
+            manifestLoadingMaxRetry: 4,
+            manifestLoadingRetryDelay: 250,
+            manifestLoadingMaxRetryTimeout: 5000,
+        });
+
+        this.hlsPlayer = hls;
+        this.hlsInitialized = true;
+        hls.attachMedia(this.audio);
+
+        await new Promise((resolve, reject) => {
+            let settled = false;
+            const finish = (error) => {
+                if (settled) return;
+                settled = true;
+                hls.off(Hls.Events.MANIFEST_PARSED, onManifest);
+                hls.off(Hls.Events.ERROR, onError);
+                if (error) reject(error);
+                else resolve();
+            };
+            const onManifest = () => finish();
+            const onError = (_, data) => {
+                if (!data?.fatal) return;
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    hls.startLoad();
+                }
+                finish(new Error(`HLS ${data.details || 'fatal playback error'}`));
+            };
+            hls.on(Hls.Events.MANIFEST_PARSED, onManifest);
+            hls.on(Hls.Events.ERROR, onError);
+            hls.loadSource(streamUrl);
+        });
+
+        if (startTime > 0) this.audio.currentTime = startTime;
+        await this.audio.play();
+    }
+
+    _cleanupHls() {
+        if (!this.hlsPlayer) return;
+        try {
+            this.hlsPlayer.destroy();
+        } catch {
+            /* ignore */
+        }
+        this.hlsPlayer = null;
+        this.hlsInitialized = false;
     }
 
     updateAdaptiveQualityBadge() {
@@ -327,6 +427,12 @@ export class Player {
 
                 if (hasDuration) {
                     const remaining = duration - this.audio.currentTime;
+                    if (remaining <= 3 && remaining > 0.2) {
+                        // Resolve metadata only while the current track is
+                        // still playing. Audio remains untouched until the
+                        // handoff, so upcoming tracks are not preloaded.
+                        this._resolveNextStreamUrl().catch(() => {});
+                    }
                     if (remaining <= 0.2 && remaining >= -0.08 && !this._advanceInFlight) {
                         this._setTransitionState('preparing');
                         this._setAdvanceInFlight(true);
@@ -524,8 +630,32 @@ export class Player {
         // Preloading is disabled — do not warm the browser cache before play.
     }
 
-    scheduleBackgroundPreload() {
-        // Preloading is disabled — no background fetch of upcoming tracks.
+    scheduleBackgroundPreload(delayMs = 250) {
+        // Resolve only the next signed URL. No audio or media segments are
+        // fetched ahead of playback.
+        if (this._backgroundPreloadTimer) clearTimeout(this._backgroundPreloadTimer);
+        this._backgroundPreloadTimer = setTimeout(() => {
+            this._backgroundPreloadTimer = null;
+            this._resolveNextStreamUrl().catch(() => {});
+        }, Math.max(0, delayMs));
+    }
+
+    async _resolveNextStreamUrl() {
+        const currentQueue = this.shuffleActive ? this.shuffledQueue : this.queue;
+        const nextIndex = this.currentQueueIndex + 1 < currentQueue.length ? this.currentQueueIndex + 1 : 0;
+        const nextTrack =
+            this.repeatMode === REPEAT_MODE.ALL ? currentQueue[nextIndex] : currentQueue[this.currentQueueIndex + 1];
+        if (!nextTrack || nextTrack.isLocal || nextTrack.isTracker || nextTrack.isPodcast) return null;
+
+        const resolutionKey = `${nextTrack.id}:${this._getEffectivePlaybackQuality(this.quality)}`;
+        if (this._nextStreamResolution === resolutionKey) return null;
+        this._nextStreamResolution = resolutionKey;
+
+        try {
+            return await this._resolveStreamUrlWithRetry(nextTrack, 1, 0);
+        } finally {
+            if (this._nextStreamResolution === resolutionKey) this._nextStreamResolution = null;
+        }
     }
 
     _updateTrackInfoUI(track) {
@@ -860,9 +990,7 @@ export class Player {
     }
 
     async preloadNextTracks() {
-        // Preloading is disabled — stream URLs are only resolved when a track
-        // is actually played.
-        return Promise.resolve();
+        return this._resolveNextStreamUrl();
     }
 
     /**
@@ -903,6 +1031,7 @@ export class Player {
         }
         this._streamUrlInflight.clear();
         this._prefetchInflight.clear();
+        this._nextStreamResolution = null;
         this.preloadCache.clear();
     }
 
@@ -1051,9 +1180,20 @@ export class Player {
                     if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
                     if (streamInfo.audioMode) track.audioMode = streamInfo.audioMode;
                     if (streamInfo.format) track.format = streamInfo.format;
+                    if (streamInfo.codec) track.codec = streamInfo.codec;
+                    if (streamInfo.containerFormat) track.containerFormat = streamInfo.containerFormat;
+                    if (streamInfo.mediaType) track.mediaType = streamInfo.mediaType;
                     if (streamInfo.mimeType) track.mimeType = streamInfo.mimeType;
                     if (streamInfo.bitrateKbps) track.bitrateKbps = streamInfo.bitrateKbps;
                     track.streamedQuality = effectiveQuality;
+
+                    // Fullscreen may have opened before the signed stream was
+                    // resolved. Refresh its exact quality readout now that the
+                    // addon has supplied the actual codec and stream specs.
+                    const fullscreenQuality = document.getElementById('fullscreen-track-quality');
+                    if (fullscreenQuality) {
+                        fullscreenQuality.innerHTML = createFullscreenQualityHTML(track);
+                    }
                 }
             } else if (track.isLocal && track.file) {
                 streamUrl = URL.createObjectURL(track.file);
@@ -1112,8 +1252,9 @@ export class Player {
                 // Switching to adaptive stream - clean up Howler first to restore native audio methods
                 this._cleanupHowler();
 
-                // Use dash.js for DASH streams, Shaka for HLS
+                // Use dash.js for DASH streams, hls.js for HLS
                 if (isDash) {
+                    this._cleanupHls();
                     // Use dash.js for DASH streams
                     try {
                         if (this.dashInitialized) {
@@ -1130,33 +1271,24 @@ export class Player {
                         await this.loadWithHowler(streamUrl, startTime);
                     }
                 } else {
-                    // Use Shaka for HLS streams
+                    // Use hls.js for HLS streams. It keeps a larger rolling
+                    // buffer and retries relay-backed media segments without
+                    // involving the DASH engine.
                     if (this.dashInitialized) {
                         this.dashPlayer.reset();
                         this.dashInitialized = false;
                     }
-                    if (!this.shakaPlayer) {
-                        await this.init();
-                    }
 
                     try {
-                        if (this.shakaPlayer) {
-                            if (this.shakaInitialized) {
-                                await this.shakaPlayer.unload();
-                                this.shakaInitialized = false;
-                            }
-                            const mimeType = 'application/x-mpegURL';
-                            await this.shakaPlayer.load(streamUrl, null, mimeType);
-                            this.shakaInitialized = true;
-                            // Shaka loads and buffers the manifest but does not
-                            // autoplay the attached media element for us.
-                            await this.audio.play();
-                        } else {
-                            throw new Error('Shaka Player not initialized');
-                        }
-                    } catch (shakaError) {
-                        console.error('Shaka load failed, falling back to Howler:', shakaError);
-                        await this.loadWithHowler(streamUrl, startTime);
+                        this._cleanupHls();
+                        await this._loadWithHls(streamUrl, startTime);
+                    } catch (hlsError) {
+                        console.error('hls.js load failed, falling back to Shaka:', hlsError);
+                        if (!this.shakaPlayer) await this.init();
+                        if (!this.shakaPlayer) throw hlsError;
+                        await this.shakaPlayer.load(streamUrl, null, 'application/x-mpegURL');
+                        this.shakaInitialized = true;
+                        await this.audio.play();
                     }
                 }
             } else {
@@ -1165,6 +1297,7 @@ export class Player {
                     await this.shakaPlayer.unload();
                     this.shakaInitialized = false;
                 }
+                this._cleanupHls();
                 if (this.dashInitialized) {
                     this.dashPlayer.reset();
                     this.dashInitialized = false;

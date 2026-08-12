@@ -110,6 +110,8 @@ async function prepareCastSource(player, audioPlayer) {
                 player.shakaInitialized = false;
             }
 
+            player._cleanupHls?.();
+
             track.streamedQuality = quality;
             audioPlayer.src = streamUrl;
             audioPlayer.load();
