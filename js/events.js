@@ -368,6 +368,20 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
 
                         if (!actualUrl) continue;
 
+                        // A Dolby tier can't decode in this browser; loading it
+                        // again just re-triggers the identical element error.
+                        // Skip straight to the next quality tier.
+                        if (
+                            typeof streamResult === 'object' &&
+                            player._isAtmosStream(streamResult, actualUrl) &&
+                            !player._supportsDolbyAtmosWebPlayback()
+                        ) {
+                            console.warn(
+                                `Fallback quality ${fallbackQuality} is Dolby Atmos — this browser has no decoder, skipping.`
+                            );
+                            continue;
+                        }
+
                         // Reset player state for standard playback (non-DASH if possible)
                         if (player.dashInitialized) {
                             player.dashPlayer.reset();

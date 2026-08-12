@@ -34,10 +34,11 @@ async function loadImage(src) {
             hostname === 'sgp.cloud.appwrite.io' ||
             hostname.endsWith('.cloud.appwrite.io');
 
-        if (needsProxy && window.location.hostname === 'localhost') {
+        if (needsProxy) {
+            if (typeof window.__corsBypass?.loadImageWithCorsBypass === 'function') {
+                return window.__corsBypass.loadImageWithCorsBypass(src);
+            }
             url = `/cors-proxy/${encodeURIComponent(src)}`;
-        } else if (needsProxy && window.location.hostname !== 'localhost') {
-            url = `https://corsproxy.io/proxy?url=${encodeURIComponent(src)}`;
         }
     }
 

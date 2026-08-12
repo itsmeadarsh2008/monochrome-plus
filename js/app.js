@@ -529,6 +529,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         true
     );
 
+    // Addon rate limit: the addon answered 429 and exhausted its retries — tell
+    // the user instead of silently showing empty results / skipped tracks.
+    window.addEventListener('addon-rate-limited', async () => {
+        try {
+            const { showNotification } = await loadDownloadsModule();
+            showNotification('Eclipse addon is rate-limited — pausing requests, try again shortly.');
+        } catch {
+            /* notification is best-effort */
+        }
+    });
+
     // Detect LDAC hint and suggest Lossless settings
     const checkLdacSupport = async () => {
         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;

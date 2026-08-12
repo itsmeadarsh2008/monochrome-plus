@@ -1,10 +1,15 @@
 // Global CORS bypass for all environments.
-// Local dev: Uses Vite proxy via /cors-proxy/ prefix
-// Production: Routes through a chain of public CORS proxies with automatic
-// fallback (a dead proxy is skipped and a working one is remembered).
+// All environments route proxied traffic through the same-origin /cors-proxy/
+// route (Vite dev server, or the host's _redirects rule in production), so the
+// browser only ever talks to its own origin. Production additionally falls back
+// to a chain of public CORS proxies when the origin route is unavailable, and a
+// dead proxy is skipped while a working one is remembered in localStorage.
 
 const CORS_PROXY_PREFIX = '/cors-proxy/';
 const PROXY_STORAGE_KEY = 'mono-cors-proxy-index';
+const PROXY_DEAD_KEY = 'mono-cors-proxy-dead';
+// A proxy is quarantined for this long after it fails twice in a row.
+const PROXY_DEAD_COOLDOWN_MS = 15 * 60 * 1000;
 
 // Public proxy fallback chain (production only). Ordered by preference.
 const PROXY_TEMPLATES = [
@@ -88,6 +93,90 @@ function setActiveProxyIndex(idx) {
     }
 }
 
+// ---- dead-proxy quarantine -------------------------------------------------
+// Public proxies die often. Once a template fails repeatedly it is quarantined
+// so every later request (fetch wrapper, XHR rewrite, image loader) skips it
+// and starts from a proxy that actually responds.
+
+function readDeadProxies() {
+    if (typeof window === 'undefined' || !window.localStorage) return {};
+    try {
+        const raw = window.localStorage.getItem(PROXY_DEAD_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeDeadProxies(dead) {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+        window.localStorage.setItem(PROXY_DEAD_KEY, JSON.stringify(dead));
+    } catch {
+        /* ignore storage errors */
+    }
+}
+
+function markProxyDead(idx) {
+    if (idx == null || idx < 0 || idx >= PROXY_TEMPLATES.length) return;
+    const dead = readDeadProxies();
+    dead[idx] = Date.now() + PROXY_DEAD_COOLDOWN_MS;
+    writeDeadProxies(dead);
+    console.warn(
+        `[CORS Bypass] Public CORS proxy #${idx} marked dead (${PROXY_DEAD_COOLDOWN_MS / 60000} min quarantine).`
+    );
+}
+
+function markProxyAlive(idx) {
+    if (idx == null || idx < 0 || idx >= PROXY_TEMPLATES.length) return;
+    const dead = readDeadProxies();
+    if (dead[idx] == null) return;
+    delete dead[idx];
+    writeDeadProxies(dead);
+}
+
+function isProxyDead(idx) {
+    const until = readDeadProxies()[idx];
+    if (!until) return false;
+    if (until <= Date.now()) {
+        const dead = readDeadProxies();
+        delete dead[idx];
+        writeDeadProxies(dead);
+        return false;
+    }
+    return true;
+}
+
+// First live proxy index, starting from the remembered active one. Falls back
+// to 0 when every proxy is quarantined (quarantine entries are time-bounded).
+function firstLiveProxyIndex() {
+    const start = getActiveProxyIndex();
+    for (let i = 0; i < PROXY_TEMPLATES.length; i++) {
+        const idx = (start + i) % PROXY_TEMPLATES.length;
+        if (!isProxyDead(idx)) return idx;
+    }
+    return 0;
+}
+
+// Failure bookkeeping per session — two consecutive failures quarantine a proxy.
+const proxyFailureCounts = new Map();
+
+function noteProxyFailure(idx) {
+    const count = (proxyFailureCounts.get(idx) || 0) + 1;
+    proxyFailureCounts.set(idx, count);
+    if (count >= 2) {
+        markProxyDead(idx);
+        proxyFailureCounts.delete(idx);
+    }
+}
+
+function noteProxySuccess(idx) {
+    proxyFailureCounts.delete(idx);
+    markProxyAlive(idx);
+}
+
 function sanitizeHost(hostname) {
     const host = String(hostname || '')
         .toLowerCase()
@@ -118,6 +207,8 @@ function encodeUrl(url) {
     return encodeURIComponent(new URL(url, window.location.href).toString());
 }
 
+// Plain rewrite used by XHR: special routes + public proxy in production
+// (dash.js segments keep the long-standing, proven behavior).
 function rewriteUrl(rawUrl) {
     if (typeof rawUrl !== 'string') return rawUrl;
 
@@ -135,13 +226,33 @@ function rewriteUrl(rawUrl) {
             return rawUrl;
         }
 
-        // Local dev only: route through Vite proxy
         if (isLocalBrowserDev()) {
             return `${CORS_PROXY_PREFIX}${encodeURIComponent(parsed.toString())}`;
         }
 
-        // Production: route through the active public CORS proxy
-        return PROXY_TEMPLATES[getActiveProxyIndex()](encodeUrl(parsed.toString()));
+        return PROXY_TEMPLATES[firstLiveProxyIndex()](encodeUrl(parsed.toString()));
+    } catch {
+        return rawUrl;
+    }
+}
+
+// Same-origin variant used by fetch: dev Vite /cors-proxy/, or the host's
+// _redirects rule in production. When the origin route is unavailable the
+// fetch wrapper falls back to the public proxy chain.
+function rewriteUrlSameOrigin(rawUrl) {
+    if (typeof rawUrl !== 'string') return rawUrl;
+
+    try {
+        const parsed = new URL(rawUrl, window.location.href);
+        if (!/^https?:$/i.test(parsed.protocol)) return rawUrl;
+        if (parsed.origin === window.location.origin) return rawUrl;
+        if (parsed.pathname.startsWith('/artistgrid-api/') || parsed.pathname.startsWith('/tracker-api/')) {
+            return `${parsed.pathname}${parsed.search}`;
+        }
+        if (!needsProxy(parsed.hostname)) {
+            return rawUrl;
+        }
+        return `${CORS_PROXY_PREFIX}${encodeURIComponent(parsed.toString())}`;
     } catch {
         return rawUrl;
     }
@@ -151,16 +262,131 @@ function proxiedUrl(originalUrl, proxyIndex) {
     return PROXY_TEMPLATES[proxyIndex](encodeUrl(originalUrl));
 }
 
+// Set once the same-origin /cors-proxy/ route proves unavailable (Vite/Netlify
+// style hosts always have it; Appwrite static hosting does not).
+let originRouteBroken = false;
+
+// Image loading cannot use the fetch wrapper (``<img>` elements with
+// crossOrigin don't return a Response), so the proxy chain is walked manually.
+// Same-origin route first (when available), then each live public proxy; a
+// failure advances to the next template and feeds the quarantine.
+function buildImageCandidates(src) {
+    const candidates = [];
+    if (!isLocalBrowserDev() && !originRouteBroken) {
+        candidates.push({ type: 'origin', url: `${CORS_PROXY_PREFIX}${encodeURIComponent(src)}` });
+    }
+    if (!isLocalBrowserDev()) {
+        const startIndex = firstLiveProxyIndex();
+        for (let i = 0; i < PROXY_TEMPLATES.length; i++) {
+            const idx = (startIndex + i) % PROXY_TEMPLATES.length;
+            if (isProxyDead(idx)) continue;
+            candidates.push({ type: 'proxy', index: idx, url: PROXY_TEMPLATES[idx](encodeUrl(src)) });
+        }
+        // Even a fully quarantined chain keeps one candidate: quarantine
+        // entries are time-bounded, and a momentarily unresponsive proxy may
+        // still answer — better a slow attempt than a hard failure.
+        if (candidates.length === 0) {
+            const idx = firstLiveProxyIndex();
+            candidates.push({ type: 'proxy', index: idx, url: PROXY_TEMPLATES[idx](encodeUrl(src)) });
+        }
+    }
+    return candidates;
+}
+
+// Loads an image through the CORS proxy chain. Resolves the loaded
+// HTMLImageElement (crossOrigin set, ready for canvas work) or rejects when
+// every candidate failed.
+function loadImageWithCorsBypass(src, timeoutMs = 12000) {
+    if (typeof window === 'undefined' || !window.Image) {
+        return Promise.reject(new Error('Image loading unavailable'));
+    }
+    if (isLocalBrowserDev()) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+            img.src = `${CORS_PROXY_PREFIX}${encodeURIComponent(src)}`;
+        });
+    }
+
+    const candidates = buildImageCandidates(src);
+    return candidates
+        .reduce(
+            (chain, candidate) => {
+                return chain.catch(() => {
+                    const attempt = () =>
+                        new Promise((resolve, reject) => {
+                            const img = new Image();
+                            const timer = setTimeout(() => {
+                                img.onload = null;
+                                img.onerror = null;
+                                reject(new Error(`Image load timed out: ${src}`));
+                            }, timeoutMs);
+                            img.crossOrigin = 'anonymous';
+                            img.onload = () => {
+                                clearTimeout(timer);
+                                resolve(img);
+                            };
+                            img.onerror = () => {
+                                clearTimeout(timer);
+                                reject(new Error(`Failed to load image: ${src}`));
+                            };
+                            img.src = candidate.url;
+                        });
+
+                    return attempt().then(
+                        (img) => {
+                            if (candidate.type === 'origin') {
+                                originRouteBroken = false;
+                            } else {
+                                noteProxySuccess(candidate.index);
+                                if (candidate.index !== firstLiveProxyIndex()) setActiveProxyIndex(candidate.index);
+                            }
+                            return img;
+                        },
+                        (error) => {
+                            if (candidate.type === 'origin') {
+                                originRouteBroken = true;
+                            } else {
+                                noteProxyFailure(candidate.index);
+                            }
+                            throw error;
+                        }
+                    );
+                });
+            },
+            Promise.reject(new Error('No proxy candidates'))
+        )
+        .catch((error) => {
+            throw new Error(`Failed to load image through CORS proxies: ${error.message}`);
+        });
+}
+
+// Sync helper for code that writes an <img src> directly: returns the URL of
+// the preferred live proxy (or the same-origin route when available).
+function rewriteImageUrl(src) {
+    if (typeof src !== 'string' || !/^https?:/i.test(src)) return src;
+    if (!originRouteBroken) {
+        return `${CORS_PROXY_PREFIX}${encodeURIComponent(src)}`;
+    }
+    const liveIndex = firstLiveProxyIndex();
+    return PROXY_TEMPLATES[liveIndex](encodeUrl(src));
+}
+
 function installGlobalCorsBypass() {
     if (typeof window === 'undefined') return;
     window.__corsBypass = window.__corsBypass || { addProxyHost };
+    window.__corsBypass.loadImageWithCorsBypass = loadImageWithCorsBypass;
+    window.__corsBypass.rewriteImageUrl = rewriteImageUrl;
+    window.__corsBypass.rewriteUrl = rewriteUrl;
     if (window.__globalCorsBypassInstalled) return;
     window.__globalCorsBypassInstalled = true;
 
     if (isLocalBrowserDev()) {
         console.log('[CORS Bypass] Local dev mode — routing through Vite proxy.');
     } else {
-        console.log(`[CORS Bypass] Production mode — public CORS proxy #${getActiveProxyIndex()}.`);
+        console.log(`[CORS Bypass] Production mode — public CORS proxy #${firstLiveProxyIndex()}.`);
     }
 
     if (!window.__originalFetch && typeof window.fetch === 'function') {
@@ -168,7 +394,7 @@ function installGlobalCorsBypass() {
 
         window.fetch = async (input, init) => {
             const originalUrl = typeof input === 'string' ? input : input.url;
-            const rewrittenUrl = rewriteUrl(originalUrl);
+            const rewrittenUrl = rewriteUrlSameOrigin(originalUrl);
 
             if (rewrittenUrl === originalUrl) {
                 return window.__originalFetch(input, init);
@@ -177,26 +403,45 @@ function installGlobalCorsBypass() {
             const buildRequest = (url) =>
                 typeof input === 'string' ? url : new Request(url, init === undefined ? input : init);
 
-            // Local dev: the Vite proxy is the only route — no fallback chain.
-            if (isLocalBrowserDev()) {
-                return window.__originalFetch(buildRequest(rewrittenUrl), init);
+            // Same-origin /cors-proxy/ attempt (Vite in dev, _redirects in prod).
+            // Once it's proven unavailable (404 / HTML shell), skip it for the
+            // rest of the session so every proxied fetch doesn't re-probe it.
+            let lastError = null;
+            if (!originRouteBroken) {
+                try {
+                    const res = await window.__originalFetch(buildRequest(rewrittenUrl), init);
+                    if (res.ok && !String(res.headers.get('content-type') || '').startsWith('text/html')) {
+                        return res;
+                    }
+                    originRouteBroken = true;
+                    lastError = new Error(`same-origin proxy unavailable (HTTP ${res.status})`);
+                } catch (error) {
+                    lastError = error;
+                }
             }
 
-            // Proxied request: try the active proxy first, then the remaining
-            // chain in order. A successful retry becomes the new default.
-            const startIndex = getActiveProxyIndex();
-            let lastError = null;
+            // Local dev: the Vite proxy is the only route — no fallback chain.
+            if (isLocalBrowserDev()) {
+                throw lastError;
+            }
+
+            // Production fallback: try the active public proxy first, then the
+            // remaining chain in order. A successful retry becomes the default
+            // and failures feed the quarantine.
+            const startIndex = firstLiveProxyIndex();
             for (let i = 0; i < PROXY_TEMPLATES.length; i++) {
                 const idx = (startIndex + i) % PROXY_TEMPLATES.length;
-                const candidateUrl = i === 0 && idx === startIndex ? rewrittenUrl : proxiedUrl(originalUrl, idx);
                 try {
-                    const res = await window.__originalFetch(buildRequest(candidateUrl), init);
+                    const res = await window.__originalFetch(buildRequest(proxiedUrl(originalUrl, idx)), init);
                     if (res.ok) {
+                        noteProxySuccess(idx);
                         if (idx !== startIndex) setActiveProxyIndex(idx);
                         return res;
                     }
-                    lastError = new Error(`CORS proxy rejected with HTTP ${res.status}`);
+                    noteProxyFailure(idx);
+                    lastError = new Error(`CORS proxy #${idx} rejected with HTTP ${res.status}`);
                 } catch (error) {
+                    noteProxyFailure(idx);
                     lastError = error;
                 }
             }

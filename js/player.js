@@ -392,19 +392,33 @@ export class Player {
     }
 
     // Detect Atmos (E-AC3-JOC / AC-4) from the stream the addon resolved.
+    // Matches codec fields, format strings, MIME types and URL tokens. Addons
+    // report codecs under many shapes ("ec-3", "eac3", "ac-3", "ddplus",
+    // "audio/mp4; codecs=\"ec-3\""), so every field is probed — a miss means
+    // the browser tries to decode Dolby and hard-fails at the element.
     _isAtmosStream(streamInfo, streamUrl) {
+        if (!streamInfo) return false;
         const source = [
-            streamInfo?.format,
-            streamInfo?.quality,
-            streamInfo?.streamQuality,
-            streamInfo?.audioQuality,
-            streamInfo?.audioMode,
-            streamInfo?.mediaType,
+            streamInfo.format,
+            streamInfo.quality,
+            streamInfo.streamQuality,
+            streamInfo.audioQuality,
+            streamInfo.audioMode,
+            streamInfo.mediaType,
+            streamInfo.mimeType,
+            streamInfo.codec,
+            streamInfo.fileCodec,
+            streamInfo.codecs,
+            streamInfo.containerFormat,
+            streamInfo.encoding,
+            streamInfo.playlistUrl,
+            streamInfo.manifestUrl,
+            streamInfo.masterPlaylistUrl,
             typeof streamUrl === 'string' ? streamUrl : '',
         ]
             .filter(Boolean)
             .join(' ');
-        return /(?:eac-?3|ec-?3|joc|ac-?4|atmos|dolby)/i.test(source);
+        return /(?:eac-?3|ec-?3|\beac3\b|\bac-?3\b|\bac3\b|dd\s*\+|ddplus|joc|ac-?4|atmos|dolby)/i.test(source);
     }
 
     _getEffectivePlaybackQuality(requestedQuality = this.quality) {
@@ -1691,9 +1705,18 @@ export class Player {
         return null;
     }
 
-    _loadMediaSessionArtwork(track, trackTitle, artist, album, coverUrl) {
+    async _loadMediaSessionArtwork(track, trackTitle, artist, album, coverUrl) {
         let url = coverUrl;
         if (typeof coverUrl === 'string' && /^https?:/i.test(coverUrl)) {
+            try {
+                const img = await window.__corsBypass?.loadImageWithCorsBypass(coverUrl);
+                if (img) {
+                    this._applyMediaSessionArtworkFromImage(track, img, trackTitle, artist, album, coverUrl);
+                    return;
+                }
+            } catch {
+                /* fall through to legacy loading below */
+            }
             if (window.location.hostname === 'localhost') {
                 url = `/cors-proxy/${encodeURIComponent(coverUrl)}`;
             } else if (window.location.hostname !== 'localhost') {
@@ -1707,45 +1730,53 @@ export class Player {
         }
         img.onload = () => {
             if (this.currentTrack !== track) return;
-
-            try {
-                const canvas = document.createElement('canvas');
-                const size = 256;
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, size, size);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
-                this._applyMediaSessionMetadata(track, {
-                    title: trackTitle || 'Unknown Title',
-                    artist,
-                    album,
-                    artwork: [
-                        { src: dataUrl, sizes: `${size}x${size}`, type: 'image/jpeg' },
-                        { src: coverUrl, sizes: '480x480', type: 'image/jpeg' },
-                    ],
-                });
-            } catch {
-                // Canvas tainted by CORS – fall back to direct URL
-                this._applyMediaSessionMetadata(track, {
-                    title: trackTitle || 'Unknown Title',
-                    artist,
-                    album,
-                    artwork: [{ src: coverUrl, sizes: '480x480', type: 'image/jpeg' }],
-                });
-            }
+            this._applyMediaSessionArtworkFromImage(track, img, trackTitle, artist, album, coverUrl);
         };
-        // If crossOrigin='anonymous' is rejected, retry without it (direct URL fallback)
         img.onerror = () => {
-            if (this.currentTrack !== track) return;
+            this._fallbackMediaSessionArtwork(track, trackTitle, artist, album, coverUrl);
+        };
+        img.src = url;
+    }
+
+    _applyMediaSessionArtworkFromImage(track, img, trackTitle, artist, album, coverUrl) {
+        if (this.currentTrack !== track) return;
+        try {
+            const canvas = document.createElement('canvas');
+            const size = 256;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, size, size);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+            this._applyMediaSessionMetadata(track, {
+                title: trackTitle || 'Unknown Title',
+                artist,
+                album,
+                artwork: [
+                    { src: dataUrl, sizes: `${size}x${size}`, type: 'image/jpeg' },
+                    { src: coverUrl, sizes: '480x480', type: 'image/jpeg' },
+                ],
+            });
+        } catch {
+            // Canvas tainted by CORS – fall back to direct URL
             this._applyMediaSessionMetadata(track, {
                 title: trackTitle || 'Unknown Title',
                 artist,
                 album,
                 artwork: [{ src: coverUrl, sizes: '480x480', type: 'image/jpeg' }],
             });
-        };
-        img.src = url;
+        }
+    }
+
+    // If crossOrigin='anonymous' is rejected, retry without it (direct URL fallback)
+    _fallbackMediaSessionArtwork(track, trackTitle, artist, album, coverUrl) {
+        if (this.currentTrack !== track) return;
+        this._applyMediaSessionMetadata(track, {
+            title: trackTitle || 'Unknown Title',
+            artist,
+            album,
+            artwork: [{ src: coverUrl, sizes: '480x480', type: 'image/jpeg' }],
+        });
     }
 
     updateMediaSessionPlaybackState() {

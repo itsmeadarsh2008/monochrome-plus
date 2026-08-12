@@ -168,6 +168,21 @@ const PRIORITY_REQUEST_GAP_MS = 60;
 const BACKGROUND_REQUEST_GAP_MS = 450;
 const MAX_429_RETRIES = 2;
 
+// Global rate-limit freeze: once the addon answers 429, every queued request
+// pauses until the limits clear instead of each failing and retrying on its
+// own (bursts of parallel searches hammer the limit harder).
+let addonRateLimitUntil = 0;
+let rateLimitNotifiedAt = 0;
+const RATE_LIMIT_NOTIFY_THROTTLE_MS = 30 * 1000;
+
+function notifyRateLimitedOnce() {
+    if (typeof window === 'undefined') return;
+    const now = Date.now();
+    if (now - rateLimitNotifiedAt < RATE_LIMIT_NOTIFY_THROTTLE_MS) return;
+    rateLimitNotifiedAt = now;
+    window.dispatchEvent(new CustomEvent('addon-rate-limited', { detail: { message: RATE_LIMIT_ERROR_MESSAGE } }));
+}
+
 const extractBitDepth = (streamInfo) => {
     const quality = `${streamInfo?.quality || ''} ${streamInfo?.streamQuality || ''}`;
     const match = quality.match(/(\d+)\s*-?\s*bit/i);
@@ -291,7 +306,8 @@ export class EclipseAPI {
                 }
                 try {
                     const now = performance.now();
-                    const waitMs = Math.max(0, this._lastRequestAt + gapMs - now);
+                    const rateLimitWait = addonRateLimitUntil - Date.now();
+                    const waitMs = Math.max(0, this._lastRequestAt + gapMs - now, rateLimitWait);
                     if (waitMs > 0) await this._sleep(waitMs);
                     this._lastRequestAt = performance.now();
                     item.resolve(await item.fn());
@@ -322,7 +338,8 @@ export class EclipseAPI {
                 }
                 try {
                     const now = performance.now();
-                    const waitMs = Math.max(0, this._lastRequestAt + BACKGROUND_REQUEST_GAP_MS - now);
+                    const rateLimitWait = addonRateLimitUntil - Date.now();
+                    const waitMs = Math.max(0, this._lastRequestAt + BACKGROUND_REQUEST_GAP_MS - now, rateLimitWait);
                     if (waitMs > 0) await this._sleep(waitMs);
                     this._lastRequestAt = performance.now();
                     item.resolve(await item.fn());
@@ -383,6 +400,10 @@ export class EclipseAPI {
             } else {
                 backoffMs = Math.min(500 * Math.pow(2, attempt), persistent ? 30000 : 8000);
             }
+            // Freeze the whole queue behind this backoff so sibling requests
+            // (parallel searches) don't keep re-tripping the addon's limiter.
+            addonRateLimitUntil = Math.max(addonRateLimitUntil, Date.now() + Math.max(backoffMs, 2000));
+            if (!persistent) notifyRateLimitedOnce();
             await this._sleep(Math.max(backoffMs, 0));
             if (persistent) {
                 return this._request(path, retries, priority, background, persistent, attempt + 1, signal);
@@ -390,6 +411,7 @@ export class EclipseAPI {
             if (retries > 0) {
                 return this._request(path, retries - 1, priority, background, false, 0, signal);
             }
+            notifyRateLimitedOnce();
             throw new Error(RATE_LIMIT_ERROR_MESSAGE);
         }
         if (res.status === 404) throw new Error('Not supported by this addon');

@@ -91,7 +91,29 @@ export default defineConfig(() => {
                     // Define runtime caching strategies
                     runtimeCaching: [
                         {
-                            urlPattern: ({ request }) => request.destination === 'image',
+                            // Proxied third-party traffic (covers via public CORS
+                            // proxies, or the same-origin /cors-proxy route) must
+                            // never be intercepted: the SW network path rejects
+                            // with "no-response" when a proxy dies, and the page's
+                            // own fallback chain can't advance past a failed
+                            // respondWith(). Let those reach the network directly.
+                            urlPattern: ({ request }) => {
+                                try {
+                                    const url = request.url;
+                                    if (url.includes('/cors-proxy/')) return false;
+                                    const host = new URL(url).hostname;
+                                    if (
+                                        host === 'corsproxy.io' ||
+                                        host.endsWith('.allorigins.win') ||
+                                        host === 'cors-proxy.htmldriven.com'
+                                    ) {
+                                        return false;
+                                    }
+                                } catch {
+                                    /* fall through to default handling */
+                                }
+                                return request.destination === 'image';
+                            },
                             handler: 'CacheFirst',
                             options: {
                                 cacheName: 'images',
@@ -102,8 +124,23 @@ export default defineConfig(() => {
                             },
                         },
                         {
-                            urlPattern: ({ request }) =>
-                                request.destination === 'audio' || request.destination === 'video',
+                            urlPattern: ({ request }) => {
+                                try {
+                                    const url = request.url;
+                                    if (url.includes('/cors-proxy/')) return false;
+                                    const host = new URL(url).hostname;
+                                    if (
+                                        host === 'corsproxy.io' ||
+                                        host.endsWith('.allorigins.win') ||
+                                        host === 'cors-proxy.htmldriven.com'
+                                    ) {
+                                        return false;
+                                    }
+                                } catch {
+                                    /* fall through to default handling */
+                                }
+                                return request.destination === 'audio' || request.destination === 'video';
+                            },
                             handler: 'CacheFirst',
                             options: {
                                 cacheName: 'media',

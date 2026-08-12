@@ -3,3 +3,4 @@
 /artistgrid-trends  https://trends.artistgrid.cx/  200
 /artistgrid-assets/*  https://assets.artistgrid.cx/:splat  200
 /tracker-api/*  https://tracker.israeli.ovh/:splat  200
+/cors-proxy/*  https://corsproxy.io/proxy?url=:splat  200
