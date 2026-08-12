@@ -253,15 +253,17 @@ export class EclipseAPI {
 
     // Build fetch options that combine the caller's AbortSignal (so stale
     // requests like command-palette keystrokes cancel immediately) with the
-    // 15s hung-addon timeout.
+    // 20s hung-addon timeout. Rate-limited addons can stall requests upstream,
+    // so the timeout is generous while persistent retries still bound dwell.
     _fetchOptions(signal, useTimeout) {
+        const timeoutMs = 20000;
         if (!useTimeout) return undefined;
-        if (!signal) return { signal: AbortSignal.timeout(15000) };
+        if (!signal) return { signal: AbortSignal.timeout(timeoutMs) };
         if (typeof AbortSignal.any === 'function') {
-            return { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) };
+            return { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) };
         }
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         signal.addEventListener(
             'abort',
             () => {
@@ -388,6 +390,25 @@ export class EclipseAPI {
             );
         } catch (error) {
             if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+                // A rate-limited addon can stall requests so long they trip the
+                // fetch timeout. Persistent requests treat that like a 429 and
+                // retry within their wall-clock budget instead of dying.
+                if (persistent && error?.name === 'TimeoutError') {
+                    const start = startedAt ?? Date.now();
+                    if (Date.now() - start <= MAX_PERSISTENT_WALL_MS) {
+                        addonRateLimitUntil = Math.max(addonRateLimitUntil, Date.now() + 3000);
+                        return this._request(
+                            path,
+                            retries,
+                            priority,
+                            background,
+                            persistent,
+                            attempt + 1,
+                            signal,
+                            start
+                        );
+                    }
+                }
                 throw new Error('Addon timed out');
             }
             throw new Error(`Addon unreachable: ${error.message}`);
@@ -813,6 +834,8 @@ export class EclipseAPI {
                 null,
             mediaType: data.format || null,
             mimeType: data.mimeType || null,
+            codec: data.codec || data.fileCodec || null,
+            containerFormat: data.containerFormat || null,
             bitrateKbps: extractBitrateKbps(data),
         };
         this.streamCache.set(key, stream);

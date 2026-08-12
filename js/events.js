@@ -333,6 +333,37 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         console.error('Audio playback error:', e);
         syncMiniPlayPauseIcon();
 
+        // A decoder failure ("No decoders for requested formats", typically a
+        // Dolby Atmos EC-3/AC-3 stream the browser can't render) is terminal
+        // for the current track AND its fallback tiers — the addon serves the
+        // same undecodable format for every quality of an Atmos release.
+        const targetError = e.target?.error;
+        const errorMessage = String(targetError?.message || targetError || e.type || '');
+        const isDecoderFailure = /no decoders|no supported decoder|decoder not|cannot play media/i.test(errorMessage);
+        const badTrack = player.currentTrack;
+
+        if (isDecoderFailure && badTrack && !badTrack.isLocal) {
+            player._decoderFailedTrackId = badTrack.id;
+            // Discard every cached URL for this track (memory + localStorage)
+            // so a later replay re-resolves instead of retrying the poison URL.
+            try {
+                player.api.clearStreamCache?.(badTrack.id);
+                player.preloadCache.delete(badTrack.id);
+                ['DOLBY_ATMOS', 'HI_RES_LOSSLESS', 'LOSSLESS', 'HIGH', 'LOW'].forEach((q) =>
+                    player.api.forgetStreamUrl?.(badTrack.id, q)
+                );
+            } catch {
+                /* cache cleanup is best-effort */
+            }
+            let decoderNoticeAt = player._decoderNoticeAt || 0;
+            if (Date.now() - decoderNoticeAt > 30000) {
+                player._decoderNoticeAt = Date.now();
+                showNotification('This track uses Dolby audio your browser can\u2019t decode \u2014 skipping.');
+            }
+        } else if (!isDecoderFailure && player._decoderFailedTrackId) {
+            player._decoderFailedTrackId = null;
+        }
+
         const currentQuality = player.quality;
 
         // Check if we can fallback to a lower quality
@@ -362,6 +393,15 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
 
                 for (const fallbackQuality of fallbackQualities) {
                     try {
+                        // A previous tier already failed to decode (e.g. Atmos
+                        // EC-3 at every quality) — don't replay the same poison.
+                        if (player._decoderFailedTrackId === player.currentTrack?.id) {
+                            console.warn(
+                                `Skipping fallback quality ${fallbackQuality}: track already failed to decode.`
+                            );
+                            break;
+                        }
+
                         const streamResult = await player.api.getStreamUrl(trackId, fallbackQuality);
                         const actualUrl =
                             typeof streamResult === 'object' && streamResult.url ? streamResult.url : streamResult;

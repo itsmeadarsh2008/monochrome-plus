@@ -8,8 +8,10 @@
 const CORS_PROXY_PREFIX = '/cors-proxy/';
 const PROXY_STORAGE_KEY = 'mono-cors-proxy-index';
 const PROXY_DEAD_KEY = 'mono-cors-proxy-dead';
-// A proxy is quarantined for this long after it fails twice in a row.
-const PROXY_DEAD_COOLDOWN_MS = 15 * 60 * 1000;
+// A proxy is quarantined for this long after it fails twice in a row. Public
+// proxies often stay broken (403s / DNS death) for hours, so the quarantine
+// is deliberately long; a working proxy is remembered anyway on success.
+const PROXY_DEAD_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 // Public proxy fallback chain (production only). Ordered by preference.
 const PROXY_TEMPLATES = [
