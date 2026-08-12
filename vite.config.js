@@ -4,19 +4,23 @@ import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
 import nodeFetch from './vite-plugin-proxy-fetch.js';
 
+const APP_REPO_URL = 'https://github.com/itsmeadarsh2008/monochrome-plus';
 const APP_COMMIT = (() => {
     try {
-        return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+        return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
     } catch {
         return 'unknown';
     }
 })();
+const APP_COMMIT_SHORT = APP_COMMIT === 'unknown' ? 'unknown' : APP_COMMIT.slice(0, 7);
 
 export default defineConfig(() => {
     return {
         base: '/',
         define: {
             __APP_COMMIT__: JSON.stringify(APP_COMMIT),
+            __APP_COMMIT_SHORT__: JSON.stringify(APP_COMMIT_SHORT),
+            __APP_REPO_URL__: JSON.stringify(APP_REPO_URL),
         },
         resolve: {
             alias: {

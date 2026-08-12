@@ -58,8 +58,25 @@ export function initializeSettings(scrobbler, player, api, ui) {
     const commitEl = document.getElementById('app-build-commit');
     if (commitEl) {
         const sha = typeof __APP_COMMIT__ !== 'undefined' ? __APP_COMMIT__ : 'unknown';
-        commitEl.textContent = sha;
-        commitEl.title = 'git rev-parse --short HEAD → ' + sha;
+        const repo =
+            typeof __APP_REPO_URL__ !== 'undefined'
+                ? __APP_REPO_URL__
+                : 'https://github.com/itsmeadarsh2008/monochrome-plus';
+        const text = typeof __APP_COMMIT_SHORT__ !== 'undefined' ? __APP_COMMIT_SHORT__ : sha;
+        if (sha !== 'unknown') {
+            commitEl.innerHTML = '';
+            const anchor = document.createElement('a');
+            anchor.href = `${repo}/commit/${sha}`;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.textContent = sha;
+            anchor.title = `Open commit ${sha} on GitHub`;
+            anchor.style.color = 'var(--accent, inherit)';
+            commitEl.appendChild(anchor);
+        } else {
+            commitEl.textContent = text;
+            commitEl.title = 'Build ran outside a git checkout — rebuild from the repo to embed the commit SHA';
+        }
     }
 
     // Restore last active settings tab
