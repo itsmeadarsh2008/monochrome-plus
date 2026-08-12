@@ -54,6 +54,14 @@ import { responsiveManager } from './responsive-utils.js';
 import { HOME_COUNTRY_OPTIONS, getUserCountryCode, setUserCountryCode } from './api/home.js';
 
 export function initializeSettings(scrobbler, player, api, ui) {
+    // Show the build commit so the deployed version can be matched to the repo
+    const commitEl = document.getElementById('app-build-commit');
+    if (commitEl) {
+        const sha = typeof __APP_COMMIT__ !== 'undefined' ? __APP_COMMIT__ : 'unknown';
+        commitEl.textContent = sha;
+        commitEl.title = 'git rev-parse --short HEAD → ' + sha;
+    }
+
     // Restore last active settings tab
     const savedTab = settingsUiState.getActiveTab();
     const settingsTab = document.querySelector(`.settings-tab[data-tab="${savedTab}"]`);

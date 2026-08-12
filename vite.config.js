@@ -1,11 +1,23 @@
 import { defineConfig } from 'vite';
+import { execSync } from 'node:child_process';
 import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
 import nodeFetch from './vite-plugin-proxy-fetch.js';
 
+const APP_COMMIT = (() => {
+    try {
+        return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    } catch {
+        return 'unknown';
+    }
+})();
+
 export default defineConfig(() => {
     return {
         base: '/',
+        define: {
+            __APP_COMMIT__: JSON.stringify(APP_COMMIT),
+        },
         resolve: {
             alias: {
                 pocketbase: '/node_modules/pocketbase/dist/pocketbase.es.js',

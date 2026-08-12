@@ -15,6 +15,7 @@ export default [
             globals: {
                 ...globals.browser,
                 ...globals.node,
+                __APP_COMMIT__: 'readonly',
             },
         },
         rules: {
