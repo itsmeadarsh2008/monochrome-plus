@@ -7,7 +7,7 @@
 import { APICache } from './cache.js';
 import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
-import { getExtensionFromBlob, RATE_LIMIT_ERROR_MESSAGE } from './utils.js';
+import { getExtensionFromBlob, isLossyCodec, isLossyContainer, RATE_LIMIT_ERROR_MESSAGE } from './utils.js';
 
 const ADDON_STORAGE_KEY = 'monochrome-eclipse-addon-v2';
 
@@ -765,6 +765,24 @@ export class EclipseAPI {
         }
     }
 
+    // A stale entry may only substitute when its delivered quality is at least
+    // the requested tier. Lossy requests accept anything; lossless requests
+    // reject lossy entries (crisis-session caches hold AAC-320 downgrades);
+    // Atmos requests additionally accept lossy entries that advertise Atmos,
+    // since Atmos is legitimately delivered as lossy E-AC3 JOC.
+    _staleStreamMeetsTier(entry, requestedQuality) {
+        const q = String(requestedQuality || '').toUpperCase();
+        if (/^(LOW|HIGH)$/.test(q)) return true;
+        const lossy =
+            isLossyCodec(entry.codec || entry.fileCodec) ||
+            isLossyContainer(entry.format || entry.containerFormat || entry.mediaType);
+        if (!lossy) return true;
+        const atmos = /atmos|dolby/i.test(
+            String(entry.audioMode || entry.audioQuality || entry.quality || entry.streamQuality || '')
+        );
+        return /DOLBY_ATMOS/.test(q) && atmos;
+    }
+
     _setStreamCacheLocal(key, entry) {
         try {
             if (!entry) return;
@@ -853,12 +871,25 @@ export class EclipseAPI {
             // Under rate pressure a cached URL (even past its nominal expiry)
             // is worth trying — Tidal CDN URLs commonly outlive their expiry,
             // and playback degrades gracefully instead of failing outright.
+            // A stale entry must still MEET the requested tier though: silently
+            // playing "High · AAC · 320 kbps" for a lossless request is not
+            // graceful — it is a quiet downgrade. Quality-crisis sessions have
+            // poisoned the persisted cache with exactly such lossy entries.
             if (error?.message === RATE_LIMIT_ERROR_MESSAGE) {
                 const stale = this._getStaleStreamCacheLocal(key);
-                if (stale?.url) {
+                if (stale?.url && this._staleStreamMeetsTier(stale, quality)) {
                     console.warn('[Eclipse] Addon rate-limited — reusing stale stream URL for', trackId);
                     data = stale;
                 } else {
+                    if (stale?.url) {
+                        console.warn(
+                            '[Eclipse] Stale stream URL for',
+                            trackId,
+                            'does not meet requested tier',
+                            quality,
+                            '— failing playback'
+                        );
+                    }
                     throw error;
                 }
             } else {
