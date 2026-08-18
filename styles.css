@@ -6429,9 +6429,7 @@ input:checked + .slider::before {
     max-height: min(38vh, 520px);
     border-radius: var(--radius);
     box-shadow:
-        0 0 0 1px rgb(240, 243, 246),
-        0 0 0 2px rgb(186, 192, 199),
-        0 0 0 3px rgb(139, 145, 152),
+        0 0 0 1px rgb(150, 156, 163),
         0 24px 48px rgb(0, 0, 0, 0.5);
     object-fit: contain;
     margin-bottom: 1rem;
@@ -6598,9 +6596,7 @@ input:checked + .slider::before {
     max-height: none;
     border-radius: var(--radius-full);
     box-shadow:
-        0 0 0 1px rgb(240, 243, 246),
-        0 0 0 2px rgb(186, 192, 199),
-        0 0 0 3px rgb(139, 145, 152),
+        0 0 0 1px rgb(150, 156, 163),
         0 0 0 4px rgb(20, 20, 20),
         0 0 0 6px rgb(8, 8, 8),
         0 4px 12px rgb(0, 0, 0, 0.5);
