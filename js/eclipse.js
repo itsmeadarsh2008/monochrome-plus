@@ -108,6 +108,17 @@ export const eclipseAddonStorage = {
         return true;
     },
 
+    // Patches stored fields (searchEnabled / streamEnabled / …) on an addon.
+    updateAddon(addonId, patch) {
+        const identity = String(addonId || '').trim();
+        const addons = this.getAddons();
+        const index = addons.findIndex((installed) => addonIdentity(installed) === identity);
+        if (index < 0) return false;
+        addons[index] = { ...addons[index], ...patch };
+        localStorage.setItem(ADDON_STORAGE_KEY, JSON.stringify(addons));
+        return true;
+    },
+
     moveAddon(addonId, direction) {
         const identity = String(addonId || '').trim();
         const addons = this.getAddons();
@@ -290,6 +301,12 @@ const MAX_429_RETRIES = 2;
 // but never stall the queue longer than this.
 const MAX_PERSISTENT_WALL_MS = 45 * 1000;
 
+// Interactive search uses a much tighter budget so results (or a visible
+// failure) arrive quickly even when the addon is rate-limited; stream
+// resolution keeps the full budget.
+const SEARCH_WALL_MS = 15 * 1000;
+const SEARCH_BACKOFF_CAP_MS = 5000;
+
 // Global rate-limit freeze: once the addon answers 429, every queued request
 // pauses until the limits clear instead of each failing and retrying on its
 // own (bursts of parallel searches hammer the limit harder).
@@ -348,6 +365,33 @@ const extractBitrateKbps = (streamInfo) => {
 };
 
 const yearAsReleaseDate = (year) => (year ? String(year).trim() : undefined);
+
+// Compares two addon-returned stream infos to pick the highest-quality
+// playback source. Lossless always beats lossy; within a tier the resolution
+// (bit depth → sample rate → bitrate) decides. The requested quality only
+// breaks ties that matter for Atmos (lossy E-AC3 JOC is legitimately Atmos),
+// everything else is inferred from the stream metadata itself.
+function streamQualityRank(streamInfo, requestedQuality = '') {
+    const text = String(streamInfo?.streamQuality || streamInfo?.quality || streamInfo?.audioQuality || '');
+    const format = String(streamInfo?.format || streamInfo?.containerFormat || '');
+    const codec = String(streamInfo?.codec || streamInfo?.fileCodec || '');
+    const bitDepth = Number(extractBitDepth(streamInfo)) || 0;
+    const sampleRate = Number(extractSampleRate(streamInfo)) || 0;
+    const bitrate = Number(extractBitrateKbps(streamInfo)) || 0;
+    const atmos = /atmos|dolby/i.test(`${text} ${streamInfo?.audioMode || ''}`);
+
+    let score = 0;
+    const lossy = isLossyCodec(codec) || isLossyContainer(format || streamInfo?.mediaType);
+    if (!lossy) score += 1000;
+    if (atmos) {
+        score += 200;
+        if (/DOLBY_ATMOS/.test(String(requestedQuality || '').toUpperCase())) score += 150;
+    }
+    score += bitDepth * 100;
+    score += sampleRate / 100;
+    score += bitrate / 10;
+    return score;
+}
 
 export class EclipseAPI {
     constructor() {
@@ -516,7 +560,8 @@ export class EclipseAPI {
         signal = null,
         startedAt = null,
         allowFallback = true,
-        requestedAddonId = null
+        requestedAddonId = null,
+        wallMs = null
     ) {
         const candidates = requestedAddonId
             ? [eclipseAddonStorage.getAddonById(requestedAddonId)].filter(Boolean)
@@ -538,7 +583,8 @@ export class EclipseAPI {
                     attempt,
                     signal,
                     startedAt,
-                    addonId
+                    addonId,
+                    wallMs
                 );
                 if (eclipseAddonStorage.getActiveAddonId() !== addonId) {
                     eclipseAddonStorage.setActiveAddon(addonId);
@@ -562,7 +608,8 @@ export class EclipseAPI {
         attempt = 0,
         signal = null,
         startedAt = null,
-        addonId = null
+        addonId = null,
+        wallMs = null
     ) {
         const addon = await eclipseAddonStorage.ensureInstalled(addonId);
         if (!addon) throw new Error(NO_ADDON_MESSAGE);
@@ -592,7 +639,8 @@ export class EclipseAPI {
                 // retry within their wall-clock budget instead of dying.
                 if (persistent && error?.name === 'TimeoutError') {
                     const start = startedAt ?? Date.now();
-                    if (Date.now() - start <= MAX_PERSISTENT_WALL_MS) {
+                    const budget = wallMs ?? MAX_PERSISTENT_WALL_MS;
+                    if (Date.now() - start <= budget) {
                         addonRateLimitUntil = Math.max(addonRateLimitUntil, Date.now() + 3000);
                         return this._requestWithAddon(
                             path,
@@ -603,7 +651,8 @@ export class EclipseAPI {
                             attempt + 1,
                             signal,
                             start,
-                            addonId
+                            addonId,
+                            wallMs
                         );
                     }
                 }
@@ -625,6 +674,7 @@ export class EclipseAPI {
                 backoffMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
             } else {
                 backoffMs = Math.min(500 * Math.pow(2, attempt), persistent ? 30000 : 8000);
+                if (wallMs) backoffMs = Math.min(backoffMs, SEARCH_BACKOFF_CAP_MS);
             }
             // Freeze the whole queue behind this backoff so sibling requests
             // (parallel searches) don't keep re-tripping the addon's limiter.
@@ -635,11 +685,23 @@ export class EclipseAPI {
             // windows don't kill playback mid-queue.
             if (persistent) {
                 const start = startedAt ?? Date.now();
-                if (Date.now() - start > MAX_PERSISTENT_WALL_MS) {
+                const budget = wallMs ?? MAX_PERSISTENT_WALL_MS;
+                if (Date.now() - start > budget) {
                     notifyRateLimitedOnce();
                     throw new Error(RATE_LIMIT_ERROR_MESSAGE);
                 }
-                return this._requestWithAddon(path, retries, priority, background, persistent, attempt + 1, signal, start, addonId);
+                return this._requestWithAddon(
+                    path,
+                    retries,
+                    priority,
+                    background,
+                    persistent,
+                    attempt + 1,
+                    signal,
+                    start,
+                    addonId,
+                    wallMs
+                );
             }
             if (retries > 0) {
                 return this._requestWithAddon(path, retries - 1, priority, background, false, 0, signal, null, addonId);
@@ -685,16 +747,23 @@ export class EclipseAPI {
                     options?.signal || null,
                     null,
                     false,
-                    addonId
+                    addonId,
+                    options?.wallMs ?? SEARCH_WALL_MS
                 );
 
-            const addons = eclipseAddonStorage.getAddonCandidates();
+            const searchable = (addon) => addon?.searchEnabled !== false;
+            const addons = eclipseAddonStorage.getAddonCandidates().filter(searchable);
             const activeAddon = eclipseAddonStorage.getAddon();
             const addonKey = (addon) => addon?.id || addon?.manifest?.id || addon?.baseUrl;
             const orderedAddons = [
                 activeAddon,
                 ...addons.filter((addon) => addonKey(addon) !== addonKey(activeAddon)),
-            ].filter(Boolean);
+            ].filter((addon) => searchable(addon) && Boolean(addon));
+            if (!orderedAddons.length) {
+                throw new Error(
+                    'Search is disabled for every addon — enable Search on an addon in Settings → Eclipse Addon.'
+                );
+            }
             const searchRequests = orderedAddons.map(async (addon) => {
                 const results = [{ data: await requestSearch(searchQuery, addonKey(addon)), addon }];
                 // MaxMusic's Deezer index exposes the official RADWIMPS/Toaka
@@ -709,7 +778,9 @@ export class EclipseAPI {
                 return results;
             });
             const settled = await Promise.allSettled(searchRequests);
-            const successful = settled.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
+            const successful = settled
+                .filter((result) => result.status === 'fulfilled')
+                .flatMap((result) => result.value);
             if (!successful.length) {
                 throw settled.find((result) => result.status === 'rejected')?.reason || new Error('Search failed');
             }
@@ -721,7 +792,10 @@ export class EclipseAPI {
             };
             if (requestedIsrc) {
                 data.tracks = data.tracks.filter(
-                    (track) => String(track?.isrc || '').replace(/-/g, '').toUpperCase() === requestedIsrc
+                    (track) =>
+                        String(track?.isrc || '')
+                            .replace(/-/g, '')
+                            .toUpperCase() === requestedIsrc
                 );
             }
             const result = {
@@ -731,12 +805,12 @@ export class EclipseAPI {
                 albums: Array.from(new Map(data.albums.map((album) => [String(album.id), album])).values()).map((a) =>
                     this.mapSearchAlbum(a)
                 ),
-                artists: Array.from(new Map(data.artists.map((artist) => [String(artist.id), artist])).values()).map((a) =>
-                    this.mapSearchArtist(a)
+                artists: Array.from(new Map(data.artists.map((artist) => [String(artist.id), artist])).values()).map(
+                    (a) => this.mapSearchArtist(a)
                 ),
-                playlists: Array.from(new Map(data.playlists.map((playlist) => [String(playlist.id), playlist])).values()).map((p) =>
-                    this.mapSearchPlaylist(p)
-                ),
+                playlists: Array.from(
+                    new Map(data.playlists.map((playlist) => [String(playlist.id), playlist])).values()
+                ).map((p) => this.mapSearchPlaylist(p)),
             };
 
             this._searchCache.set(cacheKey, result);
@@ -921,7 +995,9 @@ export class EclipseAPI {
         if (!Array.isArray(data.topTracks) || data.topTracks.length === 0) {
             try {
                 const searchResults = await this.searchTracks(data.name, { limit: 50, retry: true });
-                const artistName = String(data.name || '').trim().toLowerCase();
+                const artistName = String(data.name || '')
+                    .trim()
+                    .toLowerCase();
                 fallbackTracks = (searchResults.items || []).filter((track) => {
                     const names = (track.artists || []).map((artist) => artist?.name).filter(Boolean);
                     return names.some((name) => String(name).trim().toLowerCase() === artistName);
@@ -931,15 +1007,16 @@ export class EclipseAPI {
             }
         }
         const sourceTracks = Array.isArray(data.topTracks) && data.topTracks.length ? data.topTracks : fallbackTracks;
-        const sourceAlbums = Array.isArray(data.albums) && data.albums.length
-            ? data.albums
-            : Array.from(
-                  new Map(
-                      fallbackTracks
-                          .filter((track) => track.album?.id)
-                          .map((track) => [track.album.id, track.album])
-                  ).values()
-              );
+        const sourceAlbums =
+            Array.isArray(data.albums) && data.albums.length
+                ? data.albums
+                : Array.from(
+                      new Map(
+                          fallbackTracks
+                              .filter((track) => track.album?.id)
+                              .map((track) => [track.album.id, track.album])
+                      ).values()
+                  );
         const artist = {
             id: String(data.id),
             name: data.name,
@@ -962,9 +1039,7 @@ export class EclipseAPI {
             })),
             eps: [],
             tracks: sourceTracks.map((t) =>
-                t?.artist?.name
-                    ? t
-                    : this.mapDetailTrack(t, { id: '', title: '', cover: t.artworkURL }, data.name)
+                t?.artist?.name ? t : this.mapDetailTrack(t, { id: '', title: '', cover: t.artworkURL }, data.name)
             ),
             mixes: {},
         };
@@ -1123,16 +1198,22 @@ export class EclipseAPI {
         // tiers like Dolby Atmos when asked; the hint is a no-op for addons that
         // always pick a single canonical stream. The cache key already includes
         // the quality, so a fresh tier is requested (and cached) independently.
-        let data;
-        try {
-            data = await this._request(
-                `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
-                MAX_429_RETRIES,
-                true,
-                false,
-                true
+        //
+        // With more than one stream-capable addon installed, every addon is
+        // asked in parallel and the best-quality response wins (tie → priority
+        // order). A single addon keeps the old fallback-chain behavior so a
+        // failing addon can hand off to the next candidate.
+        const streamCandidates = eclipseAddonStorage
+            .getAddonCandidates()
+            .filter(
+                (addon) =>
+                    addon.streamEnabled !== false &&
+                    Array.isArray(addon.manifest?.resources) &&
+                    addon.manifest.resources.includes('stream')
             );
-        } catch (error) {
+        let data = null;
+        let resolvedBy = null;
+        const settleError = (error) => {
             // Under rate pressure a cached URL (even past its nominal expiry)
             // is worth trying — Tidal CDN URLs commonly outlive their expiry,
             // and playback degrades gracefully instead of failing outright.
@@ -1143,22 +1224,94 @@ export class EclipseAPI {
             if (error?.message === RATE_LIMIT_ERROR_MESSAGE) {
                 const stale = this._getStaleStreamCacheLocal(key);
                 if (stale?.url && this._staleStreamMeetsTier(stale, quality)) {
-                    console.warn('[Eclipse] Addon rate-limited — reusing stale stream URL for', trackId);
-                    data = stale;
-                } else {
-                    if (stale?.url) {
-                        console.warn(
-                            '[Eclipse] Stale stream URL for',
-                            trackId,
-                            'does not meet requested tier',
-                            quality,
-                            '— failing playback'
-                        );
-                    }
-                    throw error;
+                    console.warn('[Eclipse] Addons rate-limited — reusing stale stream URL for', trackId);
+                    return stale;
                 }
-            } else {
-                throw error;
+                if (stale?.url) {
+                    console.warn(
+                        '[Eclipse] Stale stream URL for',
+                        trackId,
+                        'does not meet requested tier',
+                        quality,
+                        '— failing playback'
+                    );
+                }
+            }
+            throw error;
+        };
+        if (streamCandidates.length > 1) {
+            const settled = await Promise.allSettled(
+                streamCandidates.map(async (addon) => {
+                    const info = await this._request(
+                        `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                        MAX_429_RETRIES,
+                        true,
+                        false,
+                        true,
+                        0,
+                        null,
+                        null,
+                        false,
+                        addonIdentity(addon),
+                        SEARCH_WALL_MS
+                    );
+                    return { addon, info };
+                })
+            );
+            let bestRank = -Infinity;
+            for (const result of settled) {
+                if (result.status === 'rejected') {
+                    if (!data) {
+                        try {
+                            data = settleError(result.reason);
+                        } catch (error) {
+                            if (!resolvedBy) resolvedBy = error;
+                        }
+                    }
+                    continue;
+                }
+                const { addon, info } = result.value;
+                const rank = streamQualityRank(info, quality);
+                if (rank > bestRank) {
+                    bestRank = rank;
+                    data = info;
+                    resolvedBy = addon;
+                }
+            }
+            if (!data) throw resolvedBy || new Error('All installed Eclipse addons failed to resolve a stream');
+            if (resolvedBy && addonIdentity(resolvedBy) !== eclipseAddonStorage.getActiveAddonId()) {
+                console.warn(
+                    `[Eclipse] Best stream for ${trackId} served by ${addonIdentity(resolvedBy)} (rank ${bestRank}) — better than the active addon`
+                );
+            }
+        } else {
+            // Single stream addon (or none declaring the resource): keep the
+            // request scoped to that addon. The generic fallback chain must
+            // NOT reach addons whose stream participation is disabled.
+            const single = streamCandidates[0];
+            try {
+                data = single
+                    ? await this._request(
+                          `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                          MAX_429_RETRIES,
+                          true,
+                          false,
+                          true,
+                          0,
+                          null,
+                          null,
+                          false,
+                          addonIdentity(single)
+                      )
+                    : await this._request(
+                          `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                          MAX_429_RETRIES,
+                          true,
+                          false,
+                          true
+                      );
+            } catch (error) {
+                data = settleError(error);
             }
         }
         const stream = {

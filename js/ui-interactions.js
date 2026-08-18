@@ -491,9 +491,12 @@ export function initializeUIInteractions(player, api, ui) {
                     : '/search';
                 if (currentPath !== nextPath) {
                     window.history.replaceState({}, '', nextPath);
-                    if (encodedQuery) {
-                        ui.renderSearchPage(decodeURIComponent(encodedQuery), selectedTab);
-                    }
+                }
+                // Tab switches render from the session cache — no refetch.
+                if (encodedQuery) {
+                    ui.liveSearch(decodeURIComponent(encodedQuery), selectedTab);
+                } else {
+                    ui.liveSearch('', 'all');
                 }
             }
         });

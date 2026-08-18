@@ -216,6 +216,15 @@ export class SearchEngine {
             .map(([q]) => q);
     }
 
+    removeFromHistory(query) {
+        const key = this._normalize(query);
+        if (key) this._history.delete(key);
+    }
+
+    clearHistory() {
+        this._history.clear();
+    }
+
     /**
      * Full search: returns instant local results immediately, fires remote in background.
      * @param {string} query

@@ -3553,19 +3553,31 @@ export function initializeSettings(scrobbler, player, api, ui) {
     };
 
     addonManager?.addEventListener('change', async (event) => {
-        if (event.target?.dataset?.addonAction !== 'enabled') return;
+        const action = event.target?.dataset?.addonAction;
+        if (!action || !['enabled', 'search-enabled', 'stream-enabled'].includes(action)) return;
         const addonId = event.target.dataset.addonId;
-        if (!eclipseAddonStorage.setAddonEnabled(addonId, event.target.checked)) {
-            event.target.checked = true;
-            setAddonStatus('At least one addon must remain enabled.', 'error');
+        if (action === 'enabled') {
+            if (!eclipseAddonStorage.setAddonEnabled(addonId, event.target.checked)) {
+                event.target.checked = true;
+                setAddonStatus('At least one addon must remain enabled.', 'error');
+                return;
+            }
+            await refreshAddonRouting(event.target.checked ? 'Addon enabled.' : 'Addon disabled.');
             return;
         }
-        await refreshAddonRouting(event.target.checked ? 'Addon enabled.' : 'Addon disabled.');
+        eclipseAddonStorage.updateAddon(addonId, {
+            [action === 'search-enabled' ? 'searchEnabled' : 'streamEnabled']: event.target.checked,
+        });
+        await refreshAddonRouting(
+            event.target.checked
+                ? `${action === 'search-enabled' ? 'Search' : 'Stream resolution'} enabled for this addon.`
+                : `${action === 'search-enabled' ? 'Search' : 'Stream resolution'} disabled for this addon.`
+        );
     });
 
     addonManager?.addEventListener('click', async (event) => {
         const button = event.target.closest('[data-addon-action]');
-        if (!button || button.dataset.addonAction === 'enabled') return;
+        if (!button || ['enabled', 'search-enabled', 'stream-enabled'].includes(button.dataset.addonAction)) return;
         const addonId = button.dataset.addonId;
         let changed = false;
         let message = '';
@@ -3575,6 +3587,29 @@ export function initializeSettings(scrobbler, player, api, ui) {
         } else if (button.dataset.addonAction === 'move') {
             changed = eclipseAddonStorage.moveAddon(addonId, button.dataset.addonDirection);
             message = 'Addon priority updated.';
+        } else if (button.dataset.addonAction === 'remove') {
+            const addon = eclipseAddonStorage.getAddonById(addonId);
+            const name = addon?.manifest?.name || addon?.baseUrl || 'this addon';
+            const remaining = Math.max(0, eclipseAddonStorage.getAddons().length - 1);
+            const isActive = eclipseAddonStorage.getActiveAddonId() === addonId;
+            const confirmText = isActive
+                ? `Remove ${name}?${
+                      remaining
+                          ? ' The next installed addon will become active.'
+                          : ' Music search and streaming will stop until you install another addon.'
+                  }`
+                : `Remove ${name}?`;
+            if (!window.confirm(confirmText)) return;
+            const next = eclipseAddonStorage.removeAddon(addonId);
+            await api.clearCache();
+            ui.renderAddonSettings();
+            setAddonStatus(
+                next
+                    ? `“${name}” removed. Now active: ${next.manifest?.name || next.baseUrl}`
+                    : `“${name}” removed. No addons installed.`,
+                'ok'
+            );
+            return;
         }
         if (changed) await refreshAddonRouting(message);
     });
@@ -3626,7 +3661,11 @@ export function initializeSettings(scrobbler, player, api, ui) {
         const addon = eclipseAddonStorage.getAddon();
         const name = addon?.manifest?.name || 'this addon';
         const remaining = Math.max(0, eclipseAddonStorage.getAddons().length - 1);
-        if (!window.confirm(`Remove ${name}?${remaining ? ` The next installed addon will become active.` : ' Music search and streaming will stop until you install another addon.'}`)) {
+        if (
+            !window.confirm(
+                `Remove ${name}?${remaining ? ` The next installed addon will become active.` : ' Music search and streaming will stop until you install another addon.'}`
+            )
+        ) {
             return;
         }
         eclipseAddonStorage.clearAddon();

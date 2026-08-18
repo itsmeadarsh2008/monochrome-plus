@@ -28,11 +28,12 @@
     },
     "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
     "devDependencies": {
+        "@eslint/js": "^10.0.1",
         "cookie-session": "^2.1.1",
         "dotenv": "^17.4.2",
         "eslint": "^10.8.0",
         "eslint-config-prettier": "^10.1.8",
-        "globals": "^17.8.0",
+        "globals": "^17.11.0",
         "htmlhint": "^1.9.2",
         "jose": "^6.2.6",
         "node-appwrite": "^27.1.0",

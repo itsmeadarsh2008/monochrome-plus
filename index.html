@@ -2115,7 +2115,34 @@
                                 autocorrect="off"
                                 autocapitalize="off"
                                 spellcheck="false"
+                                role="combobox"
+                                aria-expanded="false"
+                                aria-controls="search-history"
                             />
+                            <button
+                                type="button"
+                                id="search-clear-btn"
+                                class="search-clear-btn"
+                                title="Clear search"
+                                aria-label="Clear search"
+                                hidden
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2.2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                            <div id="search-history" class="search-history" role="listbox" hidden></div>
                         </div>
                     </form>
                 </header>
@@ -2417,66 +2444,78 @@
 
                 <div id="page-search" class="page">
                     <div class="search-header-hero">
-                        <h2 class="search-hero-title" id="search-results-title">Search</h2>
-                        <div class="search-tabs">
-                            <button class="search-tab active" data-tab="all">All</button>
-                            <button class="search-tab" data-tab="tracks">Tracks</button>
-                            <button class="search-tab" data-tab="albums">Albums</button>
-                            <button class="search-tab" data-tab="artists">Artists</button>
-                            <button class="search-tab" data-tab="playlists">Playlists</button>
-                            <button class="search-tab" data-tab="profiles">Profiles</button>
+                        <p class="search-hero-overline">Search</p>
+                        <h2 class="search-hero-title" id="search-results-title">Find your music</h2>
+                        <div class="search-tabs" role="tablist" aria-label="Result types">
+                            <button class="search-tab active" data-tab="all" role="tab" aria-selected="true">
+                                All
+                            </button>
+                            <button class="search-tab" data-tab="tracks" role="tab" aria-selected="false">
+                                Tracks
+                            </button>
+                            <button class="search-tab" data-tab="albums" role="tab" aria-selected="false">
+                                Albums
+                            </button>
+                            <button class="search-tab" data-tab="artists" role="tab" aria-selected="false">
+                                Artists
+                            </button>
+                            <button class="search-tab" data-tab="playlists" role="tab" aria-selected="false">
+                                Playlists
+                            </button>
+                            <button class="search-tab" data-tab="profiles" role="tab" aria-selected="false">
+                                Profiles
+                            </button>
                         </div>
                     </div>
 
                     <div class="search-tab-content active" id="search-tab-all">
                         <div class="search-top-results-layout" id="search-top-results-layout" style="display: none">
-                            <section class="search-top-hit-section">
-                                <h3 class="search-all-section-title">Top Result</h3>
+                            <section class="search-section search-section--hit">
+                                <h3 class="search-section-title">Top Result</h3>
                                 <div id="search-top-hit-content" class="search-top-hit-card"></div>
                             </section>
-                            <section class="search-top-tracks-section">
-                                <h3 class="search-all-section-title">Songs</h3>
-                                <div class="track-list" id="search-all-tracks-container"></div>
+                            <section class="search-section search-section--songs">
+                                <h3 class="search-section-title">Songs</h3>
+                                <div class="track-list search-track-list" id="search-all-tracks-container"></div>
                             </section>
                         </div>
 
-                        <!-- Fallback normal tracks container if Top Result is not used -->
-                        <section class="search-all-section" id="search-all-tracks-fallback" style="display: none">
-                            <h3 class="search-all-section-title">Tracks</h3>
-                            <div class="track-list" id="search-all-tracks-container-fallback"></div>
+                        <section class="search-section" id="search-all-tracks-fallback" style="display: none">
+                            <h3 class="search-section-title">Songs</h3>
+                            <div class="track-list search-track-list" id="search-all-tracks-container-fallback"></div>
                         </section>
 
-                        <section class="search-all-section">
-                            <h3 class="search-all-section-title">Artists</h3>
-                            <div class="card-grid" id="search-all-artists-container"></div>
+                        <section class="search-section" id="search-all-artists-section">
+                            <h3 class="search-section-title">Artists</h3>
+                            <div class="search-row-list" id="search-all-artists-container"></div>
                         </section>
-                        <section class="search-all-section">
-                            <h3 class="search-all-section-title">Albums</h3>
-                            <div class="card-grid" id="search-all-albums-container"></div>
+                        <section class="search-section" id="search-all-albums-section">
+                            <h3 class="search-section-title">Albums</h3>
+                            <div class="card-grid search-card-grid" id="search-all-albums-container"></div>
                         </section>
-                        <section class="search-all-section">
-                            <h3 class="search-all-section-title">Playlists</h3>
-                            <div class="card-grid" id="search-all-playlists-container"></div>
+                        <section class="search-section" id="search-all-playlists-section">
+                            <h3 class="search-section-title">Playlists</h3>
+                            <div class="card-grid search-card-grid" id="search-all-playlists-container"></div>
                         </section>
-                        <section class="search-all-section">
-                            <h3 class="search-all-section-title">Profiles</h3>
-                            <div class="card-grid" id="search-all-users-container"></div>
+                        <section class="search-section" id="search-all-users-section">
+                            <h3 class="search-section-title">People</h3>
+                            <div class="search-row-list" id="search-all-users-container"></div>
                         </section>
                     </div>
                     <div class="search-tab-content" id="search-tab-tracks">
-                        <div class="track-list" id="search-tracks-container"></div>
+                        <div class="track-list search-track-list" id="search-tracks-container"></div>
                     </div>
                     <div class="search-tab-content" id="search-tab-albums">
-                        <div class="card-grid" id="search-albums-container"></div>
+                        <div class="card-grid search-card-grid" id="search-albums-container"></div>
                     </div>
                     <div class="search-tab-content" id="search-tab-artists">
-                        <div class="card-grid" id="search-artists-container"></div>
+                        <div class="card-grid search-card-grid" id="search-artists-container"></div>
                     </div>
                     <div class="search-tab-content" id="search-tab-playlists">
-                        <div class="card-grid" id="search-playlists-container"></div>
+                        <div class="card-grid search-card-grid" id="search-playlists-container"></div>
                     </div>
                     <div class="search-tab-content" id="search-tab-profiles">
-                        <div class="card-grid" id="search-users-container"></div>
+                        <div class="card-grid search-card-grid" id="search-users-container"></div>
                     </div>
                 </div>
 

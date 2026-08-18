@@ -648,10 +648,13 @@ export class Player {
         // Resolve only the next signed URL. No audio or media segments are
         // fetched ahead of playback.
         if (this._backgroundPreloadTimer) clearTimeout(this._backgroundPreloadTimer);
-        this._backgroundPreloadTimer = setTimeout(() => {
-            this._backgroundPreloadTimer = null;
-            this._resolveNextStreamUrl().catch(() => {});
-        }, Math.max(0, delayMs));
+        this._backgroundPreloadTimer = setTimeout(
+            () => {
+                this._backgroundPreloadTimer = null;
+                this._resolveNextStreamUrl().catch(() => {});
+            },
+            Math.max(0, delayMs)
+        );
     }
 
     async _resolveNextStreamUrl() {
@@ -1312,14 +1315,21 @@ export class Player {
                         const isFirefoxHiResFailure =
                             isFirefox &&
                             this._getEffectivePlaybackQuality(this.quality) === 'HI_RES_LOSSLESS' &&
-                            /codec|media|buffer|fragment|source|unsupported|decode/i.test(String(hlsError?.message || hlsError));
+                            /codec|media|buffer|fragment|source|unsupported|decode/i.test(
+                                String(hlsError?.message || hlsError)
+                            );
                         if (isFirefoxHiResFailure) {
                             try {
-                                console.warn('[HLS] Firefox rejected Hi-Res FLAC; retrying standard Lossless:', hlsError);
+                                console.warn(
+                                    '[HLS] Firefox rejected Hi-Res FLAC; retrying standard Lossless:',
+                                    hlsError
+                                );
                                 this.api.clearStreamCache?.(track.id);
                                 const fallbackInfo = await this.api.getStreamUrl(track.id, 'LOSSLESS');
                                 const fallbackUrl =
-                                    typeof fallbackInfo === 'object' && fallbackInfo.url ? fallbackInfo.url : fallbackInfo;
+                                    typeof fallbackInfo === 'object' && fallbackInfo.url
+                                        ? fallbackInfo.url
+                                        : fallbackInfo;
                                 if (fallbackUrl && isHlsStreamUrl(fallbackUrl)) {
                                     streamUrl = fallbackUrl;
                                     streamInfo = fallbackInfo;
@@ -1334,12 +1344,12 @@ export class Player {
                                 throw hlsError;
                             }
                         } else {
-                        console.error('hls.js load failed, falling back to Shaka:', hlsError);
-                        if (!this.shakaPlayer) await this.init();
-                        if (!this.shakaPlayer) throw hlsError;
-                        await this.shakaPlayer.load(streamUrl, null, 'application/x-mpegURL');
-                        this.shakaInitialized = true;
-                        await this.audio.play();
+                            console.error('hls.js load failed, falling back to Shaka:', hlsError);
+                            if (!this.shakaPlayer) await this.init();
+                            if (!this.shakaPlayer) throw hlsError;
+                            await this.shakaPlayer.load(streamUrl, null, 'application/x-mpegURL');
+                            this.shakaInitialized = true;
+                            await this.audio.play();
                         }
                     }
                 }
@@ -2448,10 +2458,11 @@ export class Player {
                             );
                             this._recoverWithFreshStream(pos);
                         } else if (isPreviewStall && this._howlerRecoveryAttempts >= 2) {
-                            // Failed recovery - skip to next track
-                            console.warn('[Howler] Preview stall recovery failed, skipping track');
-                            this._stopHowlerMonitor();
-                            this.playNext();
+                            // Fresh-stream recovery didn't help. Some addons
+                            // serve previews that never progress — but a slow
+                            // source must not be skipped either. Keep waiting.
+                            console.warn('[Howler] Preview stall recovery failed, keeping wait');
+                            this._howlerLastProgressAt = Date.now();
                         } else if (stalledMs > 1800 && !nearEnd && this._howlerRecoveryAttempts < 8) {
                             // Regular buffering stall - try reload
                             this._howlerRecoveryAttempts += 1;
@@ -2469,10 +2480,11 @@ export class Player {
                                 console.warn('[Howler] Playback recovery attempt failed:', error);
                             }
                         } else if (stalledMs > 12000 && !nearEnd) {
-                            // Stalled too long - skip track
-                            console.warn('[Howler] Audio stalled for too long, skipping track');
-                            this._stopHowlerMonitor();
-                            this.playNext();
+                            // Sources can buffer very slowly (addon relays,
+                            // slow CDNs). Never skip on a slow load — the audio
+                            // element resumes on its own once data arrives.
+                            console.warn('[Howler] Audio still buffering, keeping wait');
+                            this._howlerLastProgressAt = Date.now();
                         }
                     }
                     this._howlerLastPosition = pos;

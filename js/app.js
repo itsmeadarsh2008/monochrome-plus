@@ -2699,13 +2699,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const searchForm = document.getElementById('search-form');
     const searchInput = document.getElementById('search-input');
+    const searchClearBtn = document.getElementById('search-clear-btn');
+    const searchHistoryEl = document.getElementById('search-history');
     const SEARCH_AUTOCLEAR_MS = 15000;
     let searchAutoclearTimer = null;
+    let searchDropdownMode = null;
 
     const clearSearchInput = ({ blur = false } = {}) => {
         if (!searchInput) return;
         searchInput.value = '';
+        syncClearButton();
         if (blur) searchInput.blur();
+    };
+
+    const syncClearButton = () => {
+        if (!searchClearBtn) return;
+        searchClearBtn.hidden = !(searchInput && searchInput.value.trim());
     };
 
     const scheduleSearchAutoclear = () => {
@@ -2724,6 +2733,86 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, SEARCH_AUTOCLEAR_MS);
     };
 
+    // URL stays shareable, but results update in place — no page hop.
+    const updateSearchUrl = (query, tab = 'all') => {
+        const path = query ? `/search/${encodeURIComponent(query)}/${tab}` : '/search';
+        if (window.location.pathname !== path) {
+            window.history.replaceState({}, '', path);
+        }
+    };
+
+    const commitLiveSearch = async (query, tab = 'all') => {
+        const q = String(query || '').trim();
+        updateSearchUrl(q, tab);
+        await ui.liveSearch(q, tab);
+        scheduleSearchAutoclear();
+    };
+
+    const closeSearchDropdown = () => {
+        if (!searchHistoryEl) return;
+        searchHistoryEl.hidden = true;
+        searchDropdownMode = null;
+        searchInput?.setAttribute('aria-expanded', 'false');
+    };
+
+    const openSearchDropdown = () => {
+        if (!searchHistoryEl || !searchInput) return;
+        renderSearchDropdown(searchInput.value.trim() ? 'typing' : 'idle');
+    };
+
+    const renderSearchDropdown = (mode) => {
+        if (!searchHistoryEl) return;
+        searchDropdownMode = mode;
+        const clockIcon =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        const xIcon =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+        if (mode === 'idle') {
+            const recent = searchEngine.getHistory(8);
+            searchHistoryEl.innerHTML =
+                `<div class="search-dropdown-head">Recent Searches</div>` +
+                (recent.length
+                    ? recent
+                          .map(
+                              (
+                                  q
+                              ) => `<button type="button" class="search-history-item" data-query="${escapeHtml(q)}" role="option">
+                        <span class="history-icon">${clockIcon}</span>
+                        <span class="query-text">${escapeHtml(q)}</span>
+                        <span class="delete-history-btn" data-delete="${escapeHtml(q)}" title="Remove from history" aria-label="Remove from history">${xIcon}</span>
+                    </button>`
+                          )
+                          .join('') +
+                      `<button type="button" class="search-history-clear-all" role="option">Clear All</button>`
+                    : '<p class="search-dropdown-empty">No recent searches yet</p>');
+        } else {
+            const local = searchEngine.searchLocal(searchInput.value.trim());
+            searchHistoryEl.innerHTML =
+                `<div class="search-dropdown-head">Your Library</div>` +
+                (local.length
+                    ? local
+                          .map((t) => {
+                              const title = t?.title || 'Unknown';
+                              const artist = t?.artist?.name || t?.artists?.[0]?.name || '';
+                              const cover = searchEngine.api?.getPreferredVisualUrl
+                                  ? searchEngine.api.getPreferredVisualUrl(t.album, '64')
+                                  : 'assets/appicon.png';
+                              return `<a class="search-history-item search-history-track" href="/track/${encodeURIComponent(t.id)}" role="option">
+                        <span class="search-row-art search-row-art--round"><img src="${cover}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'"></span>
+                        <span class="search-history-meta">
+                            <span class="query-text">${escapeHtml(title)}</span>
+                            <span class="search-history-sub">${escapeHtml(artist)}</span>
+                        </span>
+                    </a>`;
+                          })
+                          .join('')
+                    : '<p class="search-dropdown-empty">No matches in your library</p>');
+        }
+        searchHistoryEl.hidden = false;
+        searchInput?.setAttribute('aria-expanded', 'true');
+    };
+
     // Instantiate Intelligent Search Engine
     const searchEngine = new SearchEngine(api);
     window.searchEngine = searchEngine;
@@ -2738,36 +2827,118 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Setup clear button for search bar
-    ui.setupSearchClearButton(searchInput);
-
-    // Two-phase search: instant local → async remote
+    // Live search: results update in place, URL stays in sync.
     const performSearch = debounce(async (query) => {
         if (!query) return;
         searchEngine.addToHistory(query);
-        navigate(`/search/${encodeURIComponent(query)}`);
+        closeSearchDropdown();
+        await commitLiveSearch(query);
     }, 300);
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
+        syncClearButton();
         scheduleSearchAutoclear();
+        if (searchHistoryEl) {
+            renderSearchDropdown(query ? 'typing' : 'idle');
+        }
         if (query.length < 2) {
             return;
         }
         performSearch(query);
     });
 
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeSearchDropdown();
+            return;
+        }
+        if (!searchHistoryEl || searchHistoryEl.hidden) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            const items = [...searchHistoryEl.querySelectorAll('.search-history-item')];
+            if (!items.length) return;
+            e.preventDefault();
+            const currentIdx = items.indexOf(document.activeElement);
+            const nextIdx = e.key === 'ArrowDown' ? currentIdx + 1 : currentIdx - 1;
+            const target = items[Math.max(0, Math.min(nextIdx, items.length - 1))];
+            target?.focus();
+        }
+    });
+
+    searchInput.addEventListener('focus', () => {
+        openSearchDropdown();
+    });
+
     searchInput.addEventListener('blur', () => {
         scheduleSearchAutoclear();
+    });
+
+    document.addEventListener('pointerdown', (e) => {
+        if (searchHistoryEl && !searchHistoryEl.hidden && !e.target.closest('.search-input-wrapper')) {
+            closeSearchDropdown();
+        }
+    });
+
+    // Dropdown interactions (delegated — rows are re-rendered often)
+    if (searchHistoryEl) {
+        searchHistoryEl.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-history-btn');
+            if (deleteBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                searchEngine.removeFromHistory(deleteBtn.dataset.delete || '');
+                renderSearchDropdown(searchDropdownMode === 'typing' ? 'typing' : 'idle');
+                return;
+            }
+            const clearAll = e.target.closest('.search-history-clear-all');
+            if (clearAll) {
+                e.preventDefault();
+                searchEngine.clearHistory();
+                renderSearchDropdown('idle');
+                return;
+            }
+            if (e.target.closest('.search-history-track')) {
+                return; // plain anchor — native navigation
+            }
+            const item = e.target.closest('.search-history-item');
+            if (!item) return;
+            const query = item.dataset.query;
+            if (!query) return;
+            closeSearchDropdown();
+            searchInput.value = query;
+            syncClearButton();
+            commitLiveSearch(query);
+        });
+    }
+
+    // Clear button
+    if (searchClearBtn) {
+        searchClearBtn.addEventListener('click', () => {
+            closeSearchDropdown();
+            clearSearchInput();
+            updateSearchUrl('');
+            ui.liveSearch('', 'all');
+            searchInput.focus();
+        });
+    }
+
+    // Recent-search rows on the idle results page.
+    window.addEventListener('search-query-requested', (e) => {
+        const query = String(e.detail?.query || '').trim();
+        if (!query) return;
+        searchInput.value = query;
+        syncClearButton();
+        closeSearchDropdown();
+        commitLiveSearch(query);
     });
 
     searchForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const query = searchInput.value.trim();
         if (query) {
-            navigate(`/search/${encodeURIComponent(query)}`);
-            const historyEl = document.getElementById('search-history');
-            if (historyEl) historyEl.style.display = 'none';
+            searchEngine.addToHistory(query);
+            closeSearchDropdown();
+            commitLiveSearch(query);
             clearSearchInput({ blur: true });
         }
     });
@@ -2782,8 +2953,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 voiceBtn.title = 'Listening…';
                 const transcript = await searchEngine.startVoiceSearch();
                 searchInput.value = transcript;
+                syncClearButton();
                 searchEngine.addToHistory(transcript);
-                navigate(`/search/${encodeURIComponent(transcript)}`);
+                closeSearchDropdown();
+                await commitLiveSearch(transcript);
                 clearSearchInput({ blur: true });
             } catch (err) {
                 console.warn('[Voice Search] Failed:', err.message);
@@ -3233,7 +3406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (headerFriendsNavBtn) headerFriendsNavBtn.style.display = 'inline-flex';
                 if (sidebarProfileNav) sidebarProfileNav.style.display = '';
                 headerAccountBtn.classList.add('is-authenticated');
-                let data = null;
+                let data;
                 try {
                     data = await syncManager.getUserData();
                 } catch {

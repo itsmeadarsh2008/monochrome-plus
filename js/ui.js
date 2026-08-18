@@ -57,6 +57,31 @@ import {
 import { scrollToTop } from './smooth-scrolling.js';
 import { getHomeSections } from './api/home.js';
 
+const deriveArtistsFromTracks = (tracks) => {
+    const artistMap = new Map();
+    tracks.forEach((track) => {
+        if (track.artist && !artistMap.has(track.artist.id)) {
+            artistMap.set(track.artist.id, track.artist);
+        }
+        if (track.artists) {
+            track.artists.forEach((a) => {
+                if (!artistMap.has(a.id)) artistMap.set(a.id, a);
+            });
+        }
+    });
+    return Array.from(artistMap.values());
+};
+
+const deriveAlbumsFromTracks = (tracks) => {
+    const albumMap = new Map();
+    tracks.forEach((track) => {
+        if (track.album && !albumMap.has(track.album.id)) {
+            albumMap.set(track.album.id, track.album);
+        }
+    });
+    return Array.from(albumMap.values());
+};
+
 const BILLBOARD_JSON_BASE_URL = 'https://raw.githubusercontent.com/KoreanThinker/billboard-json/main';
 const BILLBOARD_CHARTS = Object.freeze({
     hot100: { slug: 'billboard-hot-100', label: 'Hot 100' },
@@ -809,7 +834,7 @@ export class UIRenderer {
     }
 
     createUserPlaylistCardHTML(playlist) {
-        let imageHTML = '';
+        let imageHTML;
         if (playlist.cover) {
             imageHTML = `<img src="${playlist.cover}" alt="${playlist.name}" class="card-image" loading="lazy">`;
         } else {
@@ -6314,15 +6339,146 @@ export class UIRenderer {
         return items.filter((item) => !favoriteIds.has(item.id));
     }
 
+    // In-memory search cache so live typing and tab switches never refetch.
+    _searchCache(query) {
+        if (!this._searchResultsCache) this._searchResultsCache = new Map();
+        return this._searchResultsCache;
+    }
+
+    _searchCacheKey(query) {
+        return String(query || '')
+            .trim()
+            .toLowerCase();
+    }
+
+    _renderSearchTitle(query) {
+        const titleEl = document.getElementById('search-results-title');
+        if (titleEl) {
+            titleEl.textContent = String(query || '').trim() || 'Find your music';
+        }
+    }
+
+    // Router / deep-link entry: full page render.
     async renderSearchPage(query, activeTab = 'all') {
         this.showPage('search');
         const selectedTab = this.activateSearchTab(activeTab);
+        this._renderSearchTitle(query);
         const normalizedQuery = String(query || '').trim();
-
-        const titleEl = document.getElementById('search-results-title');
-        if (titleEl) {
-            titleEl.textContent = normalizedQuery ? `Results for "${normalizedQuery}"` : 'Search';
+        if (!normalizedQuery) {
+            this.renderSearchIdle();
+            return;
         }
+        await this._loadAndRenderSearch(normalizedQuery, selectedTab);
+    }
+
+    // Live typing entry: renders in place (no page hop) from cache when
+    // available, otherwise fetches. URL syncing is handled by the caller.
+    async liveSearch(query, activeTab = 'all') {
+        if (this._activePageId !== 'search') {
+            this.showPage('search');
+        }
+        const selectedTab = this.activateSearchTab(activeTab);
+        this._renderSearchTitle(query);
+        const normalizedQuery = String(query || '').trim();
+        if (!normalizedQuery) {
+            this.renderSearchIdle();
+            return;
+        }
+        const cached = this._searchCache().get(this._searchCacheKey(normalizedQuery));
+        if (cached) {
+            this._renderSearchData(selectedTab, cached);
+            return;
+        }
+        await this._loadAndRenderSearch(normalizedQuery, selectedTab);
+    }
+
+    // Quiet idle state: recent searches from the local search engine.
+    // Keeps the page structure intact (sections + containers) so a later
+    // live search can render into the same DOM — never wipe #search-tab-all.
+    renderSearchIdle() {
+        const allTab = document.getElementById('search-tab-all');
+        if (!allTab) return;
+
+        const tracksContainer = document.getElementById('search-tracks-container');
+        const artistsContainer = document.getElementById('search-artists-container');
+        const albumsContainer = document.getElementById('search-albums-container');
+        const playlistsContainer = document.getElementById('search-playlists-container');
+        const usersContainer = document.getElementById('search-users-container');
+        const allTracksContainer = document.getElementById('search-all-tracks-container');
+        const allArtistsContainer = document.getElementById('search-all-artists-container');
+        const allAlbumsContainer = document.getElementById('search-all-albums-container');
+        const allPlaylistsContainer = document.getElementById('search-all-playlists-container');
+        const allUsersContainer = document.getElementById('search-all-users-container');
+        const layoutEl = document.getElementById('search-top-results-layout');
+        const fallbackEl = document.getElementById('search-all-tracks-fallback');
+        const topHitContent = document.getElementById('search-top-hit-content');
+
+        [tracksContainer, artistsContainer, albumsContainer, playlistsContainer, usersContainer].forEach((c) => {
+            if (c) c.innerHTML = '';
+        });
+        [allTracksContainer, allArtistsContainer, allAlbumsContainer, allPlaylistsContainer, allUsersContainer].forEach(
+            (c) => {
+                if (c) c.innerHTML = '';
+            }
+        );
+        if (layoutEl) layoutEl.style.display = 'none';
+        if (fallbackEl) fallbackEl.style.display = 'none';
+        if (topHitContent) topHitContent.innerHTML = '';
+
+        // Hide the per-type result sections; keep them in the DOM for reuse.
+        [
+            'search-all-artists-section',
+            'search-all-albums-section',
+            'search-all-playlists-section',
+            'search-all-users-section',
+        ].forEach((id) => {
+            const section = document.getElementById(id);
+            if (section) section.style.display = 'none';
+        });
+
+        // Idle section — created once, idempotently.
+        let idleSection = document.getElementById('search-idle-section');
+        if (!idleSection) {
+            idleSection = document.createElement('section');
+            idleSection.className = 'search-section';
+            idleSection.id = 'search-idle-section';
+            idleSection.innerHTML =
+                '<h3 class="search-section-title">Recent Searches</h3><div class="search-idle-list" id="search-idle-list"></div>';
+            allTab.insertBefore(idleSection, allTab.firstChild);
+        }
+        idleSection.style.display = '';
+
+        const recent = typeof window.searchEngine?.getHistory === 'function' ? window.searchEngine.getHistory(8) : [];
+        const clockIcon =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        const recentRows = recent.length
+            ? recent
+                  .map(
+                      (q) => `
+                <button type="button" class="search-history-item search-idle-row" data-query="${escapeHtml(q)}" role="option">
+                    <span class="history-icon">${clockIcon}</span>
+                    <span class="query-text">${escapeHtml(q)}</span>
+                </button>`
+                  )
+                  .join('')
+            : '<p class="search-idle-empty">Nothing here yet — search to get started.</p>';
+
+        const idleList = document.getElementById('search-idle-list');
+        if (idleList) idleList.innerHTML = recentRows;
+
+        allTab.querySelectorAll('.search-idle-row').forEach((row) => {
+            row.addEventListener('click', () => {
+                const query = row.dataset.query || '';
+                if (!query) return;
+                window.dispatchEvent(new CustomEvent('search-query-requested', { detail: { query } }));
+            });
+        });
+    }
+
+    async _loadAndRenderSearch(query, selectedTab) {
+        const normalizedQuery = String(query || '').trim();
+        const allTabTrackLimit =
+            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
 
         // All containers — individual tabs
         const tracksContainer = document.getElementById('search-tracks-container');
@@ -6343,44 +6499,25 @@ export class UIRenderer {
         const fallbackEl = document.getElementById('search-all-tracks-fallback');
         const topHitContent = document.getElementById('search-top-hit-content');
 
-        // Empty state — no query
-        if (!normalizedQuery) {
-            const emptyState = createPlaceholder(
-                'Start typing to search tracks, artists, albums, playlists, and profiles.'
-            );
-            [tracksContainer, artistsContainer, albumsContainer, playlistsContainer].forEach((c) => {
-                if (c) c.innerHTML = emptyState;
-            });
-            [
-                usersContainer,
-                allTracksContainer,
-                allArtistsContainer,
-                allAlbumsContainer,
-                allPlaylistsContainer,
-                allUsersContainer,
-            ].forEach((c) => {
-                if (c) c.innerHTML = emptyState;
-            });
-            if (layoutEl) layoutEl.style.display = 'none';
-            if (fallbackEl) fallbackEl.style.display = 'none';
-            if (topHitContent) topHitContent.innerHTML = '';
-            return;
-        }
-
-        const allTabTrackLimit =
-            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
-
         // Show skeletons for ALL containers (we always fetch everything)
+        const hideIdle = () => {
+            const idleSection = document.getElementById('search-idle-section');
+            if (idleSection) idleSection.style.display = 'none';
+        };
+        hideIdle();
         if (tracksContainer) tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
         if (artistsContainer) artistsContainer.innerHTML = this.createSkeletonCards(6, true);
         if (albumsContainer) albumsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (playlistsContainer) playlistsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (usersContainer) usersContainer.innerHTML = this.createSkeletonCards(6, false);
         if (allTracksContainer) allTracksContainer.innerHTML = this.createSkeletonTracks(allTabTrackLimit, true);
-        if (allArtistsContainer) allArtistsContainer.innerHTML = this.createSkeletonCards(6, true);
+        if (allArtistsContainer) allArtistsContainer.innerHTML = this.createSkeletonRows(6);
         if (allAlbumsContainer) allAlbumsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (allPlaylistsContainer) allPlaylistsContainer.innerHTML = this.createSkeletonCards(6, false);
-        if (allUsersContainer) allUsersContainer.innerHTML = this.createSkeletonCards(6, false);
+        if (allUsersContainer) allUsersContainer.innerHTML = this.createSkeletonRows(6);
+        if (layoutEl) layoutEl.style.display = 'none';
+        if (fallbackEl) fallbackEl.style.display = 'none';
+        if (topHitContent) topHitContent.innerHTML = '';
 
         // Abort any in-flight search
         if (this.searchAbortController) {
@@ -6388,110 +6525,210 @@ export class UIRenderer {
         }
         this.searchAbortController = new AbortController();
         const signal = this.searchAbortController.signal;
+        const seq = (this._searchQuerySeq = (this._searchQuerySeq || 0) + 1);
 
-        try {
-            const provider = this.api.getCurrentProvider();
+        const provider = this.api.getCurrentProvider();
+        const isStale = () => signal.aborted || seq !== this._searchQuerySeq;
 
-            // Always fetch ALL types so tab switching works without re-fetching.
-            // retry: true — keep retrying through addon rate limits until results arrive.
-            const [tracksResult, artistsResult, albumsResult, playlistsResult, usersResult] = await Promise.all([
-                this.api.searchTracks(normalizedQuery, { signal, provider, retry: true }),
-                this.api.searchArtists(normalizedQuery, { signal, provider, retry: true }),
-                this.api.searchAlbums(normalizedQuery, { signal, provider, retry: true }),
-                this.api.searchPlaylists(normalizedQuery, { signal, provider, retry: true }),
-                syncManager.searchUsers(normalizedQuery),
-            ]);
-
-            // Deduplicate tracks
+        const dedupeTracks = (items) => {
             const seenTrackIds = new Set();
-            let finalTracks = [];
-            for (const t of tracksResult.items || []) {
+            const result = [];
+            for (const t of items) {
                 if (!seenTrackIds.has(t.id)) {
                     seenTrackIds.add(t.id);
-                    finalTracks.push(t);
+                    result.push(t);
                 }
             }
-            let finalArtists = artistsResult.items || [];
-            let finalAlbums = albumsResult.items || [];
-            let finalPlaylists = playlistsResult.items || [];
-            const finalUsers = usersResult || [];
+            return result;
+        };
 
-            // Derive artists from tracks if API returned none
-            if (finalArtists.length === 0 && finalTracks.length > 0) {
-                const artistMap = new Map();
-                finalTracks.forEach((track) => {
-                    if (track.artist && !artistMap.has(track.artist.id)) {
-                        artistMap.set(track.artist.id, track.artist);
-                    }
-                    if (track.artists) {
-                        track.artists.forEach((a) => {
-                            if (!artistMap.has(a.id)) artistMap.set(a.id, a);
-                        });
-                    }
-                });
-                finalArtists = Array.from(artistMap.values());
-            }
+        // Render as each section arrives instead of waiting for every request:
+        // tracks show up first, then artists/albums/playlists, users last.
+        const results = {};
+        const errors = {};
+        const renderIncremental = () => {
+            if (isStale()) return;
+            const data = {
+                tracks: results.tracks ?? (errors.tracks ? [] : undefined),
+                artists: results.artists ?? (errors.artists ? [] : undefined),
+                albums: results.albums ?? (errors.albums ? [] : undefined),
+                playlists: results.playlists ?? (errors.playlists ? [] : undefined),
+                users: results.users ?? [],
+            };
+            // Derive missing sections from tracks while their own requests are
+            // still in flight (or failed) so the page never waits on one.
+            if (results.tracks && !results.artists) data.artists = deriveArtistsFromTracks(results.tracks);
+            if (results.tracks && !results.albums) data.albums = deriveAlbumsFromTracks(results.tracks);
+            this._renderSearchData(selectedTab, data, Object.keys(errors).length > 0);
+        };
 
-            // Derive albums from tracks if API returned none
-            if (finalAlbums.length === 0 && finalTracks.length > 0) {
-                const albumMap = new Map();
-                finalTracks.forEach((track) => {
-                    if (track.album && !albumMap.has(track.album.id)) {
-                        albumMap.set(track.album.id, track.album);
-                    }
-                });
-                finalAlbums = Array.from(albumMap.values());
-            }
+        // Always fetch ALL types so tab switching works without re-fetching.
+        // retry: true — keep retrying through addon rate limits until results
+        // arrive, but bounded by the search wall-clock budget (see eclipse.js).
+        const tasks = [
+            this.api
+                .searchTracks(normalizedQuery, { signal, provider, retry: true })
+                .then((result) => {
+                    results.tracks = dedupeTracks(result.items || []);
+                })
+                .catch((error) => {
+                    errors.tracks = error;
+                    console.warn('[Search] tracks failed:', error?.message);
+                })
+                .finally(renderIncremental),
+            this.api
+                .searchArtists(normalizedQuery, { signal, provider, retry: true })
+                .then((result) => {
+                    results.artists = result.items || [];
+                })
+                .catch((error) => {
+                    errors.artists = error;
+                    console.warn('[Search] artists failed:', error?.message);
+                })
+                .finally(renderIncremental),
+            this.api
+                .searchAlbums(normalizedQuery, { signal, provider, retry: true })
+                .then((result) => {
+                    results.albums = result.items || [];
+                })
+                .catch((error) => {
+                    errors.albums = error;
+                    console.warn('[Search] albums failed:', error?.message);
+                })
+                .finally(renderIncremental),
+            this.api
+                .searchPlaylists(normalizedQuery, { signal, provider, retry: true })
+                .then((result) => {
+                    results.playlists = result.items || [];
+                })
+                .catch((error) => {
+                    errors.playlists = error;
+                    console.warn('[Search] playlists failed:', error?.message);
+                })
+                .finally(renderIncremental),
+            syncManager
+                .searchUsers(normalizedQuery)
+                .then((users) => {
+                    results.users = users || [];
+                })
+                .catch(() => {
+                    results.users = [];
+                })
+                .finally(renderIncremental),
+        ];
+        await Promise.all(tasks);
 
-            // ── Render individual tab containers ──────────────────────
-            // Tracks tab
-            if (tracksContainer) {
-                if (finalTracks.length) {
-                    this.renderListWithTracks(tracksContainer, finalTracks, true);
-                } else {
-                    tracksContainer.innerHTML = createPlaceholder('No tracks found.');
+        // Live typing superseded this request — discard the stale response.
+        if (isStale()) return;
+
+        // Fill any sections that never arrived (failed) with empty results and
+        // cache everything so tab switches re-render instantly.
+        const finalData = {
+            tracks: results.tracks || [],
+            artists: results.artists || [],
+            albums: results.albums || [],
+            playlists: results.playlists || [],
+            users: results.users || [],
+        };
+        this._searchCache().set(this._searchCacheKey(normalizedQuery), finalData);
+        if (this._searchCache().size > 20) {
+            const oldestKey = this._searchCache().keys().next().value;
+            this._searchCache().delete(oldestKey);
+        }
+
+        this._renderSearchData(selectedTab, finalData, Object.keys(errors).length > 0);
+    }
+
+    // ── Search rendering ─────────────────────────────────────────────────────
+
+    _renderSearchData(selectedTab, data, hasErrors) {
+        if (selectedTab === 'all') {
+            this._renderSearchAllTab(data, hasErrors);
+        } else {
+            this._renderSearchSingleTab(selectedTab, data, hasErrors);
+        }
+    }
+
+    _renderSearchSingleTab(selectedTab, { tracks, artists, albums, playlists, users }, hasErrors) {
+        const layoutEl = document.getElementById('search-top-results-layout');
+        const fallbackEl = document.getElementById('search-all-tracks-fallback');
+        const idleSection = document.getElementById('search-idle-section');
+        if (idleSection) idleSection.style.display = 'none';
+        if (layoutEl) layoutEl.style.display = 'none';
+        if (fallbackEl) fallbackEl.style.display = 'none';
+
+        const tracksContainer = document.getElementById('search-tracks-container');
+        const artistsContainer = document.getElementById('search-artists-container');
+        const albumsContainer = document.getElementById('search-albums-container');
+        const playlistsContainer = document.getElementById('search-playlists-container');
+        const usersContainer = document.getElementById('search-users-container');
+
+        if (selectedTab === 'tracks' && tracksContainer && tracks !== undefined) {
+            if (tracks.length) this.renderListWithTracks(tracksContainer, tracks, true);
+            else tracksContainer.innerHTML = createPlaceholder('No tracks found.');
+        } else if (selectedTab === 'artists' && artistsContainer && artists !== undefined) {
+            artistsContainer.innerHTML = artists.length
+                ? artists.map((a) => this.createSearchArtistCardHTML(a)).join('')
+                : createPlaceholder('No artists found.');
+        } else if (selectedTab === 'albums' && albumsContainer && albums !== undefined) {
+            albumsContainer.innerHTML = albums.length
+                ? albums.map((a) => this.createAlbumCardHTML(a)).join('')
+                : createPlaceholder('No albums found.');
+        } else if (selectedTab === 'playlists' && playlistsContainer && playlists !== undefined) {
+            playlistsContainer.innerHTML = playlists.length
+                ? playlists.map((p) => this.createPlaylistCardHTML(p)).join('')
+                : createPlaceholder('No playlists found.');
+        } else if (selectedTab === 'profiles' && usersContainer && users !== undefined) {
+            usersContainer.innerHTML = users.length
+                ? users.map((u) => this.createUserCardHTML(u)).join('')
+                : createPlaceholder('No users found.');
+        }
+
+        // Wire up trackDataStore and like states
+        const wireUpCards = (container, items, type, idKey = 'id') => {
+            if (!container) return;
+            items.forEach((item) => {
+                const selector = `[data-${type}-id="${item[idKey]}"]`;
+                const el = container.querySelector(selector);
+                if (el) {
+                    trackDataStore.set(el, item);
+                    this.updateLikeState(el, type, item[idKey]);
                 }
-            }
+            });
+        };
 
-            // Artists tab
-            if (artistsContainer) {
-                artistsContainer.innerHTML = finalArtists.length
-                    ? finalArtists.map((a) => this.createSearchArtistCardHTML(a)).join('')
-                    : createPlaceholder('No artists found.');
-            }
+        if (selectedTab === 'artists' && artists !== undefined) wireUpCards(artistsContainer, artists, 'artist');
+        else if (selectedTab === 'albums' && albums !== undefined) wireUpCards(albumsContainer, albums, 'album');
+        else if (selectedTab === 'playlists' && playlists !== undefined)
+            wireUpCards(playlistsContainer, playlists, 'playlist', 'uuid');
+    }
 
-            // Albums tab
-            if (albumsContainer) {
-                albumsContainer.innerHTML = finalAlbums.length
-                    ? finalAlbums.map((a) => this.createAlbumCardHTML(a)).join('')
-                    : createPlaceholder('No albums found.');
-            }
+    _renderSearchAllTab({ tracks, artists, albums, playlists, users }, hasErrors) {
+        const layoutEl = document.getElementById('search-top-results-layout');
+        const fallbackEl = document.getElementById('search-all-tracks-fallback');
+        const topHitContent = document.getElementById('search-top-hit-content');
+        const idleSection = document.getElementById('search-idle-section');
+        if (idleSection) idleSection.style.display = 'none';
+        const allTracksContainer = document.getElementById('search-all-tracks-container');
+        const allArtistsContainer = document.getElementById('search-all-artists-container');
+        const allAlbumsContainer = document.getElementById('search-all-albums-container');
+        const allPlaylistsContainer = document.getElementById('search-all-playlists-container');
+        const allUsersContainer = document.getElementById('search-all-users-container');
 
-            // Playlists tab
-            if (playlistsContainer) {
-                playlistsContainer.innerHTML = finalPlaylists.length
-                    ? finalPlaylists.map((p) => this.createPlaylistCardHTML(p)).join('')
-                    : createPlaceholder('No playlists found.');
-            }
+        const allTabTrackLimit =
+            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
 
-            // Users/Profiles tab
-            if (usersContainer) {
-                usersContainer.innerHTML = finalUsers.length
-                    ? finalUsers.map((u) => this.createUserCardHTML(u)).join('')
-                    : createPlaceholder('No users found.');
-            }
-
-            // ── Render "All" tab ─────────────────────────────────────
-            // Top Result card
-            if (layoutEl && topHitContent) {
+        // ── Top Result card ─────────────────────────────────────────
+        if (layoutEl && topHitContent) {
+            if (tracks === undefined && artists === undefined && albums === undefined) {
+                // Sections still loading — keep the skeletons in place.
+            } else if (tracks.length > 0 && (artists !== undefined || albums !== undefined)) {
                 let topHit = null;
                 let topHitType = '';
 
-                const validArtist = finalArtists.find(
-                    (artist) => typeof artist?.name === 'string' && artist.name.trim()
-                );
-                const validAlbum = finalAlbums.find((album) => typeof album?.title === 'string' && album.title.trim());
-                const validTrack = finalTracks.find((track) => typeof track?.title === 'string' && track.title.trim());
+                const validArtist = artists.find((artist) => typeof artist?.name === 'string' && artist.name.trim());
+                const validAlbum = albums.find((album) => typeof album?.title === 'string' && album.title.trim());
+                const validTrack = tracks.find((track) => typeof track?.title === 'string' && track.title.trim());
 
                 if (validArtist) {
                     topHit = validArtist;
@@ -6504,7 +6741,7 @@ export class UIRenderer {
                     topHitType = 'track';
                 }
 
-                if (topHit && finalTracks.length > 0) {
+                if (topHit && tracks.length > 0) {
                     layoutEl.style.display = 'grid';
                     if (fallbackEl) fallbackEl.style.display = 'none';
 
@@ -6521,9 +6758,14 @@ export class UIRenderer {
                         cardClass += ' card-artist';
                         navigateUrl = `/artist/${topHit.id}`;
                     } else if (topHitType === 'album') {
+                        const albumArtists = topHit.artist
+                            ? typeof topHit.artist === 'string'
+                                ? topHit.artist
+                                : topHit.artist.name
+                            : topHit.artists?.map((a) => a.name).join(', ') || '';
                         imageSrc = this.api.getCoverUrl(topHit.cover, '320');
                         title = topHit.title || '';
-                        subtitle = `Album • ${getAlbumArtists(topHit)}`;
+                        subtitle = `Album • ${albumArtists}`;
                         cardClass += ' card-album';
                         navigateUrl = `/album/${topHit.id}`;
                     } else if (topHitType === 'track') {
@@ -6547,6 +6789,7 @@ export class UIRenderer {
                     else if (topHitType === 'track') topHitContent.setAttribute('data-track-id', topHit.id);
 
                     topHitContent.innerHTML = `
+                    <a class="search-top-hit-link" href="${navigateUrl}" aria-label="${safeTitle}">
                         <div class="search-top-hit-visual">
                             <img src="${imageSrc}" alt="${safeTitle}" loading="lazy" onerror="window.handleCoverImageFallback(this)">
                         </div>
@@ -6555,128 +6798,157 @@ export class UIRenderer {
                             <h4 class="search-top-hit-title">${safeTitle}</h4>
                             <p class="search-top-hit-subtitle">${escapeHtml(subtitle)}</p>
                         </div>
-                        <div class="search-top-hit-arrow">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                        </div>`;
-
-                    // Click navigates to the entity page
-                    topHitContent.onclick = (e) => {
-                        e.preventDefault();
-                        if (navigateUrl && typeof window.navigate === 'function') {
-                            window.navigate(navigateUrl);
-                        }
-                    };
+                    </a>`;
 
                     trackDataStore.set(topHitContent, topHit);
                     this.updateLikeState(topHitContent, topHitType, topHit.id);
 
                     // Songs beside the top hit
                     if (allTracksContainer) {
-                        this.renderListWithTracks(allTracksContainer, finalTracks.slice(0, allTabTrackLimit), true);
+                        this.renderListWithTracks(allTracksContainer, tracks.slice(0, allTabTrackLimit), true);
                     }
                 } else {
                     layoutEl.style.display = 'none';
-                    if (finalTracks.length > 0 && fallbackEl) {
+                    topHitContent.innerHTML = '';
+                    if (fallbackEl) {
                         fallbackEl.style.display = 'block';
                         const fbContainer = document.getElementById('search-all-tracks-container-fallback');
-                        if (fbContainer) this.renderListWithTracks(fbContainer, finalTracks, true);
-                    } else if (fallbackEl) {
-                        fallbackEl.style.display = 'none';
+                        if (fbContainer) this.renderListWithTracks(fbContainer, tracks, true);
                     }
-                    topHitContent.innerHTML = '';
                 }
-            }
-
-            // All-tab: Artists section
-            if (allArtistsContainer) {
-                const section = allArtistsContainer.closest('.search-all-section');
-                if (finalArtists.length) {
-                    allArtistsContainer.innerHTML = finalArtists
-                        .map((a) => this.createSearchArtistCardHTML(a))
-                        .join('');
-                    if (section) section.style.display = '';
-                } else {
-                    allArtistsContainer.innerHTML = '';
-                    if (section) section.style.display = 'none';
-                }
-            }
-
-            // All-tab: Albums section
-            if (allAlbumsContainer) {
-                const section = allAlbumsContainer.closest('.search-all-section');
-                if (finalAlbums.length) {
-                    allAlbumsContainer.innerHTML = finalAlbums.map((a) => this.createAlbumCardHTML(a)).join('');
-                    if (section) section.style.display = '';
-                } else {
-                    allAlbumsContainer.innerHTML = '';
-                    if (section) section.style.display = 'none';
-                }
-            }
-
-            // All-tab: Playlists section
-            if (allPlaylistsContainer) {
-                const section = allPlaylistsContainer.closest('.search-all-section');
-                if (finalPlaylists.length) {
-                    allPlaylistsContainer.innerHTML = finalPlaylists
-                        .map((p) => this.createPlaylistCardHTML(p))
-                        .join('');
-                    if (section) section.style.display = '';
-                } else {
-                    allPlaylistsContainer.innerHTML = '';
-                    if (section) section.style.display = 'none';
-                }
-            }
-
-            // All-tab: Users section
-            if (allUsersContainer) {
-                const section = allUsersContainer.closest('.search-all-section');
-                if (finalUsers.length) {
-                    allUsersContainer.innerHTML = finalUsers.map((u) => this.createUserCardHTML(u)).join('');
-                    if (section) section.style.display = '';
-                } else {
-                    allUsersContainer.innerHTML = '';
-                    if (section) section.style.display = 'none';
-                }
-            }
-
-            // ── Wire up trackDataStore and like states ────────────────
-            const wireUpCards = (container, items, type, idKey = 'id') => {
-                if (!container) return;
-                items.forEach((item) => {
-                    const selector = `[data-${type}-id="${item[idKey]}"]`;
-                    const el = container.querySelector(selector);
-                    if (el) {
-                        trackDataStore.set(el, item);
-                        this.updateLikeState(el, type, item[idKey]);
+            } else if (tracks !== undefined) {
+                // Tracks arrived empty: show a visible empty/error state
+                // instead of a blank page below the tabs.
+                layoutEl.style.display = 'none';
+                topHitContent.innerHTML = '';
+                if (fallbackEl) {
+                    const nothingFound =
+                        (artists?.length ?? 0) === 0 &&
+                        (albums?.length ?? 0) === 0 &&
+                        (playlists?.length ?? 0) === 0 &&
+                        (users?.length ?? 0) === 0;
+                    fallbackEl.style.display = 'block';
+                    const fbContainer = document.getElementById('search-all-tracks-container-fallback');
+                    if (fbContainer) {
+                        fbContainer.innerHTML = nothingFound
+                            ? createPlaceholder(
+                                  hasErrors
+                                      ? 'Search could not reach the addon. Check the addon connection and try again.'
+                                      : 'No results found. Try a different search.'
+                              )
+                            : '';
                     }
-                });
-            };
-
-            wireUpCards(artistsContainer, finalArtists, 'artist');
-            wireUpCards(allArtistsContainer, finalArtists, 'artist');
-            wireUpCards(albumsContainer, finalAlbums, 'album');
-            wireUpCards(allAlbumsContainer, finalAlbums, 'album');
-            wireUpCards(playlistsContainer, finalPlaylists, 'playlist', 'uuid');
-            wireUpCards(allPlaylistsContainer, finalPlaylists, 'playlist', 'uuid');
-        } catch (error) {
-            if (error.name === 'AbortError') return;
-            console.error('Search failed:', error);
-            const errorMsg = createPlaceholder(`Error during search. ${error.message}`);
-            [
-                tracksContainer,
-                artistsContainer,
-                albumsContainer,
-                playlistsContainer,
-                usersContainer,
-                allTracksContainer,
-                allArtistsContainer,
-                allAlbumsContainer,
-                allPlaylistsContainer,
-                allUsersContainer,
-            ].forEach((c) => {
-                if (c) c.innerHTML = errorMsg;
-            });
+                }
+            }
         }
+
+        // ── Sections ────────────────────────────────────────────────
+        if (allArtistsContainer && artists !== undefined) {
+            const section = allArtistsContainer.closest('.search-section');
+            if (artists.length) {
+                allArtistsContainer.innerHTML = artists.map((a) => this.createSearchArtistRowHTML(a)).join('');
+                if (section) section.style.display = '';
+            } else {
+                allArtistsContainer.innerHTML = '';
+                if (section) section.style.display = 'none';
+            }
+        }
+
+        if (allAlbumsContainer && albums !== undefined) {
+            const section = allAlbumsContainer.closest('.search-section');
+            if (albums.length) {
+                allAlbumsContainer.innerHTML = albums.map((a) => this.createAlbumCardHTML(a)).join('');
+                if (section) section.style.display = '';
+            } else {
+                allAlbumsContainer.innerHTML = '';
+                if (section) section.style.display = 'none';
+            }
+        }
+
+        if (allPlaylistsContainer && playlists !== undefined) {
+            const section = allPlaylistsContainer.closest('.search-section');
+            if (playlists.length) {
+                allPlaylistsContainer.innerHTML = playlists.map((p) => this.createPlaylistCardHTML(p)).join('');
+                if (section) section.style.display = '';
+            } else {
+                allPlaylistsContainer.innerHTML = '';
+                if (section) section.style.display = 'none';
+            }
+        }
+
+        if (allUsersContainer && users !== undefined) {
+            const section = allUsersContainer.closest('.search-section');
+            if (users.length) {
+                allUsersContainer.innerHTML = users.map((u) => this.createSearchUserRowHTML(u)).join('');
+                if (section) section.style.display = '';
+            } else {
+                allUsersContainer.innerHTML = '';
+                if (section) section.style.display = 'none';
+            }
+        }
+
+        // Wire up trackDataStore and like states for the cards rendered here.
+        const wireUpCards = (container, items, type, idKey = 'id') => {
+            if (!container) return;
+            items.forEach((item) => {
+                const selector = `[data-${type}-id="${item[idKey]}"]`;
+                const el = container.querySelector(selector);
+                if (el) {
+                    trackDataStore.set(el, item);
+                    this.updateLikeState(el, type, item[idKey]);
+                }
+            });
+        };
+
+        if (artists !== undefined) wireUpCards(allArtistsContainer, artists, 'artist');
+        if (albums !== undefined) wireUpCards(allAlbumsContainer, albums, 'album');
+        if (playlists !== undefined) wireUpCards(allPlaylistsContainer, playlists, 'playlist', 'uuid');
+    }
+
+    // Quiet editorial rows for the All tab — artists and people as clean
+    // hairlines with circular art, Apple-Music style.
+    createSearchArtistRowHTML(artist) {
+        const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
+        const picture = artist?.picture || 'assets/appicon.png';
+        return `
+            <a class="search-row search-artist-row${isBlocked ? ' blocked' : ''}" href="/artist/${encodeURIComponent(artist.id)}" data-artist-id="${escapeHtml(artist.id)}"${isBlocked ? ' title="Blocked: Artist blocked"' : ''}>
+                <span class="search-row-art search-row-art--round">
+                    <img src="${this.api.getArtistPictureUrl(picture)}" alt="${escapeHtml(artist.name)}" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'">
+                </span>
+                <span class="search-row-meta">
+                    <span class="search-row-title">${escapeHtml(artist.name)}</span>
+                    <span class="search-row-subtitle">Artist</span>
+                </span>
+            </a>`;
+    }
+
+    createSearchUserRowHTML(user) {
+        return `
+            <a class="search-row search-user-row" href="/user/@${encodeURIComponent(user.username)}">
+                <span class="search-row-art search-row-art--round">
+                    <img src="${user.avatar_url || 'assets/appicon.png'}" alt="${escapeHtml(user.display_name || user.username)}" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'">
+                </span>
+                <span class="search-row-meta">
+                    <span class="search-row-title">${escapeHtml(user.display_name || user.username)}</span>
+                    <span class="search-row-subtitle">@${escapeHtml(user.username)}</span>
+                </span>
+            </a>`;
+    }
+
+    createSkeletonRows(count = 6) {
+        return Array(count)
+            .fill(0)
+            .map(
+                () => `
+            <div class="skeleton-search-row">
+                <span class="skeleton-search-row-art"></span>
+                <span class="skeleton-search-row-lines">
+                    <span class="skeleton-search-row-line"></span>
+                    <span class="skeleton-search-row-line skeleton-search-row-line--short"></span>
+                </span>
+            </div>`
+            )
+            .join('');
     }
 
     async renderAlbumPage(albumId, provider = null) {
@@ -8448,7 +8720,7 @@ export class UIRenderer {
         }
 
         const hour = new Date().getHours();
-        let greeting = 'Welcome';
+        let greeting;
         if (hour >= 5 && hour < 12) greeting = 'Good morning';
         else if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
         else if (hour >= 17 && hour < 21) greeting = 'Good evening';
@@ -9515,7 +9787,9 @@ export class UIRenderer {
                     const installedId = installed.id || installed.manifest?.id || installed.baseUrl;
                     const manifest = installed.manifest || {};
                     const resources = Array.isArray(manifest.resources)
-                        ? manifest.resources.map((resource) => `<span class="addon-badge">${escapeHtml(resource)}</span>`).join('')
+                        ? manifest.resources
+                              .map((resource) => `<span class="addon-badge">${escapeHtml(resource)}</span>`)
+                              .join('')
                         : '';
                     const icon = manifest.icon
                         ? `<img class="addon-card-icon" src="${escapeHtml(manifest.icon)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
@@ -9538,16 +9812,19 @@ export class UIRenderer {
                                 <div class="addon-card-status addon-card-status-checking" id="${statusId}">Checking addon reachability from this site…</div>
                                 <div class="addon-card-controls">
                                     <label class="addon-enabled-toggle"><input type="checkbox" data-addon-action="enabled" data-addon-id="${escapeHtml(installedId)}" ${installed.enabled !== false ? 'checked' : ''} /> Enabled</label>
+                                    <label class="addon-enabled-toggle" title="Include this addon's results in search"><input type="checkbox" data-addon-action="search-enabled" data-addon-id="${escapeHtml(installedId)}" ${installed.searchEnabled !== false ? 'checked' : ''} /> Search</label>
+                                    <label class="addon-enabled-toggle" title="Ask this addon for stream URLs; the best quality wins"><input type="checkbox" data-addon-action="stream-enabled" data-addon-id="${escapeHtml(installedId)}" ${installed.streamEnabled !== false ? 'checked' : ''} /> Stream</label>
                                     <button type="button" class="btn-ghost" data-addon-action="activate" data-addon-id="${escapeHtml(installedId)}" ${isActive || installed.enabled === false ? 'disabled' : ''}>Use</button>
                                     <button type="button" class="btn-ghost" data-addon-action="move" data-addon-direction="-1" data-addon-id="${escapeHtml(installedId)}" ${index === 0 ? 'disabled' : ''} aria-label="Move addon up">↑</button>
                                     <button type="button" class="btn-ghost" data-addon-action="move" data-addon-direction="1" data-addon-id="${escapeHtml(installedId)}" ${index === addons.length - 1 ? 'disabled' : ''} aria-label="Move addon down">↓</button>
+                                    <button type="button" class="btn-ghost addon-remove-btn" data-addon-action="remove" data-addon-id="${escapeHtml(installedId)}" aria-label="Remove addon">Remove</button>
                                 </div>
                             </div>
                         </div>`;
                 })
                 .join('')}
         </div>
-        <div class="addon-card-count">Priority is top to bottom. Failed requests automatically try the next enabled addon.</div>`;
+        <div class="addon-card-count">Priority is top to bottom. Search mixes every addon with Search enabled; stream resolution asks every addon with Stream enabled and keeps the best-quality URL.</div>`;
         if (actions) actions.hidden = false;
         addons.forEach((installed, index) => void this._checkReachability(installed, `addon-reachability-${index}`));
     }
