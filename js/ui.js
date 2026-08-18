@@ -1645,15 +1645,14 @@ export class UIRenderer {
             tiltEl.style.setProperty('--shine-y', '50%');
         };
 
-        if (
-            !window.matchMedia('(min-width: 1200px) and (hover: hover) and (pointer: fine)').matches ||
-            window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ) {
+        const isDesktop = window.matchMedia('(min-width: 1200px) and (hover: hover) and (pointer: fine)').matches;
+        const isTouch = window.matchMedia('(pointer: coarse)').matches;
+        if ((!isDesktop && !isTouch) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             resetTilt();
             return;
         }
 
-        const MAX_TILT = 10;
+        const MAX_TILT = isDesktop ? 10 : 7;
         let rafId = 0;
         let targetX = 0;
         let targetY = 0;
@@ -1714,12 +1713,16 @@ export class UIRenderer {
             queueApply();
         };
 
+        tiltEl.addEventListener('pointerdown', onPointerMove);
         tiltEl.addEventListener('pointermove', onPointerMove);
         tiltEl.addEventListener('pointerleave', onPointerLeave);
+        tiltEl.addEventListener('pointercancel', onPointerLeave);
 
         this._fullscreenCoverTiltCleanup = () => {
+            tiltEl.removeEventListener('pointerdown', onPointerMove);
             tiltEl.removeEventListener('pointermove', onPointerMove);
             tiltEl.removeEventListener('pointerleave', onPointerLeave);
+            tiltEl.removeEventListener('pointercancel', onPointerLeave);
             if (rafId) cancelAnimationFrame(rafId);
             rafId = 0;
             resetTilt();

@@ -6632,31 +6632,37 @@ input:checked + .slider::before {
     display: none;
 }
 
-@media (min-width: 1200px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    /* Cursor-following shine on the album art. The element is positioned and
-       sized by JS to the art's exact bounds, so the glow can never extend
-       past the art. */
-    #fullscreen-cover-shine {
-        position: absolute;
-        z-index: 5;
-        pointer-events: none;
-        border-radius: var(--radius);
-        opacity: 0;
-        transition: opacity 0.25s ease;
-        background: radial-gradient(
-            circle at var(--shine-x, 50%) var(--shine-y, 50%),
-            rgb(255, 255, 255, 0.16) 0%,
-            rgb(255, 255, 255, 0.05) 35%,
-            transparent 60%
-        );
-    }
+/* Cursor/touch-following shine on the album art. The element is positioned
+   and sized by JS to the art's exact bounds, so the glow can never extend
+   past the art. Visible on hover (desktop) or while touching (mobile). */
+#fullscreen-cover-shine {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    border-radius: var(--radius);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    background: radial-gradient(
+        circle at var(--shine-x, 50%) var(--shine-y, 50%),
+        rgb(255, 255, 255, 0.16) 0%,
+        rgb(255, 255, 255, 0.05) 35%,
+        transparent 60%
+    );
+}
 
+#fullscreen-cover-tilt:has(#vinyl-disc-container.rotating-disc) #fullscreen-cover-shine {
+    border-radius: 50%;
+}
+
+@media (min-width: 1200px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
     #fullscreen-cover-tilt:hover #fullscreen-cover-shine {
         opacity: 1;
     }
+}
 
-    #fullscreen-cover-tilt:has(#vinyl-disc-container.rotating-disc) #fullscreen-cover-shine {
-        border-radius: 50%;
+@media (pointer: coarse) and (prefers-reduced-motion: no-preference) {
+    #fullscreen-cover-tilt:active #fullscreen-cover-shine {
+        opacity: 1;
     }
 }
 
