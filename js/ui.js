@@ -1562,16 +1562,19 @@ export class UIRenderer {
 
         const fitSize = Math.max(minSize, Math.min(maxSize, targetSize));
         // Honor the user's art size setting when it fits the viewport budget;
-        // otherwise fall back to the adaptive fit.
+        // otherwise fall back to the adaptive fit. The plain (non-disc) art
+        // may use a looser cap since the layout was designed for larger art.
+        const isDisc = vinylContainer.classList.contains('rotating-disc');
         const userSize = Number.parseFloat(
             getComputedStyle(document.documentElement).getPropertyValue('--vinyl-disc-size')
         );
-        const finalSize = userSize > 0 ? Math.min(userSize, fitSize) : fitSize;
+        const plainCap = Math.max(fitSize, Math.min(targetSize * 1.2, 620));
+        const finalSize = userSize > 0 ? Math.min(userSize, isDisc ? fitSize : plainCap) : fitSize;
 
         vinylContainer.style.setProperty('--vinyl-disc-size', `${Math.round(finalSize)}px`);
 
         const coverImage = overlay.querySelector('#fullscreen-cover-image');
-        if (coverImage && !vinylContainer.classList.contains('rotating-disc')) {
+        if (coverImage && !isDisc) {
             coverImage.style.width = `${Math.round(finalSize)}px`;
             coverImage.style.height = `${Math.round(finalSize)}px`;
         }

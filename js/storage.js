@@ -506,8 +506,8 @@ export const rotatingCoverSettings = {
     DISC_SCRATCH_KEY: 'rotating-cover-disc-scratch-enabled',
     DISC_SIZE_KEY: 'rotating-cover-disc-size',
     DEFAULT_DISC_SIZE: 280,
-    MIN_DISC_SIZE: 220,
-    MAX_DISC_SIZE: 420,
+    MIN_DISC_SIZE: 160,
+    MAX_DISC_SIZE: 560,
 
     isEnabled() {
         try {
