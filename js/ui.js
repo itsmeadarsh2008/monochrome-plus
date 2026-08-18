@@ -1575,8 +1575,25 @@ export class UIRenderer {
 
         const coverImage = overlay.querySelector('#fullscreen-cover-image');
         if (coverImage && !isDisc) {
-            coverImage.style.width = `${Math.round(finalSize)}px`;
-            coverImage.style.height = `${Math.round(finalSize)}px`;
+            // Size the box to the artwork's true aspect ratio (object-fit:
+            // contain would letterbox non-square art, leaving the outline
+            // floating around empty space).
+            const naturalWidth = coverImage.naturalWidth || 0;
+            const naturalHeight = coverImage.naturalHeight || 0;
+            const aspect = naturalWidth && naturalHeight ? naturalWidth / naturalHeight : 1;
+            const maxW = Math.min(finalSize, 620);
+            const maxH = Math.min(finalSize, 520);
+            let width = maxW;
+            let height = maxW / aspect;
+            if (height > maxH) {
+                height = maxH;
+                width = maxH * aspect;
+            }
+            coverImage.style.width = `${Math.round(width)}px`;
+            coverImage.style.height = `${Math.round(height)}px`;
+            if (!naturalWidth && !coverImage.complete) {
+                coverImage.addEventListener('load', () => this.applyAdaptiveFullscreenDiscSize(), { once: true });
+            }
         }
     }
 
