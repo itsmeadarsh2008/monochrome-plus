@@ -3125,6 +3125,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             ? rotatingCoverSettings.setDiscSize(size)
             : rotatingCoverSettings.getDiscSize();
         document.documentElement.style.setProperty('--vinyl-disc-size', `${discSize}px`);
+        if (ui?.isFullscreenCoverOpen?.()) {
+            ui.applyAdaptiveFullscreenDiscSize();
+        }
     });
 
     // PWA Update Logic

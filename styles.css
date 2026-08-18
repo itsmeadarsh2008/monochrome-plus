@@ -6428,7 +6428,9 @@ input:checked + .slider::before {
     max-width: min(48vw, 620px);
     max-height: min(38vh, 520px);
     border-radius: var(--radius);
-    box-shadow: 0 20px 50px rgb(0, 0, 0, 0.5);
+    box-shadow:
+        0 0 0 2px rgb(200, 205, 211),
+        0 20px 50px rgb(0, 0, 0, 0.5);
     object-fit: contain;
     margin-bottom: 1rem;
     z-index: 1;
@@ -6594,6 +6596,7 @@ input:checked + .slider::before {
     max-height: none;
     border-radius: var(--radius-full);
     box-shadow:
+        0 0 0 2px rgb(200, 205, 211),
         0 0 0 4px rgb(20, 20, 20),
         0 0 0 6px rgb(8, 8, 8),
         0 4px 12px rgb(0, 0, 0, 0.5);
@@ -6630,9 +6633,9 @@ input:checked + .slider::before {
 }
 
 @media (min-width: 1200px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    /* Spotlight: a light pool follows the cursor and the rest of the art
-       dims, like a flashlight beam. Clipped to the art's exact bounds by
-       the JS-sized element. */
+    /* Cursor-following shine on the album art. The element is positioned and
+       sized by JS to the art's exact bounds, so the glow can never extend
+       past the art. */
     #fullscreen-cover-shine {
         position: absolute;
         z-index: 5;
@@ -6642,10 +6645,9 @@ input:checked + .slider::before {
         transition: opacity 0.25s ease;
         background: radial-gradient(
             circle at var(--shine-x, 50%) var(--shine-y, 50%),
-            rgb(255, 255, 255, 0.12) 0%,
-            rgb(255, 255, 255, 0.04) 22%,
-            transparent 42%,
-            rgb(0, 0, 0, 0.42) 80%
+            rgb(255, 255, 255, 0.16) 0%,
+            rgb(255, 255, 255, 0.05) 35%,
+            transparent 60%
         );
     }
 

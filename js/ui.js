@@ -1560,8 +1560,21 @@ export class UIRenderer {
         const minSize = isLandscape ? 220 : 210;
         const maxSize = isLandscape ? 340 : 320;
 
-        const finalSize = Math.max(minSize, Math.min(maxSize, targetSize));
+        const fitSize = Math.max(minSize, Math.min(maxSize, targetSize));
+        // Honor the user's art size setting when it fits the viewport budget;
+        // otherwise fall back to the adaptive fit.
+        const userSize = Number.parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue('--vinyl-disc-size')
+        );
+        const finalSize = userSize > 0 ? Math.min(userSize, fitSize) : fitSize;
+
         vinylContainer.style.setProperty('--vinyl-disc-size', `${Math.round(finalSize)}px`);
+
+        const coverImage = overlay.querySelector('#fullscreen-cover-image');
+        if (coverImage && !vinylContainer.classList.contains('rotating-disc')) {
+            coverImage.style.width = `${Math.round(finalSize)}px`;
+            coverImage.style.height = `${Math.round(finalSize)}px`;
+        }
     }
 
     startAdaptiveFullscreenDiscSizing() {
@@ -1590,6 +1603,9 @@ export class UIRenderer {
 
         const vinylContainer = document.getElementById('vinyl-disc-container');
         vinylContainer?.style.removeProperty('--vinyl-disc-size');
+        const coverImage = document.getElementById('fullscreen-cover-image');
+        coverImage?.style.removeProperty('width');
+        coverImage?.style.removeProperty('height');
     }
 
     refreshFullscreenDiscScrubbing() {
