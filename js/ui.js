@@ -1421,6 +1421,7 @@ export class UIRenderer {
         if (playerBar) playerBar.style.display = 'none';
 
         overlay.style.display = 'flex';
+        this.setupFullscreenCoverTilt();
         this.startAdaptiveFullscreenDiscSizing();
         this.refreshFullscreenDiscScrubbing();
 
@@ -1489,6 +1490,10 @@ export class UIRenderer {
         if (this.fullscreenDiscScrubCleanup) {
             this.fullscreenDiscScrubCleanup();
             this.fullscreenDiscScrubCleanup = null;
+        }
+        if (this._fullscreenCoverTiltCleanup) {
+            this._fullscreenCoverTiltCleanup();
+            this._fullscreenCoverTiltCleanup = null;
         }
         this.stopAdaptiveFullscreenDiscSizing();
         this.stopFullscreenDiscRotationSync();
@@ -1601,6 +1606,106 @@ export class UIRenderer {
      * Fullscreen DJ disc motion uses a playback-synced RAF loop.
      * Scrub/inertia temporarily take control and hand back with preserved phase.
      */
+
+    setupFullscreenCoverTilt() {
+        const tiltEl = document.getElementById('fullscreen-cover-tilt');
+        const vinylContainer = document.getElementById('vinyl-disc-container');
+        const coverImage = document.getElementById('fullscreen-cover-image');
+        const shineEl = document.getElementById('fullscreen-cover-shine');
+        if (!tiltEl) return;
+
+        if (this._fullscreenCoverTiltCleanup) {
+            this._fullscreenCoverTiltCleanup();
+            this._fullscreenCoverTiltCleanup = null;
+        }
+
+        const resetTilt = () => {
+            tiltEl.style.setProperty('--tilt-x', '0deg');
+            tiltEl.style.setProperty('--tilt-y', '0deg');
+            tiltEl.style.setProperty('--shine-x', '50%');
+            tiltEl.style.setProperty('--shine-y', '50%');
+        };
+
+        if (
+            !window.matchMedia('(min-width: 1200px) and (hover: hover) and (pointer: fine)').matches ||
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ) {
+            resetTilt();
+            return;
+        }
+
+        const MAX_TILT = 10;
+        let rafId = 0;
+        let targetX = 0;
+        let targetY = 0;
+        let shineX = 50;
+        let shineY = 50;
+        let shineLeft = 0;
+        let shineTop = 0;
+        let shineWidth = 0;
+        let shineHeight = 0;
+
+        const getArtElement = () => (vinylContainer?.classList.contains('rotating-disc') ? vinylContainer : coverImage);
+
+        const apply = () => {
+            rafId = 0;
+            tiltEl.style.setProperty('--tilt-x', `${targetX.toFixed(2)}deg`);
+            tiltEl.style.setProperty('--tilt-y', `${targetY.toFixed(2)}deg`);
+            if (!shineEl) return;
+            shineEl.style.left = `${shineLeft.toFixed(1)}px`;
+            shineEl.style.top = `${shineTop.toFixed(1)}px`;
+            shineEl.style.width = `${shineWidth.toFixed(1)}px`;
+            shineEl.style.height = `${shineHeight.toFixed(1)}px`;
+            shineEl.style.setProperty('--shine-x', `${shineX.toFixed(1)}%`);
+            shineEl.style.setProperty('--shine-y', `${shineY.toFixed(1)}%`);
+        };
+
+        const queueApply = () => {
+            if (!rafId) rafId = requestAnimationFrame(apply);
+        };
+
+        const onPointerMove = (event) => {
+            if (vinylContainer?.classList.contains('disc-scrubbing')) return;
+            const artEl = getArtElement();
+            const artRect = artEl?.getBoundingClientRect();
+            if (!artRect || !artRect.width || !artRect.height) return;
+            const wrapRect = tiltEl.getBoundingClientRect();
+            const dx = Math.max(
+                -1,
+                Math.min(1, (event.clientX - (artRect.left + artRect.width / 2)) / (artRect.width / 2))
+            );
+            const dy = Math.max(
+                -1,
+                Math.min(1, (event.clientY - (artRect.top + artRect.height / 2)) / (artRect.height / 2))
+            );
+            targetX = -dy * MAX_TILT;
+            targetY = dx * MAX_TILT;
+            shineLeft = artRect.left - wrapRect.left;
+            shineTop = artRect.top - wrapRect.top;
+            shineWidth = artRect.width;
+            shineHeight = artRect.height;
+            shineX = ((event.clientX - artRect.left) / artRect.width) * 100;
+            shineY = ((event.clientY - artRect.top) / artRect.height) * 100;
+            queueApply();
+        };
+
+        const onPointerLeave = () => {
+            targetX = 0;
+            targetY = 0;
+            queueApply();
+        };
+
+        tiltEl.addEventListener('pointermove', onPointerMove);
+        tiltEl.addEventListener('pointerleave', onPointerLeave);
+
+        this._fullscreenCoverTiltCleanup = () => {
+            tiltEl.removeEventListener('pointermove', onPointerMove);
+            tiltEl.removeEventListener('pointerleave', onPointerLeave);
+            if (rafId) cancelAnimationFrame(rafId);
+            rafId = 0;
+            resetTilt();
+        };
+    }
 
     startFullscreenDiscRotationSync(_audioPlayer) {
         const audioPlayer = _audioPlayer || this._fullscreenAudioPlayer;

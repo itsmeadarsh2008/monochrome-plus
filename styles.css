@@ -6606,6 +6606,54 @@ input:checked + .slider::before {
     backface-visibility: hidden;
 }
 
+/* Fullscreen album art tilt (pointer-following 3D card) + shine sweep.
+   Big screens with a fine pointer only; the tilt wrapper keeps the JS-driven
+   disc spin (inline transform) and the tilt transform on separate layers. */
+#fullscreen-cover-tilt {
+    --tilt-x: 0deg;
+    --tilt-y: 0deg;
+    position: relative;
+    z-index: 1;
+    margin-bottom: var(--space-4);
+    transform: perspective(1000px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 0.2s ease-out;
+}
+
+#fullscreen-cover-tilt #vinyl-disc-container {
+    margin-bottom: 0;
+}
+
+#fullscreen-cover-overlay.video-bg-active #fullscreen-cover-tilt {
+    display: none;
+}
+
+@media (min-width: 1200px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    #fullscreen-cover-shine {
+        position: absolute;
+        z-index: 5;
+        pointer-events: none;
+        border-radius: var(--radius);
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        background: radial-gradient(
+            circle at var(--shine-x, 50%) var(--shine-y, 50%),
+            rgb(255, 255, 255, 0.16) 0%,
+            rgb(255, 255, 255, 0.05) 35%,
+            transparent 60%
+        );
+    }
+
+    #fullscreen-cover-tilt:hover #fullscreen-cover-shine {
+        opacity: 1;
+    }
+
+    #fullscreen-cover-tilt:has(#vinyl-disc-container.rotating-disc) #fullscreen-cover-shine {
+        border-radius: 50%;
+    }
+}
+
 .fullscreen-track-info {
     text-align: center;
     z-index: 1;
