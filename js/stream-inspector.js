@@ -169,6 +169,32 @@ export function extractFlacStreamInfo(bytes) {
     return null;
 }
 
+// Decodes a 34-byte FLAC STREAMINFO body into the real codec spec. This is
+// the authoritative ground truth for FLAC: the fLaC sample entry often has a
+// zero samplerate (Tidal's muxer writes none), while STREAMINFO always
+// carries the true rate/channels/bit depth. Layout:
+//   10-12 sample rate (20 bits), 12-13 channels-1 (3 bits) + bps-1 (5 bits)
+export function decodeFlacStreamInfo(streamInfo) {
+    if (!streamInfo || streamInfo.length < 34) return null;
+    const b = streamInfo;
+    const sampleRate = (b[10] << 12) | (b[11] << 4) | (b[12] >> 4);
+    const channels = ((b[12] & 0x0e) >> 1) + 1;
+    const bitDepth = (((b[12] & 0x01) << 4) | (b[13] >> 4)) + 1;
+    if (!(sampleRate >= 8000 && sampleRate <= 768000)) return null;
+    return {
+        codec: 'FLAC',
+        sampleRate,
+        bitDepth: bitDepth >= 8 && bitDepth <= 32 ? bitDepth : null,
+        channels: channels >= 1 && channels <= 8 ? channels : null,
+    };
+}
+
+// Extracts and decodes the FLAC STREAMINFO from an fLaC init segment, or null.
+export function extractFlacSpec(bytes) {
+    if (!bytes) return null;
+    return decodeFlacStreamInfo(extractFlacStreamInfo(bytes));
+}
+
 function resolveUri(uri, baseUrl) {
     try {
         return new URL(uri, baseUrl).toString();
@@ -299,8 +325,16 @@ async function inspectHls(manifestUrl) {
     if (playlist.initUri) {
         const initBytes = await fetchHeadBytes(playlist.initUri);
         if (initBytes) {
-            const spec = readAudioSpecFromMoov(initBytes);
-            Object.assign(meta, pickPlausible(spec));
+            // FLAC truth: STREAMINFO beats the sample entry — Tidal's fLaC
+            // entry carries a zero samplerate field, so the moov alone can
+            // report nothing (or a wrong rate) for these streams.
+            const flacSpec = extractFlacSpec(initBytes);
+            if (flacSpec) {
+                Object.assign(meta, pickPlausible(flacSpec));
+            } else {
+                const spec = readAudioSpecFromMoov(initBytes);
+                Object.assign(meta, pickPlausible(spec));
+            }
         }
     }
 
