@@ -398,59 +398,141 @@ export const createQualityBadgeHTML = (track, adaptiveQuality = null) => {
     return '';
 };
 
-/**
- * Build the fullscreen readout from facts about the stream, not from the
- * requested quality. The requested tier is only a fallback because adaptive
- * providers and failed fallbacks can return a different actual encoding.
- */
 export const createFullscreenQualityHTML = (track) => {
     if (!track) return '';
 
-    // Fullscreen describes only the resolved media bytes. Provider metadata,
-    // album metadata and the requested quality are deliberately excluded.
-    const stream = track.streamMetadata;
-    if (!stream || Object.keys(stream).length === 0) return '';
+    // Derive quality from track
+    const quality = deriveTrackQuality(track);
 
-    const bitDepth = toPositiveInt(stream.bitDepth);
-    const sampleRate = toPositiveInt(stream.sampleRate);
-    const bitrateKbps = toPositiveInt(stream.bitrateKbps);
-    const codec = extractCodecFromMime(stream.codec || stream.mimeType || stream.format || stream.mediaType);
-    const rawFormat = String(stream.format || stream.containerFormat || stream.mediaType || '').toUpperCase();
-    const container = rawFormat && !/UNKNOWN|AUDIO|HLS|ADAPTIVE|DASH/i.test(rawFormat) ? rawFormat : null;
-    const lossy = codec ? isLossyCodec(codec) : isLossyContainer(container);
-    const atmos = /ATMOS|DOLBY|E-?AC3|AC-?4/i.test(`${codec || ''} ${stream.audioMode || ''}`);
-    const quality = atmos
-        ? 'DOLBY_ATMOS'
-        : !lossy && (bitDepth || sampleRate)
-          ? bitDepth >= 24 || sampleRate > 48000
-              ? 'HI_RES_LOSSLESS'
-              : 'LOSSLESS'
-          : lossy && bitrateKbps
-            ? bitrateKbps >= 256
-                ? 'HIGH'
-                : 'LOW'
-            : null;
+    // Get bit depth and sample rate from track
+    const bitDepth = track.bitDepth || track.album?.bitDepth || null;
+    const sampleRate = track.sampleRate || track.album?.sampleRate || null;
 
-    const parts = [];
-    if (quality === 'DOLBY_ATMOS') parts.push(SVG_ATMOS(16), 'Dolby Atmos');
-    else if (quality === 'HI_RES_LOSSLESS') parts.push('Hi-Res Lossless');
-    else if (quality === 'LOSSLESS') parts.push('Lossless');
-    else if (quality === 'HIGH') parts.push('High');
-    else if (quality === 'LOW') parts.push('Low');
-
-    // A lossy sample entry's nominal 16-bit value is not a meaningful depth.
-    if (!lossy && bitDepth) parts.push(`${bitDepth}-bit`);
+    // Format sample rate as kHz
+    let sampleRateStr = null;
     if (sampleRate) {
         const kHz = sampleRate / 1000;
-        parts.push(`${Number.isInteger(kHz) ? kHz : kHz.toFixed(1)} kHz`);
+        sampleRateStr = `${Number.isInteger(kHz) ? kHz : kHz.toFixed(1)} kHz`;
     }
-    if (codec) parts.push(codec);
-    else if (container) parts.push(container);
-    if (bitrateKbps) parts.push(`${bitrateKbps} kbps`);
 
-    // No fabricated default: this is especially important while fullscreen
-    // is opened before the signed stream has finished resolving.
-    return parts.filter(Boolean).join(' · ');
+    // Format bit depth
+    let bitDepthStr = null;
+    if (bitDepth) {
+        bitDepthStr = `${bitDepth}-bit`;
+    }
+
+    // Actual codec reported by the addon (AAC, Opus, MP3, …) — this is the
+    // exact answer to "what am I listening to", preferred over container names.
+    const codec = extractCodecFromMime(track.codec || track.mimeType || track.format || track.mediaType);
+
+    // Container format reported by the addon (MP4, WEBM, FLAC, …). Wrapper
+    // tokens (HLS/ADAPTIVE/DASH) are not real formats and are skipped.
+    const rawFormat = String(track.format || track.mediaType || '').toUpperCase();
+    const containerFormat = rawFormat && !/UNKNOWN|AUDIO|HLS|ADAPTIVE|DASH/i.test(rawFormat) ? rawFormat : null;
+
+    const formatStr = codec || containerFormat || null;
+
+    // Lossy codecs/containers can never carry a lossless label
+    const lossy = codec ? isLossyCodec(codec) : isLossyContainer(track.format || track.mediaType);
+
+    // Lossy streams have no real bit depth: the sample entry's samplesize
+    // is a nominal 16 for AAC/Opus/MP3. Drop any bit depth claim so the
+    // readout never shows "16-bit" next to a lossy codec.
+    if (lossy) {
+        bitDepthStr = null;
+    }
+
+    // Exact bitrate when the addon reports it (e.g. 128 → "128 kbps")
+    const bitrateKbps = toPositiveInt(track.bitrateKbps);
+    const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
+
+    // Determine quality label and logo
+    let qualityLabel = '';
+    let logoHtml = '';
+
+    if (quality === 'DOLBY_ATMOS') {
+        // For Dolby Atmos, just show the logo (the badge already shows "Atmos" and title may have it)
+        logoHtml = SVG_ATMOS(16);
+    } else if (lossy) {
+        // Lossy format overrides any lossless claim
+        qualityLabel = 'High';
+    } else if (quality === 'HI_RES_LOSSLESS') {
+        qualityLabel = 'Hi-Res Lossless';
+    } else if (quality === 'LOSSLESS') {
+        qualityLabel = 'Lossless';
+    } else if (quality === 'HIGH') {
+        qualityLabel = 'High';
+    } else if (quality === 'LOW') {
+        qualityLabel = 'Low';
+    } else {
+        // Unknown quality - try to infer from bit depth and sample rate
+        if (bitDepth && sampleRate) {
+            if (bitDepth >= 24 && sampleRate > 48000) {
+                qualityLabel = 'Hi-Res Lossless';
+            } else if (bitDepth >= 24 || sampleRate > 44100) {
+                qualityLabel = 'Lossless';
+            } else {
+                qualityLabel = 'Lossless';
+            }
+        } else if (bitDepth) {
+            qualityLabel = bitDepth >= 24 ? 'Hi-Res Lossless' : 'Lossless';
+        } else if (sampleRate) {
+            qualityLabel = sampleRate > 48000 ? 'Hi-Res Lossless' : 'Lossless';
+        } else {
+            // Default to Lossless if we can't determine
+            qualityLabel = 'Lossless';
+        }
+    }
+
+    // Build the display string
+    const parts = [];
+
+    // Add logo if present (Dolby Atmos)
+    if (logoHtml) {
+        parts.push(logoHtml);
+    }
+
+    // Add quality label (only if not empty)
+    if (qualityLabel) {
+        parts.push(qualityLabel);
+    }
+
+    // Add bit depth
+    if (bitDepthStr) {
+        parts.push(bitDepthStr);
+    }
+
+    // Add sample rate
+    if (sampleRateStr) {
+        parts.push(sampleRateStr);
+    }
+
+    // Add container format / codec
+    if (formatStr) {
+        parts.push(formatStr);
+    }
+
+    // Add exact bitrate
+    if (bitrateStr) {
+        parts.push(bitrateStr);
+    }
+
+    // Filter out empty parts
+    const validParts = parts.filter((part) => part);
+    if (validParts.length === 0) return '';
+
+    // Join with dots, but handle leading dot issue for logo-only case
+    let result = validParts.join(' · ');
+
+    // If result starts with ' · ' (dot-space), remove it
+    if (result.startsWith(' · ')) {
+        result = result.substring(3);
+    }
+    // If result ends with ' · ', remove it
+    if (result.endsWith(' · ')) {
+        result = result.substring(0, result.length - 3);
+    }
+    return result.trim();
 };
 
 export const deriveQualityFromTags = (rawTags) => {

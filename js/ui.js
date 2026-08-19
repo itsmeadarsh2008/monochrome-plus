@@ -57,14 +57,6 @@ import {
 import { scrollToTop } from './smooth-scrolling.js';
 import { getHomeSections } from './api/home.js';
 
-// Keep private deployment naming out of homepage notices. The full base URL
-// remains unchanged for requests; this is display-only formatting.
-const formatAddonHostForDisplay = (hostname) => {
-    const host = String(hostname || '').trim();
-    const match = host.match(/^hifi-api-([^.]+)\.onrender\.com$/i);
-    return match ? match[1] : host;
-};
-
 const deriveArtistsFromTracks = (tracks) => {
     const artistMap = new Map();
     tracks.forEach((track) => {
@@ -4035,19 +4027,18 @@ export class UIRenderer {
         this._homeDiscoveryProbeKey = baseKey;
         this._homeDiscoveryProbeAt = now;
         const probe = await probeAddonReachability(addon);
-        const displayHost = formatAddonHostForDisplay(probe.hostname);
         if (probe.reachable) {
             this._discoveryProbeHtml = `
                 <div class="discovery-notice-title">Your addon is reachable, but it returned no Discovery content</div>
                 <div class="discovery-notice-text">
-                    ${escapeHtml(displayHost)} responded, but the Spotlight / Hot / New modules came back empty.
+                    ${escapeHtml(probe.hostname)} responded, but the Spotlight / Hot / New modules came back empty.
                     Check that your addon is configured to surface trending content on this origin.
                 </div>
                 <a class="discovery-notice-link" href="/settings/system" onclick="event.preventDefault();window.navigate('/settings/system')">Check addon settings</a>
             `;
         } else if (probe.branch === 'localhost-or-lan') {
             this._discoveryProbeHtml = `
-                <div class="discovery-notice-title">Your addon runs on ${escapeHtml(displayHost)}</div>
+                <div class="discovery-notice-title">Your addon runs on ${escapeHtml(probe.hostname)}</div>
                 <div class="discovery-notice-text">
                     That address is only reachable from your own machine or network, so this deployed site can't load it.
                     Deploy the addon to a public <code>https://</code> URL and use that URL here.
@@ -6592,6 +6583,9 @@ export class UIRenderer {
 
     async _loadAndRenderSearch(query, selectedTab) {
         const normalizedQuery = String(query || '').trim();
+        const allTabTrackLimit =
+            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
+
         // All containers — individual tabs
         const tracksContainer = document.getElementById('search-tracks-container');
         const artistsContainer = document.getElementById('search-artists-container');
@@ -6617,7 +6611,7 @@ export class UIRenderer {
         if (albumsContainer) albumsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (playlistsContainer) playlistsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (usersContainer) usersContainer.innerHTML = this.createSkeletonCards(6, false);
-        if (allTracksContainer) allTracksContainer.innerHTML = this.createSkeletonTracks(8, true);
+        if (allTracksContainer) allTracksContainer.innerHTML = this.createSkeletonTracks(allTabTrackLimit, true);
         if (allArtistsContainer) allArtistsContainer.innerHTML = this.createSkeletonRows(6);
         if (allAlbumsContainer) allAlbumsContainer.innerHTML = this.createSkeletonCards(6, false);
         if (allPlaylistsContainer) allPlaylistsContainer.innerHTML = this.createSkeletonCards(6, false);
@@ -6818,6 +6812,9 @@ export class UIRenderer {
         const allPlaylistsContainer = document.getElementById('search-all-playlists-container');
         const allUsersContainer = document.getElementById('search-all-users-container');
 
+        const allTabTrackLimit =
+            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
+
         // ── Top Result card ─────────────────────────────────────────
         if (layoutEl && topHitContent) {
             if (tracks === undefined && artists === undefined && albums === undefined) {
@@ -6905,7 +6902,7 @@ export class UIRenderer {
 
                     // Songs beside the top hit
                     if (allTracksContainer) {
-                        this.renderListWithTracks(allTracksContainer, tracks, true);
+                        this.renderListWithTracks(allTracksContainer, tracks.slice(0, allTabTrackLimit), true);
                     }
                 } else {
                     layoutEl.style.display = 'none';

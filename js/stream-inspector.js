@@ -195,30 +195,6 @@ export function extractFlacSpec(bytes) {
     return decodeFlacStreamInfo(extractFlacStreamInfo(bytes));
 }
 
-// Reads STREAMINFO from a native FLAC file. Unlike an addon quality label,
-// these fields are written by the encoder and describe the audio actually in
-// the file. A native FLAC starts with "fLaC", followed by metadata blocks.
-export function extractNativeFlacSpec(bytes) {
-    if (!bytes || bytes.length < 8 || typeString(bytes, 0) !== 'fLaC') return null;
-
-    let offset = 4;
-    while (offset + 4 <= bytes.length) {
-        const header = readU8(bytes, offset);
-        const blockType = header & 0x7f;
-        const blockLength =
-            (readU8(bytes, offset + 1) << 16) | (readU8(bytes, offset + 2) << 8) | readU8(bytes, offset + 3);
-        const bodyStart = offset + 4;
-        const bodyEnd = bodyStart + blockLength;
-        if (bodyEnd > bytes.length) return null;
-        if (blockType === 0 && blockLength === 34) {
-            return decodeFlacStreamInfo(bytes.slice(bodyStart, bodyEnd));
-        }
-        if (header & 0x80) break;
-        offset = bodyEnd;
-    }
-    return null;
-}
-
 function resolveUri(uri, baseUrl) {
     try {
         return new URL(uri, baseUrl).toString();
@@ -296,7 +272,6 @@ const plausible = {
     bitDepth: (v) => Number.isInteger(v) && v >= 1 && v <= 32,
     bitrateKbps: (v) => Number.isFinite(v) && v >= 8 && v <= 10000,
     channels: (v) => Number.isInteger(v) && v >= 1 && v <= 32,
-    codec: (v) => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9.+-]{0,15}$/.test(v),
 };
 
 function pickPlausible(meta) {
@@ -374,7 +349,7 @@ async function inspectDirect(url, durationSeconds) {
 
     const headBytes = await fetchHeadBytes(url);
     if (headBytes) {
-        const spec = extractNativeFlacSpec(headBytes) || extractFlacSpec(headBytes) || readAudioSpecFromMoov(headBytes);
+        const spec = readAudioSpecFromMoov(headBytes);
         Object.assign(meta, pickPlausible(spec));
     }
 
