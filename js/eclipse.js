@@ -853,7 +853,14 @@ export class EclipseAPI {
         if (!cleanName) return null;
         try {
             const { items } = await this.searchArtists(cleanName, { limit: 8 });
-            if (!items?.length) return null;
+            if (!items?.length) {
+                // The addon may not return artists from search at all — fall
+                // back to a name-keyed id that getArtist() synthesizes from
+                // track search results.
+                const tracks = await this.searchTracks(cleanName, { limit: 8 });
+                if (tracks?.items?.length) return `by-name:${encodeURIComponent(cleanName)}`;
+                return null;
+            }
             const normalized = cleanName.toLowerCase();
             const exact = items.find((a) => a?.name && String(a.name).toLowerCase() === normalized);
             return (exact || items[0])?.id || null;
@@ -972,8 +979,143 @@ export class EclipseAPI {
 
     // ---- catalog --------------------------------------------------------
 
+    // Re-stamps a search-mapped track with album/artist context so it matches
+    // the shape produced by mapDetailTrack() for real catalog responses.
+    _applyAlbumContext(track, album, artistName) {
+        return {
+            ...track,
+            artist: track.artist?.name ? track.artist : { name: artistName || '' },
+            artists: track.artists?.length ? track.artists : [{ name: artistName || '' }],
+            album: album || track.album || null,
+            albumId: album?.id ?? track.albumId ?? '',
+            albumTitle: album?.title ?? track.albumTitle,
+            artwork: track.artwork?.length ? track.artwork : album?.cover ? [{ url: album.cover }] : [],
+            cover: track.cover || album?.cover,
+            videoCover: null,
+        };
+    }
+
+    // Some addons' album catalog endpoint can be unavailable (404/502) even
+    // though search returns the album's tracks. Reconstruct the album from the
+    // tracks their own search already returned for it.
+    async _synthesizeAlbumFromSearch(albumId) {
+        const registered = [...this.trackRegistry.values()].find(
+            (track) => track?.album?.id && String(track.album.id) === albumId
+        );
+        if (!registered) return null;
+        const albumTitle = registered.albumTitle || registered.album?.title || '';
+        const artistName = registered.artist?.name || '';
+        if (!albumTitle) return null;
+        try {
+            const query = artistName ? `${albumTitle} ${artistName}` : albumTitle;
+            const results = await this.searchTracks(query, { limit: 30, retry: true });
+            const want = albumTitle.trim().toLowerCase();
+            const matches = (results?.items || []).filter(
+                (track) =>
+                    String(track.albumTitle || track.album?.title || '')
+                        .trim()
+                        .toLowerCase() === want
+            );
+            if (!matches.length) return null;
+            const album = {
+                id: albumId,
+                title: albumTitle,
+                cover: registered.album?.cover || registered.cover,
+                artist: registered.artist || { name: artistName },
+                artists: registered.artists?.length ? registered.artists : registered.artist ? [registered.artist] : [],
+                releaseDate: undefined,
+                numberOfTracks: matches.length,
+                artwork: registered.album?.cover ? [{ url: registered.album.cover }] : [],
+                videoCover: null,
+            };
+            const tracks = matches.map((track) =>
+                this.registerTrack(this._applyAlbumContext(track, album, artistName))
+            );
+            return { album, tracks };
+        } catch (error) {
+            console.warn('[Eclipse] Album synthesis fallback failed:', error);
+            return null;
+        }
+    }
+
+    // Some addons have no artist search (or an unavailable artist catalog), so
+    // an artist page is synthesized from track search results instead. Only
+    // `by-name:` ids are synthesizable — real ids go through the catalog.
+    async _synthesizeArtistFromSearch(idOrName) {
+        const PREFIX = 'by-name:';
+        if (typeof idOrName !== 'string' || !idOrName.startsWith(PREFIX)) return null;
+        let name;
+        try {
+            name = decodeURIComponent(idOrName.slice(PREFIX.length));
+        } catch {
+            return null;
+        }
+        if (!name) return null;
+        try {
+            const results = await this.searchTracks(name, { limit: 50, retry: true });
+            const want = name.trim().toLowerCase();
+            const byArtist = (results?.items || []).filter((track) =>
+                (track.artists || []).some(
+                    (artist) =>
+                        String(artist?.name || '')
+                            .trim()
+                            .toLowerCase() === want
+                )
+            );
+            const tracks = (byArtist.length ? byArtist : results?.items || []).slice(0, 30);
+            if (!tracks.length) return null;
+            const albums = Array.from(
+                new Map(
+                    tracks
+                        .filter((track) => track.album?.id)
+                        .map((track) => [
+                            track.album.id,
+                            {
+                                id: String(track.album.id),
+                                title: track.album.title,
+                                cover: track.album.cover,
+                                artist: { name },
+                                artists: [{ name }],
+                                numberOfTracks: undefined,
+                                releaseDate: undefined,
+                                artwork: track.album.cover ? [{ url: track.album.cover }] : [],
+                            },
+                        ])
+                ).values()
+            );
+            const artist = {
+                id: `${PREFIX}${encodeURIComponent(name)}`,
+                name,
+                picture: tracks[0]?.cover || '',
+                image: tracks[0]?.cover || '',
+                biography: '',
+                popularity: 0,
+                genres: [],
+                albums,
+                eps: [],
+                tracks: tracks.map((track) =>
+                    this.registerTrack(
+                        this._applyAlbumContext(track, track.album || { id: '', title: '', cover: track.cover }, name)
+                    )
+                ),
+                mixes: {},
+            };
+            return artist;
+        } catch (error) {
+            console.warn('[Eclipse] Artist synthesis fallback failed:', error);
+            return null;
+        }
+    }
+
     async getAlbum(id) {
-        const data = await this._request(`album/${id}`);
+        let data;
+        try {
+            data = await this._request(`album/${id}`);
+        } catch (error) {
+            const synthesized = await this._synthesizeAlbumFromSearch(String(id));
+            if (synthesized) return synthesized;
+            throw error;
+        }
         const album = {
             id: String(data.id),
             title: data.title,
@@ -990,7 +1132,14 @@ export class EclipseAPI {
     }
 
     async getArtist(id) {
-        const data = await this._request(`artist/${id}`);
+        let data;
+        try {
+            data = await this._request(`artist/${id}`);
+        } catch (error) {
+            const synthesized = await this._synthesizeArtistFromSearch(id);
+            if (synthesized) return synthesized;
+            throw error;
+        }
         let fallbackTracks = [];
         if (!Array.isArray(data.topTracks) || data.topTracks.length === 0) {
             try {
