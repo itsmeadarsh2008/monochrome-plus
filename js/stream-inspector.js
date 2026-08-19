@@ -88,7 +88,7 @@ function collectBoxes(bytes, start, end, targetType, out = []) {
 // samplesize at +26, samplerate at +32 — used by Tidal's HLS muxer) and the
 // QuickTime variant (version/revision/vendor instead; channelcount +16,
 // samplesize +18, samplerate +24). Both are tried, plausibility-checked.
-function readAudioSpecFromMoov(bytes) {
+export function readAudioSpecFromMoov(bytes) {
     for (const stsdStart of collectBoxes(bytes, 0, bytes.length, 'stsd')) {
         const count = readU32(bytes, stsdStart + 12);
         for (let i = 0; i < count; i += 1) {
@@ -128,6 +128,44 @@ function readAudioSpecFromMoov(bytes) {
     return {};
 }
 
+// Extracts the raw 34-byte FLAC STREAMINFO block from the dfLa box of an
+// fLaC init segment, or null when absent. Layout: dfLa box → 4-byte fullbox
+// flags → metadata block header (last/type/length) → STREAMINFO body.
+export function extractFlacStreamInfo(bytes) {
+    const dfLaOffsets = [];
+    const search = (start, end) => {
+        let idx = start;
+        while (idx < end - 4) {
+            const found = bytes.indexOf(0x64, idx);
+            if (found === -1 || found > end - 4) break;
+            if (found >= 4 && typeString(bytes, found) === 'dfLa' && readU32(bytes, found - 4) >= 8) {
+                dfLaOffsets.push(found - 4);
+                idx = found + 4;
+            } else {
+                idx = found + 1;
+            }
+        }
+    };
+    search(0, bytes.length);
+
+    for (const dfLaStart of dfLaOffsets) {
+        const dfLaSize = readU32(bytes, dfLaStart);
+        const payloadStart = dfLaStart + 8;
+        const payloadEnd = Math.min(dfLaStart + dfLaSize, bytes.length);
+        const headerStart = payloadStart + 4; // fullbox version/flags
+        if (headerStart + 4 > payloadEnd) continue;
+        const blockType = readU8(bytes, headerStart) & 0x7f;
+        const blockLength =
+            (readU8(bytes, headerStart + 1) << 16) |
+            (readU8(bytes, headerStart + 2) << 8) |
+            readU8(bytes, headerStart + 3);
+        if (blockType === 0 && blockLength === 34 && headerStart + 4 + 34 <= payloadEnd) {
+            return bytes.slice(headerStart + 4, headerStart + 4 + 34);
+        }
+    }
+    return null;
+}
+
 function resolveUri(uri, baseUrl) {
     try {
         return new URL(uri, baseUrl).toString();
@@ -136,7 +174,7 @@ function resolveUri(uri, baseUrl) {
     }
 }
 
-async function proxiedFetch(url, init) {
+export async function proxiedFetch(url, init) {
     const rewritten = window.__corsBypass?.rewriteUrl ? window.__corsBypass.rewriteUrl(url) : url;
     return fetch(rewritten, init);
 }
@@ -169,7 +207,7 @@ async function fetchHeadBytes(url, maxBytes = HEAD_PROBE_BYTES) {
 }
 
 // Parses a master or media HLS playlist. Returns {} on malformed input.
-function parseHlsManifest(text, baseUrl) {
+export function parseHlsManifest(text, baseUrl) {
     const segments = [];
     const variants = [];
     let initUri = null;

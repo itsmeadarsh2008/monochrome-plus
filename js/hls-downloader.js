@@ -1,104 +1,129 @@
-// js/hls-downloader.js
-import { SegmentedDownloadProgress } from './progressEvents.js';
+// Downloads a complete HLS stream (up to Hi-Res / 192 kHz) as a real audio
+// file, not a playlist text.
+//
+// Tidal's Hi-Res FLAC HLS streams are fragmented MP4: a tiny init segment
+// (moov + fLaC sample entry carrying the dfLa STREAMINFO block) plus numbered
+// segments, each a moof + mdat whose mdat payload is raw FLAC frames. The
+// downloader reassembles them into a standalone .flac (fLaC marker +
+// STREAMINFO + concatenated frame payloads) — decodable everywhere, and
+// ready for tag embedding. Non-FLAC HLS falls back to the raw fMP4 bytes.
+//
+// Fetches go through window.__corsBypass.rewriteUrl like the rest of the app.
+
+import { parseHlsManifest, proxiedFetch, extractFlacStreamInfo } from './stream-inspector.js';
+
+function extractMdatPayloads(segmentBytes) {
+    const payloads = [];
+    let p = 0;
+    while (p + 8 <= segmentBytes.length) {
+        const size =
+            ((segmentBytes[p] << 24) |
+                (segmentBytes[p + 1] << 16) |
+                (segmentBytes[p + 2] << 8) |
+                segmentBytes[p + 3]) >>>
+            0;
+        if (size < 8 || p + size > segmentBytes.length) break;
+        const type = String.fromCharCode(
+            segmentBytes[p + 4],
+            segmentBytes[p + 5],
+            segmentBytes[p + 6],
+            segmentBytes[p + 7]
+        );
+        if (type === 'mdat') payloads.push(segmentBytes.subarray(p + 8, p + size));
+        p += size;
+    }
+    return payloads;
+}
 
 export class HlsDownloader {
     constructor() {}
 
-    async downloadHlsStream(masterUrl, options = {}) {
-        const { onProgress, signal } = options;
+    async downloadHlsStream(manifestUrl, options = {}) {
+        const { signal, onProgress, fetchFn } = options;
+        const doFetch = fetchFn || proxiedFetch;
 
-        const response = await fetch(masterUrl, { signal });
-        const masterText = await response.text();
-
-        const variantUrl = this.getBestVariantUrl(masterUrl, masterText);
-
-        const mediaResponse = await fetch(variantUrl, { signal });
-        const mediaText = await mediaResponse.text();
-
-        const segments = this.parseMediaPlaylist(variantUrl, mediaText);
-        if (segments.length === 0) {
-            throw new Error('No segments found in HLS playlist');
+        // 1. Resolve the media playlist (follow the first variant of a master).
+        const manifestRes = await doFetch(manifestUrl, { signal });
+        if (!manifestRes.ok) throw new Error(`Failed to fetch HLS manifest: ${manifestRes.status}`);
+        let playlist = parseHlsManifest(await manifestRes.text(), manifestUrl);
+        if ((!playlist.variants.length && !playlist.segments.length) || !playlist.segments.length) {
+            throw new Error('Invalid HLS playlist');
+        }
+        if (playlist.variants.length > 0) {
+            const variantRes = await doFetch(playlist.variants[0].uri, { signal });
+            if (!variantRes.ok) throw new Error(`Failed to fetch HLS media playlist: ${variantRes.status}`);
+            const child = parseHlsManifest(await variantRes.text(), playlist.variants[0].uri);
+            if (!child.segments.length) throw new Error('Invalid HLS media playlist');
+            playlist = child;
         }
 
-        const chunks = [];
-        let downloadedBytes = 0;
-        const totalSegments = segments.length;
+        // 2. Init segment (carries moov + dfLa STREAMINFO for FLAC).
+        let initBytes = null;
+        if (playlist.initUri) {
+            const initRes = await doFetch(playlist.initUri, { signal });
+            if (initRes.ok) initBytes = new Uint8Array(await initRes.arrayBuffer());
+        }
 
-        for (let i = 0; i < totalSegments; i++) {
+        // 3. Download every segment, extracting the mdat audio payload.
+        const segments = playlist.segments.filter((s) => s.uri);
+        const framePayloads = [];
+        const rawSegments = [];
+        let downloadedBytes = 0;
+        let estimatedTotal = 0;
+        let firstSegmentSize = 0;
+
+        for (let i = 0; i < segments.length; i++) {
             if (signal?.aborted) throw new Error('AbortError');
 
-            onProgress?.(new SegmentedDownloadProgress(downloadedBytes, undefined, i, totalSegments));
-
-            const segmentUrl = segments[i];
-            const segmentResponse = await fetch(segmentUrl, { signal });
-
-            if (!segmentResponse.ok) {
-                throw new Error(`Failed to fetch segment ${i}: ${segmentResponse.status}`);
+            let segmentRes = await doFetch(segments[i].uri, { signal });
+            if (!segmentRes.ok) {
+                // Retry once after a short pause before giving up.
+                await new Promise((r) => setTimeout(r, 1000));
+                segmentRes = await doFetch(segments[i].uri, { signal });
+                if (!segmentRes.ok) throw new Error(`Failed to fetch segment ${i}: ${segmentRes.status}`);
             }
 
-            const chunk = await segmentResponse.arrayBuffer();
-            chunks.push(chunk);
-            downloadedBytes += chunk.byteLength;
+            const segmentBytes = new Uint8Array(await segmentRes.arrayBuffer());
+            rawSegments.push(segmentBytes);
 
-            onProgress?.(new SegmentedDownloadProgress(downloadedBytes, undefined, i + 1, totalSegments));
-        }
+            const payloads = extractMdatPayloads(segmentBytes);
+            if (payloads.length > 0) {
+                for (const payload of payloads) framePayloads.push(payload);
+                downloadedBytes += payloads.reduce((sum, pl) => sum + pl.byteLength, 0);
+                if (!firstSegmentSize) firstSegmentSize = segmentBytes.byteLength;
+            }
 
-        const mimeType = segments[0].endsWith('.m4s') || segments[0].includes('mp4') ? 'video/mp4' : 'video/mp2t';
-        return new Blob(chunks, { type: mimeType });
-    }
-
-    getBestVariantUrl(masterUrl, masterText) {
-        if (!masterText.includes('#EXT-X-STREAM-INF')) {
-            return masterUrl;
-        }
-
-        const lines = masterText.split('\n');
-        const variants = [];
-        let currentVariant = null;
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('#EXT-X-STREAM-INF:')) {
-                const bandwidthMatch = trimmed.match(/BANDWIDTH=(\d+)/);
-                const resolutionMatch = trimmed.match(/RESOLUTION=(\d+x\d+)/);
-                currentVariant = {
-                    bandwidth: bandwidthMatch ? parseInt(bandwidthMatch[1], 10) : 0,
-                    resolution: resolutionMatch ? resolutionMatch[1] : 'unknown',
-                };
-            } else if (trimmed && !trimmed.startsWith('#')) {
-                if (currentVariant) {
-                    currentVariant.url = this.resolveUrl(masterUrl, trimmed);
-                    variants.push(currentVariant);
-                    currentVariant = null;
-                }
+            if (onProgress) {
+                const estimate = estimatedTotal || firstSegmentSize * segments.length;
+                if (firstSegmentSize && !estimatedTotal) estimatedTotal = estimate;
+                onProgress({
+                    stage: 'downloading',
+                    receivedBytes: downloadedBytes,
+                    totalBytes: estimatedTotal || undefined,
+                    currentSegment: i + 1,
+                    totalSegments: segments.length,
+                });
             }
         }
 
-        if (variants.length === 0) return masterUrl;
-
-        variants.sort((a, b) => b.bandwidth - a.bandwidth);
-        return variants[0].url;
-    }
-
-    parseMediaPlaylist(mediaUrl, mediaText) {
-        const lines = mediaText.split('\n');
-        const segments = [];
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
-                segments.push(this.resolveUrl(mediaUrl, trimmed));
-            }
+        if (framePayloads.length === 0) {
+            throw new Error('No audio data found in HLS stream');
         }
 
-        return segments;
-    }
-
-    resolveUrl(baseUrl, relativeUrl) {
-        try {
-            return new URL(relativeUrl, baseUrl).href;
-        } catch {
-            return relativeUrl;
+        // 4. FLAC: fLaC marker + STREAMINFO block + concatenated FLAC frames.
+        const streamInfo = initBytes ? extractFlacStreamInfo(initBytes) : null;
+        if (streamInfo) {
+            const head = new Uint8Array(4 + 4 + 34);
+            head.set([0x66, 0x4c, 0x61, 0x43]); // 'fLaC'
+            head[4] = 0x80; // last metadata block, type 0 (STREAMINFO)
+            head[5] = 0x00;
+            head[6] = 0x00;
+            head[7] = 34;
+            head.set(streamInfo, 8);
+            return new Blob([head, ...framePayloads], { type: 'audio/flac' });
         }
+
+        // 5. Non-FLAC fallback: keep the fragmented MP4 as-is.
+        return new Blob(initBytes ? [initBytes, ...rawSegments] : rawSegments, { type: 'audio/mp4' });
     }
 }

@@ -14,12 +14,24 @@ import {
 import { lyricsSettings, bulkDownloadSettings, playlistSettings } from './storage.js';
 import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
+import { HlsDownloader } from './hls-downloader.js';
 import { generateM3U, generateM3U8, generateCUE, generateNFO, generateJSON } from './playlist-generator.js';
 
 const downloadTasks = new Map();
 const bulkDownloadTasks = new Map();
 const ongoingDownloads = new Set();
 let downloadNotificationContainer = null;
+
+function isHlsStreamUrl(streamUrl) {
+    if (!streamUrl) return false;
+    try {
+        const pathname = new URL(streamUrl, window.location.href).pathname.toLowerCase();
+        return pathname.endsWith('.m3u8') || (/\/dash(?:\/|$)/.test(pathname) && !pathname.endsWith('.mpd'));
+    } catch {
+        const normalized = String(streamUrl).toLowerCase();
+        return normalized.includes('.m3u8') || /\/dash(?:\/|$)/.test(normalized);
+    }
+}
 
 async function loadClientZip() {
     try {
@@ -230,6 +242,21 @@ async function downloadTrackBlob(track, quality, api, lyricsManager = null, sign
                 return downloadTrackBlob(track, 'LOSSLESS', api, lyricsManager, signal);
             }
             throw dashError;
+        }
+    } else if (isHlsStreamUrl(streamUrl)) {
+        // Hi-Res HLS (Tidal FLAC up to 192 kHz) is reassembled into a real
+        // audio file: init segment + per-segment mdat payloads, FLAC
+        // STREAMINFO header included, tags embedded below.
+        try {
+            const downloader = new HlsDownloader();
+            blob = await downloader.downloadHlsStream(streamUrl, { signal });
+        } catch (hlsError) {
+            console.error('HLS download failed:', hlsError);
+            if (quality !== 'LOSSLESS') {
+                console.warn('Falling back to LOSSLESS (16-bit) download.');
+                return downloadTrackBlob(track, 'LOSSLESS', api, lyricsManager, signal);
+            }
+            throw hlsError;
         }
     } else {
         const response = await fetch(streamUrl, { signal });

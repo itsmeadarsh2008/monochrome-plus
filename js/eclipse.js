@@ -7,6 +7,7 @@
 import { APICache } from './cache.js';
 import { addMetadataToAudio } from './metadata.js';
 import { DashDownloader } from './dash-downloader.js';
+import { HlsDownloader } from './hls-downloader.js';
 import { getExtensionFromBlob, isLossyCodec, isLossyContainer, RATE_LIMIT_ERROR_MESSAGE } from './utils.js';
 
 const ADDON_STORAGE_KEY = 'monochrome-eclipse-addons-v1';
@@ -2078,6 +2079,24 @@ export class EclipseAPI {
                         return this.downloadTrack(id, 'LOSSLESS', filename, options);
                     }
                     throw dashError;
+                }
+            } else if (isHlsStreamUrl(streamUrl)) {
+                // Hi-Res HLS (Tidal FLAC up to 192 kHz) is reassembled into a
+                // real audio file: init segment + per-segment mdat payloads,
+                // FLAC STREAMINFO header included, tags embedded below.
+                try {
+                    const downloader = new HlsDownloader();
+                    blob = await downloader.downloadHlsStream(streamUrl, {
+                        signal: options.signal,
+                        onProgress: options.onProgress,
+                    });
+                } catch (hlsError) {
+                    console.error('HLS download failed:', hlsError);
+                    if (quality !== 'LOSSLESS') {
+                        console.warn('Falling back to LOSSLESS (16-bit) download.');
+                        return this.downloadTrack(id, 'LOSSLESS', filename, options);
+                    }
+                    throw hlsError;
                 }
             } else {
                 const response = await fetch(streamUrl, {
