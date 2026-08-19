@@ -70,6 +70,269 @@ export async function fetchLastFmArtistImage(artistName, options = {}) {
     }
 }
 
+// ---- scrobble metadata resolution ---------------------------------------
+//
+// Last.fm matches a scrobble against its own (MusicBrainz-backed) database
+// using artist + track + album. When the source addon reports a sloppy
+// album title (trailing spaces, partial titles, "Artist - Single" place-
+// holders) or a non-canonical artist credit, the scrobble lands on the
+// wrong release — and the Last.fm dashboard shows the generic placeholder
+// instead of the real album art. Resolve the canonical release first:
+//
+//   1. track.isrc  -> MusicBrainz recording lookup (exact, ISRC is unique
+//                     per recording; the recording's releases are real
+//                     releases, earliest date preferred unless the local
+//                     album title matches one exactly)
+//   2. otherwise   -> Last.fm track.getInfo with autocorrect=1 (canonical
+//                     artist/track/album as Last.fm itself stores them)
+//
+// Results are cached (30 days positive, 1 day miss) in memory + localStorage
+// so a lookup costs nothing on repeat plays. MusicBrainz requests are
+// serialized with 1.1 s spacing to respect their rate limit.
+
+const MUSICBRAINZ_API = 'https://musicbrainz.org/ws/2';
+const METADATA_CACHE_KEY = 'lastfm-scrobble-metadata-v1';
+const METADATA_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+const METADATA_MISS_TTL = 24 * 60 * 60 * 1000;
+const METADATA_CACHE_MAX = 500;
+
+const metadataCache = new Map();
+let metadataQueue = Promise.resolve();
+
+function loadMetadataCache() {
+    try {
+        const raw = localStorage.getItem(METADATA_CACHE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        for (const [key, entry] of Object.entries(data.entries || {})) {
+            if (entry && typeof entry === 'object') metadataCache.set(key, entry);
+        }
+    } catch {
+        console.warn('Failed to load scrobble metadata cache');
+    }
+}
+
+function persistMetadataCache() {
+    try {
+        const entries = {};
+        let count = 0;
+        for (const [key, entry] of metadataCache) {
+            entries[key] = entry;
+            count += 1;
+            if (count >= METADATA_CACHE_MAX) break;
+        }
+        localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify({ version: 1, entries }));
+    } catch {
+        // Storage full or unavailable — the in-memory cache still works.
+    }
+}
+
+function getCachedMetadata(key) {
+    const entry = metadataCache.get(key);
+    if (!entry) return null;
+    const ttl = entry.miss ? METADATA_MISS_TTL : METADATA_CACHE_TTL;
+    if (Date.now() - entry.ts < ttl) return entry;
+    metadataCache.delete(key);
+    return null;
+}
+
+function setCachedMetadata(key, data, miss) {
+    if (metadataCache.size >= METADATA_CACHE_MAX) {
+        metadataCache.delete(metadataCache.keys().next().value);
+    }
+    metadataCache.set(key, { data, miss: !!miss, ts: Date.now() });
+    persistMetadataCache();
+}
+
+function enqueueMusicBrainz(path) {
+    const run = metadataQueue.then(async () => {
+        const response = await fetch(`${MUSICBRAINZ_API}${path}`, {
+            headers: { 'User-Agent': 'MonochromePlus/1.0 (https://github.com/itsmeadarsh2008/monochrome-plus)' },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        return response;
+    });
+    metadataQueue = run.catch(() => {});
+    return run;
+}
+
+function normalizeTitle(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[\u2018\u2019\u201C\u201D"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Primary artist name for scrobbling: first artist credit, stripped of
+// featured-artist suffixes ("feat.", "ft.", "&", "with", "x", …).
+export function getScrobbleArtist(track) {
+    if (!track) return 'Unknown Artist';
+
+    let artistName = 'Unknown Artist';
+
+    if (track.artist?.name) {
+        artistName = track.artist.name;
+    } else if (typeof track.artist === 'string') {
+        artistName = track.artist;
+    } else if (track.artists && track.artists.length > 0) {
+        const first = track.artists[0];
+        artistName = typeof first === 'string' ? first : first.name || 'Unknown Artist';
+    }
+
+    if (typeof artistName !== 'string') return 'Unknown Artist';
+
+    artistName = artistName.split(/\s*[&]\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+|\s+with\s+|\s+x\s+/i)[0].trim();
+
+    return artistName || 'Unknown Artist';
+}
+
+async function resolveByIsrc(isrc, localAlbumTitle, localTrackTitle) {
+    const normalizedLocalAlbum = normalizeTitle(localAlbumTitle);
+    const cacheKey = `isrc:${isrc}\u0000${normalizedLocalAlbum}`;
+    const cached = getCachedMetadata(cacheKey);
+    if (cached) return cached.data;
+
+    // The MusicBrainz recording itself is cached once per ISRC; only the
+    // release choice depends on the local album context.
+    const rawKey = `isrcraw:${isrc}`;
+    let recording = getCachedMetadata(rawKey)?.data || null;
+    if (!recording) {
+        try {
+            const path = `/recording?query=${encodeURIComponent(`isrc:${isrc}`)}&fmt=json&limit=5`;
+            const response = await enqueueMusicBrainz(path);
+            if (!response.ok) {
+                setCachedMetadata(cacheKey, null, true);
+                return null;
+            }
+            const data = await response.json();
+            const found = data?.recordings?.[0];
+            if (!found) {
+                setCachedMetadata(cacheKey, null, true);
+                return null;
+            }
+
+            const artistCredit = (found['artist-credit'] || [])
+                .map((credit) => credit.name || credit.artist?.name || '')
+                .filter(Boolean)
+                .join(', ');
+
+            recording = {
+                title: found.title || null,
+                artist: artistCredit || null,
+                mbid: found.id || null,
+                releases: (found.releases || []).map((release) => ({
+                    title: release.title || null,
+                    date: release.date || null,
+                })),
+            };
+            setCachedMetadata(rawKey, recording, false);
+        } catch (error) {
+            console.warn('MusicBrainz ISRC lookup failed:', error);
+            setCachedMetadata(cacheKey, null, true);
+            return null;
+        }
+    }
+    if (!recording) return null;
+
+    const releases = recording.releases || [];
+    let release = null;
+    if (releases.length > 0) {
+        release =
+            releases.find((candidate) => normalizeTitle(candidate.title) === normalizedLocalAlbum) ||
+            releases.slice().sort((a, b) => String(a.date || '9999').localeCompare(String(b.date || '9999')))[0];
+    }
+
+    // Keep the source's track title when it matches the chosen release —
+    // that is the release's own track name (e.g. "Kesariya (From
+    // "Brahmastra")" for the single), which is what Last.fm stores too.
+    // Otherwise fall back to the bare MusicBrainz recording title.
+    let title = recording.title || null;
+    if (release && localTrackTitle && normalizeTitle(localTrackTitle) === normalizeTitle(release.title)) {
+        title = localTrackTitle;
+    }
+
+    const result = {
+        title,
+        artist: recording.artist || null,
+        mbid: recording.mbid || null,
+        album: release?.title || null,
+        releaseDate: release?.date || null,
+    };
+    setCachedMetadata(cacheKey, result, false);
+    return result;
+}
+
+async function resolveByLastFm(artist, title) {
+    const cacheKey = `lfm:${artist.toLowerCase()}\u0000${title.toLowerCase()}`;
+    const cached = getCachedMetadata(cacheKey);
+    if (cached) return cached.data;
+
+    try {
+        const endpoint =
+            `https://ws.audioscrobbler.com/2.0/?method=track.getInfo` +
+            `&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}` +
+            `&autocorrect=1&api_key=${resolveLastFmApiKey()}&format=json`;
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            setCachedMetadata(cacheKey, null, true);
+            return null;
+        }
+        const data = await response.json();
+        const info = data?.track;
+        if (!info || data.error) {
+            setCachedMetadata(cacheKey, null, true);
+            return null;
+        }
+
+        const result = {
+            title: info.name || null,
+            artist: info.artist?.name || null,
+            mbid: info.mbid || null,
+            album: info.album?.title || null,
+            releaseDate: null,
+        };
+        setCachedMetadata(cacheKey, result, false);
+        return result;
+    } catch (error) {
+        console.warn('Last.fm track.getInfo failed:', error);
+        setCachedMetadata(cacheKey, null, true);
+        return null;
+    }
+}
+
+// Resolves the canonical (artist, track, album, mbid) for a scrobble. Never
+// throws; returns null when nothing could be resolved, in which case the
+// caller keeps the track's own metadata.
+export async function resolveScrobbleMetadata(track) {
+    if (!track) return null;
+
+    let resolved = null;
+    if (track.mbid) {
+        resolved = { title: null, artist: null, album: null, mbid: track.mbid, releaseDate: null };
+    } else if (track.isrc) {
+        resolved = await resolveByIsrc(track.isrc, track.album?.title, track.cleanTitle || track.title);
+    }
+    if (!resolved) {
+        const artist = getScrobbleArtist(track);
+        const title = track.cleanTitle || track.title;
+        if (artist && artist !== 'Unknown Artist' && title && title !== 'Unknown Track') {
+            resolved = await resolveByLastFm(artist, title);
+        }
+    }
+    return resolved;
+}
+
+function applyResolvedMetadata(params, resolved) {
+    if (!resolved) return;
+    if (resolved.artist) params.artist = resolved.artist;
+    if (resolved.title) params.track = resolved.title;
+    if (resolved.album) params.album = resolved.album;
+    if (resolved.mbid) params.mbid = resolved.mbid;
+}
+
+loadMetadataCache();
+
 export class LastFMScrobbler {
     constructor() {
         this.DEFAULT_API_KEY = '85214f5abbc730e78770f27784b9bdf7';
@@ -138,30 +401,7 @@ export class LastFMScrobbler {
     }
 
     _getScrobbleArtist(track) {
-        if (!track) return 'Unknown Artist';
-
-        // Get the primary artist name
-        let artistName = 'Unknown Artist';
-
-        if (track.artist?.name) {
-            artistName = track.artist.name;
-        } else if (typeof track.artist === 'string') {
-            artistName = track.artist;
-        } else if (track.artists && track.artists.length > 0) {
-            // Only use the FIRST artist (main artist)
-            const first = track.artists[0];
-            artistName = typeof first === 'string' ? first : first.name || 'Unknown Artist';
-        }
-
-        if (typeof artistName !== 'string') return 'Unknown Artist';
-
-        // Strip featured artists: split on &, feat., ft., featuring, with, etc.
-        // Only keep the part BEFORE these indicators
-        artistName = artistName
-            .split(/\s*[&]\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+|\s+with\s+|\s+x\s+/i)[0]
-            .trim();
-
-        return artistName || 'Unknown Artist';
+        return getScrobbleArtist(track);
     }
 
     async generateSignature(params) {
@@ -338,6 +578,11 @@ export class LastFMScrobbler {
                 params.trackNumber = track.trackNumber;
             }
 
+            // Override with the canonical release metadata (MusicBrainz via
+            // ISRC, or Last.fm's own autocorrected track info) so the scrobble
+            // matches the artist's actual release — and its album art.
+            applyResolvedMetadata(params, await resolveScrobbleMetadata(track));
+
             await this.makeRequest('track.updateNowPlaying', params, true);
 
             console.log('Now playing updated:', scrobbleTitle);
@@ -392,6 +637,8 @@ export class LastFMScrobbler {
                 params.trackNumber = this.currentTrack.trackNumber;
             }
 
+            applyResolvedMetadata(params, await resolveScrobbleMetadata(this.currentTrack));
+
             await this.makeRequest('track.scrobble', params, true);
 
             this.hasScrobbled = true;
@@ -411,6 +658,8 @@ export class LastFMScrobbler {
                 artist: this._getScrobbleArtist(track),
                 track: track.title,
             };
+
+            applyResolvedMetadata(params, await resolveScrobbleMetadata(track));
 
             await this.makeRequest('track.love', params, true);
             console.log('Loved track on Last.fm:', track.title);
