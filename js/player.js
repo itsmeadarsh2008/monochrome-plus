@@ -594,7 +594,7 @@ export class Player {
 
             for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
-                    const streamInfo = await this.api.getStreamUrl(track.id, effectiveQuality);
+                    const streamInfo = await this.api.getStreamUrl(track.id, effectiveQuality, null, track);
                     // Extract URL from the stream info object
                     let streamUrl = streamInfo;
                     if (typeof streamInfo === 'object' && streamInfo.url) {
@@ -1178,7 +1178,7 @@ export class Player {
                 } else {
                     // Get stream URL from API (optimized for high-fidelity)
                     try {
-                        streamInfo = await this.api.getStreamUrl(track.id, effectiveQuality);
+                        streamInfo = await this.api.getStreamUrl(track.id, effectiveQuality, null, track);
                         streamUrl = streamInfo;
                         if (typeof streamInfo === 'object' && streamInfo.url) {
                             streamUrl = streamInfo.url;
@@ -1325,7 +1325,7 @@ export class Player {
                                     hlsError
                                 );
                                 this.api.clearStreamCache?.(track.id);
-                                const fallbackInfo = await this.api.getStreamUrl(track.id, 'LOSSLESS');
+                                const fallbackInfo = await this.api.getStreamUrl(track.id, 'LOSSLESS', null, track);
                                 const fallbackUrl =
                                     typeof fallbackInfo === 'object' && fallbackInfo.url
                                         ? fallbackInfo.url
@@ -2524,7 +2524,7 @@ export class Player {
             }
 
             // Re-fetch stream URL
-            const streamInfo = await this.api.getStreamUrl(trackId, effectiveQuality);
+            const streamInfo = await this.api.getStreamUrl(trackId, effectiveQuality, null, this.currentTrack);
             let newUrl = streamInfo;
             if (typeof streamInfo === 'object' && streamInfo.url) {
                 newUrl = streamInfo.url;

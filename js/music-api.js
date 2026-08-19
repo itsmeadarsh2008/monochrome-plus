@@ -81,8 +81,8 @@ export class MusicAPI {
     }
 
     // Stream methods
-    async getStreamUrl(id, quality, _provider = null) {
-        return this.tidalAPI.getStreamUrl(this.stripProviderPrefix(id), quality);
+    async getStreamUrl(id, quality, _provider = null, track = null) {
+        return this.tidalAPI.getStreamUrl(this.stripProviderPrefix(id), quality, track);
     }
 
     // Cover/artwork methods

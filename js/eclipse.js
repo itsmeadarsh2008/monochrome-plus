@@ -1325,7 +1325,56 @@ export class EclipseAPI {
         this._forgetStreamCacheLocal(key);
     }
 
-    async getStreamUrl(id, quality = 'LOSSLESS') {
+    // Finds the same song under the current addon's provider when a saved
+    // track id (playlists, liked songs, recently played) can't be resolved
+    // directly by the addon. Prefers an ISRC match, then an exact title match
+    // (bonus for the same artist); otherwise refuses to guess.
+    async _resolveTrackIdBySearch(track) {
+        const title = String(track?.title || '').trim();
+        const artist = String(track?.artist?.name || track?.artists?.[0]?.name || '').trim();
+        if (!title) return null;
+        try {
+            const query = artist ? `${title} ${artist}` : title;
+            const results = await this.searchTracks(query, { limit: 12, retry: true });
+            const items = results?.items || [];
+            if (!items.length) return null;
+            const wantTitle = title.toLowerCase();
+            const wantArtist = artist.toLowerCase();
+            const wantIsrc = track?.isrc ? String(track.isrc).replace(/-/g, '').toUpperCase() : null;
+            const best = items
+                .map((item) => {
+                    let score = 0;
+                    if (
+                        wantIsrc &&
+                        String(item.isrc || '')
+                            .replace(/-/g, '')
+                            .toUpperCase() === wantIsrc
+                    )
+                        score += 100;
+                    if (
+                        String(item.title || '')
+                            .trim()
+                            .toLowerCase() === wantTitle
+                    )
+                        score += 50;
+                    const names = (item.artists || []).map((name) =>
+                        String(name?.name || '')
+                            .trim()
+                            .toLowerCase()
+                    );
+                    if (wantArtist && names.some((name) => name === wantArtist)) score += 25;
+                    return { item, score };
+                })
+                .sort((a, b) => b.score - a.score)[0];
+            if (!best || best.score < 50) return null;
+            return best.item.id;
+        } catch (error) {
+            console.warn('[Eclipse] Track id resolution by search failed:', error);
+            return null;
+        }
+    }
+
+    async getStreamUrl(id, quality = 'LOSSLESS', track = null) {
         const trackId = String(id);
         const key = `${this._addonCacheScope()}_stream_${trackId}_${quality || 'LOSSLESS'}`;
         const now = Math.floor(Date.now() / 1000);
@@ -1360,8 +1409,6 @@ export class EclipseAPI {
                     Array.isArray(addon.manifest?.resources) &&
                     addon.manifest.resources.includes('stream')
             );
-        let data = null;
-        let resolvedBy = null;
         const settleError = (error) => {
             // Under rate pressure a cached URL (even past its nominal expiry)
             // is worth trying — Tidal CDN URLs commonly outlive their expiry,
@@ -1388,60 +1435,71 @@ export class EclipseAPI {
             }
             throw error;
         };
-        if (streamCandidates.length > 1) {
-            const settled = await Promise.allSettled(
-                streamCandidates.map(async (addon) => {
-                    const info = await this._request(
-                        `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
-                        MAX_429_RETRIES,
-                        true,
-                        false,
-                        true,
-                        0,
-                        null,
-                        null,
-                        false,
-                        addonIdentity(addon),
-                        SEARCH_WALL_MS
-                    );
-                    return { addon, info };
-                })
-            );
-            let bestRank = -Infinity;
-            for (const result of settled) {
-                if (result.status === 'rejected') {
-                    if (!data) {
-                        try {
-                            data = settleError(result.reason);
-                        } catch (error) {
-                            if (!resolvedBy) resolvedBy = error;
-                        }
-                    }
-                    continue;
-                }
-                const { addon, info } = result.value;
-                const rank = streamQualityRank(info, quality);
-                if (rank > bestRank) {
-                    bestRank = rank;
-                    data = info;
-                    resolvedBy = addon;
-                }
-            }
-            if (!data) throw resolvedBy || new Error('All installed Eclipse addons failed to resolve a stream');
-            if (resolvedBy && addonIdentity(resolvedBy) !== eclipseAddonStorage.getActiveAddonId()) {
-                console.warn(
-                    `[Eclipse] Best stream for ${trackId} served by ${addonIdentity(resolvedBy)} (rank ${bestRank}) — better than the active addon`
+        // Resolve a stream for a concrete track id against every stream-capable
+        // addon. Throws when no addon can serve it.
+        //
+        // With more than one stream-capable addon installed, every addon is
+        // asked in parallel and the best-quality response wins (tie → priority
+        // order). A single addon keeps the old fallback-chain behavior so a
+        // failing addon can hand off to the next candidate.
+        const tryResolve = async (candidateId) => {
+            if (streamCandidates.length > 1) {
+                const settled = await Promise.allSettled(
+                    streamCandidates.map(async (addon) => {
+                        const info = await this._request(
+                            `stream/${candidateId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                            MAX_429_RETRIES,
+                            true,
+                            false,
+                            true,
+                            0,
+                            null,
+                            null,
+                            false,
+                            addonIdentity(addon),
+                            SEARCH_WALL_MS
+                        );
+                        return { addon, info };
+                    })
                 );
+                let bestRank = -Infinity;
+                let chosen = null;
+                let by = null;
+                for (const result of settled) {
+                    if (result.status === 'rejected') {
+                        if (!chosen) {
+                            try {
+                                chosen = settleError(result.reason);
+                            } catch (error) {
+                                if (!by) by = error;
+                            }
+                        }
+                        continue;
+                    }
+                    const { addon, info } = result.value;
+                    const rank = streamQualityRank(info, quality);
+                    if (rank > bestRank) {
+                        bestRank = rank;
+                        chosen = info;
+                        by = addon;
+                    }
+                }
+                if (!chosen) throw by || new Error('All installed Eclipse addons failed to resolve a stream');
+                if (by && addonIdentity(by) !== eclipseAddonStorage.getActiveAddonId()) {
+                    console.warn(
+                        `[Eclipse] Best stream for ${candidateId} served by ${addonIdentity(by)} (rank ${bestRank}) — better than the active addon`
+                    );
+                }
+                return { data: chosen, resolvedBy: by };
             }
-        } else {
             // Single stream addon (or none declaring the resource): keep the
             // request scoped to that addon. The generic fallback chain must
             // NOT reach addons whose stream participation is disabled.
             const single = streamCandidates[0];
             try {
-                data = single
+                const info = single
                     ? await this._request(
-                          `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                          `stream/${candidateId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
                           MAX_429_RETRIES,
                           true,
                           false,
@@ -1453,16 +1511,34 @@ export class EclipseAPI {
                           addonIdentity(single)
                       )
                     : await this._request(
-                          `stream/${trackId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
+                          `stream/${candidateId}?quality=${encodeURIComponent(quality || 'LOSSLESS')}`,
                           MAX_429_RETRIES,
                           true,
                           false,
                           true
                       );
+                return { data: info, resolvedBy: single || null };
             } catch (error) {
-                data = settleError(error);
+                throw settleError(error);
             }
+        };
+        // Tracks saved before the current addon era (playlists, liked songs,
+        // recently played) carry ids the addon cannot resolve ("Unknown
+        // source"). When direct resolution fails, find the same song through
+        // the addon's own search and resolve the matched id instead.
+        let resolved;
+        try {
+            resolved = await tryResolve(trackId);
+        } catch (error) {
+            if (error?.message === RATE_LIMIT_ERROR_MESSAGE || !track) throw error;
+            const searchId = await this._resolveTrackIdBySearch(track);
+            if (!searchId) throw error;
+            console.warn(
+                `[Eclipse] Cannot resolve stream id ${trackId} directly — retrying with search-matched id ${searchId}`
+            );
+            resolved = await tryResolve(searchId);
         }
+        const { data } = resolved;
         const stream = {
             url: data.url,
             format: data.format,
@@ -1496,20 +1572,22 @@ export class EclipseAPI {
         return encodeURIComponent(addonIdentity(eclipseAddonStorage.getAddon()) || 'no-addon');
     }
 
-    async getTrack(id, quality) {
+    async getTrack(id, quality, track = null) {
         const trackId = String(id);
-        const stream = await this.getStreamUrl(trackId, quality);
-        const track = this.trackRegistry.get(trackId) || {
-            id: trackId,
-            title: 'Unknown Track',
-            artist: { name: '' },
-            artists: [],
-            album: null,
-            artwork: [],
-            cover: null,
-        };
+        const source = track || this.trackRegistry.get(trackId) || null;
+        const stream = await this.getStreamUrl(trackId, quality, source);
+        const resolved = this.trackRegistry.get(trackId) ||
+            source || {
+                id: trackId,
+                title: 'Unknown Track',
+                artist: { name: '' },
+                artists: [],
+                album: null,
+                artwork: [],
+                cover: null,
+            };
         return {
-            track,
+            track: resolved,
             info: { manifest: stream.url, expiresAt: stream.expiresAt },
             originalTrackUrl: stream.url,
             url: stream.url,
@@ -1520,7 +1598,7 @@ export class EclipseAPI {
             mediaType: stream.format,
             mimeType: stream.mimeType,
             bitrateKbps: stream.bitrateKbps,
-            isrc: track.isrc || null,
+            isrc: resolved.isrc || null,
         };
     }
 
@@ -1973,7 +2051,7 @@ export class EclipseAPI {
         const { onProgress, track } = options;
 
         try {
-            const lookup = await this.getTrack(id, quality);
+            const lookup = await this.getTrack(id, quality, track);
             let streamUrl;
             let blob;
 

@@ -402,7 +402,12 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
                             break;
                         }
 
-                        const streamResult = await player.api.getStreamUrl(trackId, fallbackQuality);
+                        const streamResult = await player.api.getStreamUrl(
+                            trackId,
+                            fallbackQuality,
+                            null,
+                            player.currentTrack
+                        );
                         const actualUrl =
                             typeof streamResult === 'object' && streamResult.url ? streamResult.url : streamResult;
 
@@ -558,7 +563,12 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
             progressBar.style.maskImage = '';
 
             try {
-                const streamUrl = await player.api.getStreamUrl(player.currentTrack.id, 'LOW');
+                const streamUrl = await player.api.getStreamUrl(
+                    player.currentTrack.id,
+                    'LOW',
+                    null,
+                    player.currentTrack
+                );
                 const waveformData = await waveformGenerator.getWaveform(streamUrl, player.currentTrack.id);
 
                 if (waveformData && currentTrackIdForWaveform === player.currentTrack.id) {

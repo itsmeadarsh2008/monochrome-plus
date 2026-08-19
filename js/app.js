@@ -90,7 +90,7 @@ async function prepareCastSource(player, audioPlayer) {
 
     for (const quality of qualityCandidates) {
         try {
-            const streamResult = await player.api.getStreamUrl(track.id, quality);
+            const streamResult = await player.api.getStreamUrl(track.id, quality, null, track);
             const streamUrl = typeof streamResult === 'object' && streamResult.url ? streamResult.url : streamResult;
             if (!streamUrl || String(streamUrl).startsWith('blob:')) {
                 continue;
