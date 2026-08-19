@@ -365,6 +365,25 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         }
 
         const currentQuality = player.quality;
+        const isYouTubeDirectStream =
+            player.currentTrack?.streamSource === 'youtube' || /googlevideo\.com|youtube\.com/i.test(audioPlayer.currentSrc || '');
+
+        // YouTube addons commonly return the same direct M4A URL for every
+        // requested quality. Sending that URL through the generic fallback
+        // chain, or retrying the full queue load, just emits loadstart again
+        // and makes the play button oscillate between play and buffering.
+        // Let the normal terminal error path advance the queue once.
+        if (isYouTubeDirectStream) {
+            player._youtubePlaybackRetryTrackId = null;
+            player.isFallbackRetry = false;
+            if (!player._youtubePlaybackTerminalError) {
+                player._youtubePlaybackTerminalError = true;
+                setTimeout(() => {
+                    if (player.currentTrack?.streamSource === 'youtube') player.playNext(1);
+                }, 250);
+            }
+            return;
+        }
 
         // Check if we can fallback to a lower quality
         const fallbackQualities =
@@ -438,7 +457,21 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
                         // be blocked when loaded on that element, so clear the
                         // attribute for plain-file fallback playback.
                         audioPlayer.removeAttribute('crossorigin');
-                        audioPlayer.src = actualUrl;
+                        let playbackUrl = actualUrl;
+                        try {
+                            const parsed = new URL(actualUrl, window.location.href);
+                            const isYouTube =
+                                player.currentTrack?.streamSource === 'youtube' ||
+                                /(?:^|\.)googlevideo\.com$|(?:^|\.)youtube(?:-nocookie)?\.com$/i.test(parsed.hostname);
+                            if (isYouTube) {
+                                // Do not proxy signed Googlevideo media: the
+                                // proxy's IP/context can invalidate the URL.
+                                audioPlayer.removeAttribute('crossorigin');
+                            }
+                        } catch {
+                            /* use the original URL; the browser will report a useful media error */
+                        }
+                        audioPlayer.src = playbackUrl;
                         audioPlayer.load();
                         await audioPlayer.play();
 

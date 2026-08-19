@@ -41,6 +41,24 @@ function isHlsStreamUrl(streamUrl) {
     }
 }
 
+function rewriteYouTubeAudioUrl(streamUrl, streamInfo = null) {
+    if (!streamUrl || typeof streamUrl !== 'string') return streamUrl;
+
+    let isYouTube = streamInfo?.source === 'youtube';
+    try {
+        const parsed = new URL(streamUrl, window.location.href);
+        isYouTube ||= /(?:^|\.)googlevideo\.com$|(?:^|\.)youtube(?:-nocookie)?\.com$/i.test(parsed.hostname);
+        if (isYouTube) window.__corsBypass?.addProxyHost?.(parsed.hostname);
+    } catch {
+        return streamUrl;
+    }
+
+    // Signed Googlevideo URLs can be IP/context-bound. A server-side CORS
+    // proxy commonly turns those valid URLs into 403s, so let the media
+    // element request YouTube directly instead of proxying the audio bytes.
+    return streamUrl;
+}
+
 export class Player {
     constructor(audioElement, api, quality = 'HI_RES_LOSSLESS') {
         Player.instance = this;
@@ -1074,6 +1092,15 @@ export class Player {
         const track = currentQueue[this.currentQueueIndex];
         const trackTitle = getTrackTitle(track);
 
+        // Search/queue/UI events can converge while a slow addon (notably
+        // YouTube) is still resolving its direct audio URL. Do not replace a
+        // valid in-flight load with another load of the same queue item.
+        if (this._playRequestState?.trackId === String(track.id) && this._playRequestState.status === 'loading') {
+            return;
+        }
+        this._playRequestState = { trackId: String(track.id), status: 'loading' };
+        this._youtubePlaybackTerminalError = false;
+
         if (track.isUnavailable) {
             console.warn(`Attempted to play unavailable track: ${trackTitle}. Skipping...`);
             this.playNext(recursiveCount + 1);
@@ -1090,6 +1117,9 @@ export class Player {
 
         this.saveQueueState();
         this.currentTrack = track;
+        // A track object can be replayed with a new signed URL. Never carry
+        // inspected facts from the previous stream into fullscreen.
+        delete track.streamMetadata;
         recentActivityManager.addTrack(track);
 
         // UI Updates
@@ -1193,6 +1223,7 @@ export class Player {
                 // Store stream quality metadata on track for UI display —
                 // applied on every path so the fullscreen quality readout is exact.
                 if (streamInfo && typeof streamInfo === 'object' && streamInfo.url) {
+                    if (streamInfo.source) track.streamSource = streamInfo.source;
                     if (streamInfo.bitDepth != null) track.bitDepth = streamInfo.bitDepth;
                     if (streamInfo.sampleRate != null) track.sampleRate = streamInfo.sampleRate;
                     if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
@@ -1265,32 +1296,23 @@ export class Player {
                 (streamInfo && String(streamInfo.mediaType || '').toUpperCase() === 'HLS') ||
                 (streamInfo && /mpegurl|apple\.mpegurl/i.test(String(streamInfo.mimeType || '')));
             const isAdaptive = isDash || isHls;
+            const playbackUrl = rewriteYouTubeAudioUrl(streamUrl, streamInfo);
 
             // Ground truth from the media files themselves: the addon's quality
             // label is text that can be missing, vague or wrong (it carries no
             // bitrate at all for Tidal FLAC). Probe the actual stream and
             // override the displayed specs with what the file really is.
             // Non-blocking — playback is never delayed by the inspection.
-            if (typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
+            // Googlevideo intentionally does not expose CORS headers. Do not
+            // launch a background fetch probe for it; the media element is
+            // already the authoritative playback path for this source.
+            if (typeof streamUrl === 'string' && streamInfo?.source !== 'youtube') {
                 const inspectedTrack = track;
                 inspectStreamMetadata(streamUrl, { isHls, duration: Number(track.duration) || 0 })
                     .then((real) => {
                         if (isStalePlay() || this.currentTrack !== inspectedTrack) return;
                         if (Object.keys(real).length === 0) return;
-                        let changed = false;
-                        if (real.sampleRate && real.sampleRate !== inspectedTrack.sampleRate) {
-                            inspectedTrack.sampleRate = real.sampleRate;
-                            changed = true;
-                        }
-                        if (real.bitDepth && real.bitDepth !== inspectedTrack.bitDepth) {
-                            inspectedTrack.bitDepth = real.bitDepth;
-                            changed = true;
-                        }
-                        if (real.bitrateKbps && real.bitrateKbps !== inspectedTrack.bitrateKbps) {
-                            inspectedTrack.bitrateKbps = real.bitrateKbps;
-                            changed = true;
-                        }
-                        if (!changed) return;
+                        inspectedTrack.streamMetadata = real;
                         const fullscreenQuality = document.getElementById('fullscreen-track-quality');
                         if (fullscreenQuality) {
                             fullscreenQuality.innerHTML = createFullscreenQualityHTML(inspectedTrack);
@@ -1402,10 +1424,15 @@ export class Player {
                     this.dashPlayer.reset();
                     this.dashInitialized = false;
                 }
-                await this.loadWithNativeAudio(streamUrl, startTime);
+                await this.loadWithNativeAudio(playbackUrl, startTime, streamInfo);
             }
 
             // Post-playback tasks
+            this._playRequestState = { trackId: String(track.id), status: 'ready' };
+            if (this._youtubePlaybackRetryTrackId === track.id) {
+                this._youtubePlaybackRetryTrackId = null;
+            }
+            this._youtubePlaybackTerminalError = false;
             this.scheduleBackgroundPreload(200);
             this._setAdvanceInFlight(false);
         } catch (error) {
@@ -1414,6 +1441,9 @@ export class Player {
             if (isStalePlay()) return;
 
             console.error(`Could not play track: ${trackTitle}`, error);
+            if (this._playRequestState?.trackId === String(track.id)) {
+                this._playRequestState = null;
+            }
             this._gaplessTransitionInProgress = false;
             this._setAdvanceInFlight(false);
 
@@ -2249,9 +2279,17 @@ export class Player {
     }
 
     // Howler-based audio playback for better streaming support
-    async loadWithNativeAudio(streamUrl, startTime = 0) {
+    async loadWithNativeAudio(streamUrl, startTime = 0, streamInfo = null) {
         this._cleanupHowler();
         this.audio.pause();
+        if (streamInfo?.source === 'youtube') {
+            // Playback itself does not require CORS. Keeping this attribute
+            // would make Chromium reject the signed Googlevideo media before
+            // it can play because Googlevideo does not expose ACAO.
+            this.audio.removeAttribute('crossorigin');
+        } else {
+            this.audio.setAttribute('crossorigin', 'anonymous');
+        }
         this.audio.preload = 'auto';
         this.audio.src = streamUrl;
         this.audio.load();

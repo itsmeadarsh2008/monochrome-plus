@@ -336,7 +336,6 @@ const extractBitDepth = (streamInfo) => {
     const quality = `${streamInfo?.quality || ''} ${streamInfo?.streamQuality || ''}`;
     const match = quality.match(/(\d+)\s*-?\s*bit/i);
     if (match) return parseInt(match[1], 10);
-    if (/LOSSLESS/i.test(quality)) return 16;
     return null;
 };
 
@@ -344,8 +343,6 @@ const extractSampleRate = (streamInfo) => {
     const quality = `${streamInfo?.quality || ''} ${streamInfo?.streamQuality || ''}`;
     const match = quality.match(/([\d.]+)\s*kHz/i);
     if (match) return Math.round(parseFloat(match[1]) * 1000);
-    if (/HI_RES/i.test(quality)) return 96000;
-    if (/LOSSLESS/i.test(quality)) return 44100;
     return null;
 };
 
@@ -825,20 +822,20 @@ export class EclipseAPI {
 
     async searchTracks(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.tracks.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const items = options.limit == null ? data.tracks : data.tracks.slice(0, options.limit);
+        return { items, limit: options.limit ?? items.length, offset: 0, totalNumberOfItems: data.tracks.length };
     }
 
     async searchAlbums(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.albums.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const items = options.limit == null ? data.albums : data.albums.slice(0, options.limit);
+        return { items, limit: options.limit ?? items.length, offset: 0, totalNumberOfItems: data.albums.length };
     }
 
     async searchArtists(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.artists.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const items = options.limit == null ? data.artists : data.artists.slice(0, options.limit);
+        return { items, limit: options.limit ?? items.length, offset: 0, totalNumberOfItems: data.artists.length };
     }
 
     /**
@@ -873,8 +870,8 @@ export class EclipseAPI {
 
     async searchPlaylists(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.playlists.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const items = options.limit == null ? data.playlists : data.playlists.slice(0, options.limit);
+        return { items, limit: options.limit ?? items.length, offset: 0, totalNumberOfItems: data.playlists.length };
     }
 
     // ---- mappers --------------------------------------------------------
@@ -1540,12 +1537,41 @@ export class EclipseAPI {
             resolved = await tryResolve(searchId);
         }
         const { data } = resolved;
+        const resolvedUrl = typeof data?.url === 'string' ? data.url : '';
+        const isYouTubeAudio = /(?:^|\.)googlevideo\.com$|(?:^|\.)youtube(?:-nocookie)?\.com$/i.test(
+            (() => {
+                try {
+                    return new URL(resolvedUrl).hostname;
+                } catch {
+                    return '';
+                }
+            })()
+        );
+        let urlMimeType = null;
+        try {
+            urlMimeType = new URL(resolvedUrl).searchParams.get('mime');
+        } catch {
+            /* malformed URLs are rejected by the player later */
+        }
+        const mimeType = data.mimeType || urlMimeType || null;
+        const format = data.format || (/audio\/mp4/i.test(String(mimeType)) ? 'M4A' : null);
+        const isDirectAudio =
+            isYouTubeAudio &&
+            (/^audio\//i.test(String(mimeType || '')) || /^(M4A|AAC|MP4)$/i.test(String(format || '')));
         const stream = {
-            url: data.url,
-            format: data.format,
+            url: resolvedUrl,
+            source: isYouTubeAudio ? 'youtube' : null,
+            format,
             quality: data.quality,
             streamQuality: data.streamQuality,
-            expiresAt: data.expiresAt || now + 3600,
+            expiresAt: data.expiresAt || (() => {
+                try {
+                    const expire = Number(new URL(resolvedUrl).searchParams.get('expire'));
+                    return Number.isFinite(expire) && expire > now ? expire : now + 3600;
+                } catch {
+                    return now + 3600;
+                }
+            })(),
             bitDepth: extractBitDepth(data),
             sampleRate: extractSampleRate(data),
             audioQuality: data.streamQuality || data.quality || data.audioQuality || null,
@@ -1557,8 +1583,11 @@ export class EclipseAPI {
             // `/dash/:id` URL while reporting `format: "flac"`. Keep `format`
             // for quality/codec metadata, but expose the transport separately
             // so Eclipse playback goes through the HLS engine.
-            mediaType: data.mediaType || (isHlsStreamUrl(data.url) ? 'HLS' : data.format || null),
-            mimeType: data.mimeType || null,
+            // Googlevideo audio URLs are complete M4A/AAC files. Some
+            // YouTube addons copy a generic DASH mediaType onto them; that
+            // would send a direct file into the manifest engines and fail.
+            mediaType: isDirectAudio ? 'FILE' : data.mediaType || (isHlsStreamUrl(resolvedUrl) ? 'HLS' : format),
+            mimeType,
             codec: data.codec || data.fileCodec || null,
             containerFormat: data.containerFormat || null,
             bitrateKbps: extractBitrateKbps(data),

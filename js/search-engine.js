@@ -118,7 +118,7 @@ export class SearchEngine {
      * Perform instant local semantic search over normalized index.
      * Includes lightweight multilingual query variant expansion.
      * @param {string} query
-     * @returns {Array} up to 8 results
+     * @returns {Array} all matching results from the local index
      */
     searchLocal(query) {
         if (!query || this._normalizedIndex.length === 0) return [];
@@ -140,7 +140,6 @@ export class SearchEngine {
 
         return scored
             .sort((a, b) => b.score - a.score)
-            .slice(0, 8)
             .map((r) => ({ ...r.item, _score: 1 - r.score, _source: 'local' }));
     }
 
@@ -171,10 +170,10 @@ export class SearchEngine {
         const remoteQuery = variants[0] || query;
 
         const promise = Promise.allSettled([
-            this.api.searchTracks(remoteQuery, { limit: 8 }),
-            this.api.searchAlbums(remoteQuery, { limit: 6 }),
-            this.api.searchArtists(remoteQuery, { limit: 6 }),
-            this.api.searchPlaylists(remoteQuery, { limit: 6 }),
+            this.api.searchTracks(remoteQuery),
+            this.api.searchAlbums(remoteQuery),
+            this.api.searchArtists(remoteQuery),
+            this.api.searchPlaylists(remoteQuery),
         ])
             .then((responses) => {
                 const [tracksRes, albumsRes, artistsRes, playlistsRes] = responses;
