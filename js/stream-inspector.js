@@ -105,7 +105,10 @@ export function readAudioSpecFromMoov(bytes) {
                     return {
                         codec,
                         sampleRate,
-                        bitDepth: sampleSize > 1 ? sampleSize : null,
+                        // AAC has no bit depth: the sample entry's samplesize
+                        // field is a nominal 16 per the format spec, not real
+                        // data. Only FLAC (fLaC) carries a meaningful value.
+                        bitDepth: codec === 'FLAC' ? (sampleSize > 1 ? sampleSize : null) : null,
                         channels: channelCount > 0 ? channelCount : null,
                     };
                 };

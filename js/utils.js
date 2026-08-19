@@ -435,6 +435,13 @@ export const createFullscreenQualityHTML = (track) => {
     // Lossy codecs/containers can never carry a lossless label
     const lossy = codec ? isLossyCodec(codec) : isLossyContainer(track.format || track.mediaType);
 
+    // Lossy streams have no real bit depth: the sample entry's samplesize
+    // is a nominal 16 for AAC/Opus/MP3. Drop any bit depth claim so the
+    // readout never shows "16-bit" next to a lossy codec.
+    if (lossy) {
+        bitDepthStr = null;
+    }
+
     // Exact bitrate when the addon reports it (e.g. 128 → "128 kbps")
     const bitrateKbps = toPositiveInt(track.bitrateKbps);
     const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
