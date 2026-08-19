@@ -19,3 +19,6 @@ auth_storage/
 
 # opensrc - source code for packages
 opensrc/
+
+# Local opencode config
+opencode.jsonc
