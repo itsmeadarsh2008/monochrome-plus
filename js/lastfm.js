@@ -91,7 +91,9 @@ export async function fetchLastFmArtistImage(artistName, options = {}) {
 // serialized with 1.1 s spacing to respect their rate limit.
 
 const MUSICBRAINZ_API = 'https://musicbrainz.org/ws/2';
-const METADATA_CACHE_KEY = 'lastfm-scrobble-metadata-v1';
+// v2: v1 cached album-less getInfo results as 30-day positives, which
+// short-circuited the spelling bridge added later. Bump to invalidate.
+const METADATA_CACHE_KEY = 'lastfm-scrobble-metadata-v2';
 const METADATA_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 const METADATA_MISS_TTL = 24 * 60 * 60 * 1000;
 const METADATA_CACHE_MAX = 500;
@@ -121,7 +123,7 @@ function persistMetadataCache() {
             count += 1;
             if (count >= METADATA_CACHE_MAX) break;
         }
-        localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify({ version: 1, entries }));
+        localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify({ version: 2, entries }));
     } catch {
         // Storage full or unavailable — the in-memory cache still works.
     }
@@ -360,8 +362,11 @@ async function resolveByLastFm(artist, title) {
     }
 
     // Nothing with an album found — keep the direct match (if any) so the
-    // scrobble still goes out with best-effort metadata.
-    setCachedMetadata(cacheKey, direct || null, !direct);
+    // scrobble still goes out with best-effort metadata. Cache as a miss
+    // (short TTL) when the result carries no album: an album-less result must
+    // never block the bridge from re-running on a later play.
+    const miss = !direct?.album;
+    setCachedMetadata(cacheKey, direct || null, miss);
     return direct || null;
 }
 
