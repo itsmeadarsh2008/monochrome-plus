@@ -1929,8 +1929,6 @@ body.search-page-active #wave-bg {
 .search-bar input:focus,
 .track-list-search-input:focus {
     outline: none;
-    border-color: var(--ring);
-    box-shadow: 0 0 0 3px rgb(var(--highlight-rgb) / 0.2);
 }
 
 .recommended-search {
@@ -2134,8 +2132,6 @@ body.has-page-background .track-item:hover {
 .search-input-wrapper input:focus,
 .search-input-wrapper:has(input:focus) {
     outline: none;
-    border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
 .search-clear-btn {

@@ -2763,52 +2763,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     const renderSearchDropdown = (mode) => {
         if (!searchHistoryEl) return;
         searchDropdownMode = mode;
-        const clockIcon =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-        const xIcon =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 
         if (mode === 'idle') {
-            const recent = searchEngine.getHistory(8);
-            searchHistoryEl.innerHTML =
-                `<div class="search-dropdown-head">Recent Searches</div>` +
-                (recent.length
-                    ? recent
-                          .map(
-                              (
-                                  q
-                              ) => `<button type="button" class="search-history-item" data-query="${escapeHtml(q)}" role="option">
-                        <span class="history-icon">${clockIcon}</span>
-                        <span class="query-text">${escapeHtml(q)}</span>
-                        <span class="delete-history-btn" data-delete="${escapeHtml(q)}" title="Remove from history" aria-label="Remove from history">${xIcon}</span>
-                    </button>`
-                          )
-                          .join('') +
-                      `<button type="button" class="search-history-clear-all" role="option">Clear All</button>`
-                    : '<p class="search-dropdown-empty">No recent searches yet</p>');
-        } else {
-            const local = searchEngine.searchLocal(searchInput.value.trim());
-            searchHistoryEl.innerHTML =
-                `<div class="search-dropdown-head">Your Library</div>` +
-                (local.length
-                    ? local
-                          .map((t) => {
-                              const title = t?.title || 'Unknown';
-                              const artist = t?.artist?.name || t?.artists?.[0]?.name || '';
-                              const cover = searchEngine.api?.getPreferredVisualUrl
-                                  ? searchEngine.api.getPreferredVisualUrl(t.album, '64')
-                                  : 'assets/appicon.png';
-                              return `<a class="search-history-item search-history-track" href="/track/${encodeURIComponent(t.id)}" role="option">
+            // Recent searches removed — keep the dropdown closed while empty.
+            searchHistoryEl.hidden = true;
+            searchInput?.setAttribute('aria-expanded', 'false');
+            return;
+        }
+
+        const local = searchEngine.searchLocal(searchInput.value.trim());
+        searchHistoryEl.innerHTML =
+            `<div class="search-dropdown-head">Your Library</div>` +
+            (local.length
+                ? local
+                      .map((t) => {
+                          const title = t?.title || 'Unknown';
+                          const artist = t?.artist?.name || t?.artists?.[0]?.name || '';
+                          const cover = searchEngine.api?.getPreferredVisualUrl
+                              ? searchEngine.api.getPreferredVisualUrl(t.album, '64')
+                              : 'assets/appicon.png';
+                          return `<a class="search-history-item search-history-track" href="/track/${encodeURIComponent(t.id)}" role="option">
                         <span class="search-row-art search-row-art--round"><img src="${cover}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/appicon.png'"></span>
                         <span class="search-history-meta">
                             <span class="query-text">${escapeHtml(title)}</span>
                             <span class="search-history-sub">${escapeHtml(artist)}</span>
                         </span>
                     </a>`;
-                          })
-                          .join('')
-                    : '<p class="search-dropdown-empty">No matches in your library</p>');
-        }
+                      })
+                      .join('')
+                : '<p class="search-dropdown-empty">No matches in your library</p>');
         searchHistoryEl.hidden = false;
         searchInput?.setAttribute('aria-expanded', 'true');
     };

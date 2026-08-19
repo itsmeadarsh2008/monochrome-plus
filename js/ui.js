@@ -6579,44 +6579,6 @@ export class UIRenderer {
             const section = document.getElementById(id);
             if (section) section.style.display = 'none';
         });
-
-        // Idle section — created once, idempotently.
-        let idleSection = document.getElementById('search-idle-section');
-        if (!idleSection) {
-            idleSection = document.createElement('section');
-            idleSection.className = 'search-section';
-            idleSection.id = 'search-idle-section';
-            idleSection.innerHTML =
-                '<h3 class="search-section-title">Recent Searches</h3><div class="search-idle-list" id="search-idle-list"></div>';
-            allTab.insertBefore(idleSection, allTab.firstChild);
-        }
-        idleSection.style.display = '';
-
-        const recent = typeof window.searchEngine?.getHistory === 'function' ? window.searchEngine.getHistory(8) : [];
-        const clockIcon =
-            '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-        const recentRows = recent.length
-            ? recent
-                  .map(
-                      (q) => `
-                <button type="button" class="search-history-item search-idle-row" data-query="${escapeHtml(q)}" role="option">
-                    <span class="history-icon">${clockIcon}</span>
-                    <span class="query-text">${escapeHtml(q)}</span>
-                </button>`
-                  )
-                  .join('')
-            : '<p class="search-idle-empty">Nothing here yet — search to get started.</p>';
-
-        const idleList = document.getElementById('search-idle-list');
-        if (idleList) idleList.innerHTML = recentRows;
-
-        allTab.querySelectorAll('.search-idle-row').forEach((row) => {
-            row.addEventListener('click', () => {
-                const query = row.dataset.query || '';
-                if (!query) return;
-                window.dispatchEvent(new CustomEvent('search-query-requested', { detail: { query } }));
-            });
-        });
     }
 
     async _loadAndRenderSearch(query, selectedTab) {
@@ -6644,11 +6606,6 @@ export class UIRenderer {
         const topHitContent = document.getElementById('search-top-hit-content');
 
         // Show skeletons for ALL containers (we always fetch everything)
-        const hideIdle = () => {
-            const idleSection = document.getElementById('search-idle-section');
-            if (idleSection) idleSection.style.display = 'none';
-        };
-        hideIdle();
         if (tracksContainer) tracksContainer.innerHTML = this.createSkeletonTracks(8, true);
         if (artistsContainer) artistsContainer.innerHTML = this.createSkeletonCards(6, true);
         if (albumsContainer) albumsContainer.innerHTML = this.createSkeletonCards(6, false);
@@ -6796,8 +6753,6 @@ export class UIRenderer {
     _renderSearchSingleTab(selectedTab, { tracks, artists, albums, playlists, users }, hasErrors) {
         const layoutEl = document.getElementById('search-top-results-layout');
         const fallbackEl = document.getElementById('search-all-tracks-fallback');
-        const idleSection = document.getElementById('search-idle-section');
-        if (idleSection) idleSection.style.display = 'none';
         if (layoutEl) layoutEl.style.display = 'none';
         if (fallbackEl) fallbackEl.style.display = 'none';
 
@@ -6851,8 +6806,6 @@ export class UIRenderer {
         const layoutEl = document.getElementById('search-top-results-layout');
         const fallbackEl = document.getElementById('search-all-tracks-fallback');
         const topHitContent = document.getElementById('search-top-hit-content');
-        const idleSection = document.getElementById('search-idle-section');
-        if (idleSection) idleSection.style.display = 'none';
         const allTracksContainer = document.getElementById('search-all-tracks-container');
         const allArtistsContainer = document.getElementById('search-all-artists-container');
         const allAlbumsContainer = document.getElementById('search-all-albums-container');
