@@ -182,7 +182,10 @@ export function getScrobbleArtist(track) {
 
     if (typeof artistName !== 'string') return 'Unknown Artist';
 
-    artistName = artistName.split(/\s*[&]\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+|\s+with\s+|\s+x\s+/i)[0].trim();
+    // Strip featured artists: split on &, feat., ft., featuring, x, etc.
+    // NOTE: "with" is deliberately NOT split on — "MAN WITH A MISSION" is a
+    // band name, and splitting it truncated real credits to "milet, MAN".
+    artistName = artistName.split(/\s*[&]\s*|\s+feat\.?\s+|\s+ft\.?\s+|\s+featuring\s+|\s+x\s+/i)[0].trim();
 
     return artistName || 'Unknown Artist';
 }
@@ -259,46 +262,107 @@ async function resolveByIsrc(isrc, localAlbumTitle, localTrackTitle) {
         album: release?.title || null,
         releaseDate: release?.date || null,
     };
-    setCachedMetadata(cacheKey, result, false);
-    return result;
+
+    // Last.fm's database sometimes names the same release differently than
+    // MusicBrainz (e.g. MB "コイコガレ" -> Last.fm "絆ノ奇跡 / コイコガレ").
+    // Verify against Last.fm itself so the scrobble lands on a release it
+    // actually has — that is what puts album art on the dashboard.
+    const lfm = await lastFmGetInfo(recording.artist, result.title);
+    let final = result;
+    if (lfm?.album) {
+        const wasLocalExact = normalizedLocalAlbum && normalizeTitle(result.album) === normalizedLocalAlbum;
+        if (!wasLocalExact || normalizeTitle(lfm.album) === normalizeTitle(result.album)) {
+            final = lfm;
+        }
+    } else {
+        const bridged = await resolveByLastFm(recording.artist, result.title);
+        if (bridged?.album) final = bridged;
+    }
+    setCachedMetadata(cacheKey, final, false);
+    return final;
 }
 
+async function lastFmGetInfo(artist, title) {
+    const endpoint =
+        `https://ws.audioscrobbler.com/2.0/?method=track.getInfo` +
+        `&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}` +
+        `&autocorrect=1&api_key=${resolveLastFmApiKey()}&format=json`;
+    const response = await fetch(endpoint);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const info = data?.track;
+    if (!info || data.error) return null;
+    return {
+        title: info.name || null,
+        artist: info.artist?.name || null,
+        mbid: info.mbid || null,
+        album: info.album?.title || null,
+        releaseDate: null,
+    };
+}
+
+async function lastFmSearch(query) {
+    const endpoint =
+        `https://ws.audioscrobbler.com/2.0/?method=track.search&track=${encodeURIComponent(query)}` +
+        `&limit=10&api_key=${resolveLastFmApiKey()}&format=json`;
+    const response = await fetch(endpoint);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data?.results?.trackmatches?.track || []).map((t) => ({ artist: t.artist, name: t.name }));
+}
+
+// Splits a bilingual track name into its parts ("コイコガレ - Koi Kogare"
+// -> ["コイコガレ - Koi Kogare", "コイコガレ", "Koi Kogare"]) so the bridge
+// can try each spelling against Last.fm's database.
+function candidateSpellings(name) {
+    const spellings = new Set([String(name || '')]);
+    for (const segment of String(name || '').split(/\s*[-–—·]\s*|\s*\/\s*/)) {
+        if (segment.trim()) spellings.add(segment);
+    }
+    spellings.delete('');
+    return [...spellings];
+}
+
+// Resolves the canonical Last.fm metadata for a track. First a direct
+// track.getInfo; if that yields no album (Last.fm has no release attached to
+// that exact spelling), a track.search bridge hunts for alternate spellings —
+// e.g. "Koi Kogare" -> "コイコガレ - Koi Kogare" -> "コイコガレ", which is the
+// spelling Last.fm's database actually links to an album (and its art).
 async function resolveByLastFm(artist, title) {
     const cacheKey = `lfm:${artist.toLowerCase()}\u0000${title.toLowerCase()}`;
     const cached = getCachedMetadata(cacheKey);
     if (cached) return cached.data;
 
-    try {
-        const endpoint =
-            `https://ws.audioscrobbler.com/2.0/?method=track.getInfo` +
-            `&artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(title)}` +
-            `&autocorrect=1&api_key=${resolveLastFmApiKey()}&format=json`;
-        const response = await fetch(endpoint);
-        if (!response.ok) {
-            setCachedMetadata(cacheKey, null, true);
-            return null;
-        }
-        const data = await response.json();
-        const info = data?.track;
-        if (!info || data.error) {
-            setCachedMetadata(cacheKey, null, true);
-            return null;
-        }
+    const tried = new Set();
+    const tryInfo = async (candidateArtist, candidateTitle, paced = true) => {
+        const marker = `${candidateArtist.toLowerCase()}\u0000${candidateTitle.toLowerCase()}`;
+        if (tried.has(marker)) return null;
+        tried.add(marker);
+        if (paced) await new Promise((resolve) => setTimeout(resolve, 350));
+        return lastFmGetInfo(candidateArtist, candidateTitle);
+    };
 
-        const result = {
-            title: info.name || null,
-            artist: info.artist?.name || null,
-            mbid: info.mbid || null,
-            album: info.album?.title || null,
-            releaseDate: null,
-        };
-        setCachedMetadata(cacheKey, result, false);
-        return result;
-    } catch (error) {
-        console.warn('Last.fm track.getInfo failed:', error);
-        setCachedMetadata(cacheKey, null, true);
-        return null;
+    const direct = await tryInfo(artist, title, false);
+    if (direct?.album) {
+        setCachedMetadata(cacheKey, direct, false);
+        return direct;
     }
+
+    const matches = await lastFmSearch(`${title} ${artist}`);
+    for (const match of matches.slice(0, 6)) {
+        for (const spelling of candidateSpellings(match.name)) {
+            const info = await tryInfo(match.artist, spelling);
+            if (info?.album) {
+                setCachedMetadata(cacheKey, info, false);
+                return info;
+            }
+        }
+    }
+
+    // Nothing with an album found — keep the direct match (if any) so the
+    // scrobble still goes out with best-effort metadata.
+    setCachedMetadata(cacheKey, direct || null, !direct);
+    return direct || null;
 }
 
 // Resolves the canonical (artist, track, album, mbid) for a scrobble. Never
