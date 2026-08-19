@@ -28,6 +28,7 @@ import {
     recentActivityManager,
 } from './storage.js';
 import { audioContextManager } from './audio-context.js';
+import { inspectStreamMetadata } from './stream-inspector.js';
 
 function isHlsStreamUrl(streamUrl) {
     if (!streamUrl) return false;
@@ -1264,6 +1265,41 @@ export class Player {
                 (streamInfo && String(streamInfo.mediaType || '').toUpperCase() === 'HLS') ||
                 (streamInfo && /mpegurl|apple\.mpegurl/i.test(String(streamInfo.mimeType || '')));
             const isAdaptive = isDash || isHls;
+
+            // Ground truth from the media files themselves: the addon's quality
+            // label is text that can be missing, vague or wrong (it carries no
+            // bitrate at all for Tidal FLAC). Probe the actual stream and
+            // override the displayed specs with what the file really is.
+            // Non-blocking — playback is never delayed by the inspection.
+            if (typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
+                const inspectedTrack = track;
+                inspectStreamMetadata(streamUrl, { isHls, duration: Number(track.duration) || 0 })
+                    .then((real) => {
+                        if (isStalePlay() || this.currentTrack !== inspectedTrack) return;
+                        if (Object.keys(real).length === 0) return;
+                        let changed = false;
+                        if (real.sampleRate && real.sampleRate !== inspectedTrack.sampleRate) {
+                            inspectedTrack.sampleRate = real.sampleRate;
+                            changed = true;
+                        }
+                        if (real.bitDepth && real.bitDepth !== inspectedTrack.bitDepth) {
+                            inspectedTrack.bitDepth = real.bitDepth;
+                            changed = true;
+                        }
+                        if (real.bitrateKbps && real.bitrateKbps !== inspectedTrack.bitrateKbps) {
+                            inspectedTrack.bitrateKbps = real.bitrateKbps;
+                            changed = true;
+                        }
+                        if (!changed) return;
+                        const fullscreenQuality = document.getElementById('fullscreen-track-quality');
+                        if (fullscreenQuality) {
+                            fullscreenQuality.innerHTML = createFullscreenQualityHTML(inspectedTrack);
+                        }
+                    })
+                    .catch(() => {
+                        /* inspection is best-effort */
+                    });
+            }
 
             if (isAdaptive) {
                 if (!audioContextManager.isReady()) {
