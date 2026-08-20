@@ -241,7 +241,7 @@ export function createDiscordBridge() {
 
     async function handler(req, res, next) {
         const url = (req.url || '').split('?')[0];
-        if (url !== '/api/discord/status' && url !== '/api/discord/activity') {
+        if (url !== '/api/discord/status' && url !== '/api/discord/activity' && url !== '/api/discord/connect') {
             if (next) return next();
             return sendJson(res, 404, { error: 'Not found' });
         }
@@ -258,6 +258,18 @@ export function createDiscordBridge() {
 
         if (url === '/api/discord/status' && req.method === 'GET') {
             sendJson(res, 200, status());
+            return;
+        }
+
+        if (url === '/api/discord/connect' && req.method === 'POST') {
+            try {
+                const raw = await readBody(req);
+                const body = JSON.parse(raw.toString('utf8') || '{}');
+                await setActivity(body.clientId, null);
+                sendJson(res, 200, { ok: true });
+            } catch (error) {
+                sendJson(res, 503, { ok: false, error: error?.message || 'Bridge error' });
+            }
             return;
         }
 

@@ -151,6 +151,31 @@ export class DiscordPresence {
         return null;
     }
 
+    async _bridgeConnect(clientId) {
+        const seq = ++this.fetchSeq;
+        for (const base of BRIDGE_URLS) {
+            if (seq !== this.fetchSeq) return null;
+            try {
+                const res = await fetch(`${base}/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientId }),
+                    cache: 'no-store',
+                    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                });
+                if (res.status === 503) {
+                    return { base, connected: false };
+                }
+                if (res.ok) {
+                    return { base, connected: true };
+                }
+            } catch {
+                // try next bridge location
+            }
+        }
+        return null;
+    }
+
     async connect() {
         if (this.disposed) return;
         const clientId = discordPresenceStorage.getClientId();
@@ -163,7 +188,7 @@ export class DiscordPresence {
         if (this.connected) return;
 
         this.setStatus('connecting');
-        const found = await this._bridgeFetch('/status');
+        const found = await this._bridgeConnect(clientId);
         if (!found) {
             this.bridgeBase = null;
             this.connected = false;
@@ -175,7 +200,7 @@ export class DiscordPresence {
 
         this.bridgeBase = found.base;
         this.retryDelayIndex = 0;
-        if (found.data && found.data.connected) {
+        if (found.connected) {
             this.connected = true;
             this.setStatus('connected');
             this.flushPendingActivity();
