@@ -1,12 +1,10 @@
 import { discordPresenceStorage } from './storage.js';
 import { deriveTrackQuality, extractCodecFromMime, isLossyCodec, isLossyContainer, toPositiveInt } from './utils.js';
 
-const RPC_PORTS = [6463, 6464, 6465, 6466, 6467, 6468, 6469, 6470, 6471, 6472];
-const CONNECT_TIMEOUT_MS = 1500;
-const READY_TIMEOUT_MS = 2000;
-const AUTHORIZE_TIMEOUT_MS = 20000;
+const BRIDGE_URLS = ['/api/discord', 'http://127.0.0.1:37710/api/discord'];
+const FETCH_TIMEOUT_MS = 3000;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
-const RPC_SCOPE = 'rpc.activities.write';
+const POLL_INTERVAL_MS = 15000;
 
 const QUALITY_LABELS = {
     DOLBY_ATMOS: 'Dolby Atmos',
@@ -100,21 +98,19 @@ function resolveCoverUrl(track, api) {
 
 export class DiscordPresence {
     constructor() {
-        this.socket = null;
+        this.bridgeBase = null;
         this.enabled = false;
         this.disposed = false;
-        this.permanentlyBlocked = false;
         this.retryDelayIndex = 0;
         this.reconnectTimer = null;
-        this.authorized = false;
+        this.pollTimer = null;
         this.pendingActivity = null;
-        this.nonceHandlers = new Map();
         this.onStatusChange = null;
-        this.connectPromise = null;
         this.clientId = null;
         this.api = null;
         this.status = 'disabled';
-        this.socketOpen = false;
+        this.connected = false;
+        this.fetchSeq = 0;
     }
 
     setStatus(status) {
@@ -133,7 +129,26 @@ export class DiscordPresence {
     }
 
     isActive() {
-        return this.enabled && this.authorized && this.socketOpen;
+        return this.enabled && !!this.bridgeBase && this.connected;
+    }
+
+    async _bridgeFetch(path, options) {
+        const seq = ++this.fetchSeq;
+        for (const base of BRIDGE_URLS) {
+            if (seq !== this.fetchSeq) return null;
+            try {
+                const res = await fetch(`${base}${path}`, {
+                    ...options,
+                    cache: 'no-store',
+                    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                });
+                if (!res.ok) continue;
+                return { base, data: await res.json() };
+            } catch {
+                // try next bridge location
+            }
+        }
+        return null;
     }
 
     async connect() {
@@ -144,24 +159,48 @@ export class DiscordPresence {
             return;
         }
         this.enabled = true;
-        this.permanentlyBlocked = false;
         this.clientId = clientId;
-        if (this.socketOpen || (this.socket && this.socket.readyState === WebSocket.CONNECTING)) {
+        if (this.connected) return;
+
+        this.setStatus('connecting');
+        const found = await this._bridgeFetch('/status');
+        if (!found) {
+            this.bridgeBase = null;
+            this.connected = false;
+            this.setStatus('no-bridge');
+            this.scheduleReconnect();
+            this.startPolling();
             return;
         }
-        this.setStatus('connecting');
-        this.connectPromise = this._tryConnect().catch(() => {});
-        await this.connectPromise;
+
+        this.bridgeBase = found.base;
+        this.retryDelayIndex = 0;
+        if (found.data && found.data.connected) {
+            this.connected = true;
+            this.setStatus('connected');
+            this.flushPendingActivity();
+        } else {
+            this.connected = false;
+            this.setStatus('offline');
+            this.scheduleReconnect();
+        }
+        this.startPolling();
     }
 
     disconnect() {
         this.enabled = false;
-        this.clearReconnectTimer();
-        this.closeSocket();
-        this.authorized = false;
-        this.socketOpen = false;
+        this.connected = false;
+        this.bridgeBase = null;
         this.clientId = null;
+        this.clearReconnectTimer();
+        this.stopPolling();
         this.setStatus('disabled');
+    }
+
+    flushPendingActivity() {
+        if (this.isActive() && this.pendingActivity) {
+            this.sendActivity(this.pendingActivity);
+        }
     }
 
     setTrack(track) {
@@ -236,237 +275,81 @@ export class DiscordPresence {
             assets: Object.keys(activity.assets || {}).length ? activity.assets : undefined,
             secrets: activity.secrets,
         };
-        this.send({ cmd: 'SET_ACTIVITY', args: { pid: 0, activity: payload } }).catch(() => {});
+        return this._postActivity(payload).catch(() => {});
     }
 
     sendClear() {
-        this.send({ cmd: 'SET_ACTIVITY', args: { pid: 0, activity: null } }).catch(() => {});
+        return this._postActivity(null).catch(() => {});
     }
 
-    async send(payload) {
-        if (!this.socketOpen) return;
-        const nonce = crypto.randomUUID();
-        payload.nonce = nonce;
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.nonceHandlers.delete(nonce);
-                reject(new Error('Discord RPC command timed out'));
-            }, 10000);
-            this.nonceHandlers.set(nonce, (data) => {
-                clearTimeout(timeout);
-                if (data.evt === 'ERROR') {
-                    reject(new Error(`Discord RPC error: ${JSON.stringify(data.data?.error || data.data || data)}`));
-                } else {
-                    resolve(data.data);
-                }
+    async _postActivity(activity) {
+        if (!this.bridgeBase) return;
+        try {
+            const res = await fetch(`${this.bridgeBase}/activity`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId: this.clientId, activity }),
+                cache: 'no-store',
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             });
-            try {
-                this.socket.send(JSON.stringify(payload));
-            } catch (error) {
-                clearTimeout(timeout);
-                this.nonceHandlers.delete(nonce);
-                reject(error);
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                if (res.status === 503) {
+                    this.connected = false;
+                    this.setStatus('offline');
+                    this.scheduleReconnect();
+                }
+                throw new Error(body.error || `Bridge error ${res.status}`);
             }
-        });
+        } catch {
+            this.connected = false;
+            this.setStatus('offline');
+            this.scheduleReconnect();
+        }
     }
 
-    async _tryConnect() {
-        for (const port of RPC_PORTS) {
-            if (!this.enabled || this.disposed) return;
-            const socket = await this._openPort(port);
-            if (!socket) continue;
-            this.socket = socket;
-            this.socketOpen = true;
+    startPolling() {
+        if (this.pollTimer || !this.enabled || this.disposed) return;
+        this.pollTimer = setInterval(() => {
+            if (!this.enabled || this.disposed) {
+                this.stopPolling();
+                return;
+            }
+            this.poll().catch(() => {});
+        }, POLL_INTERVAL_MS);
+    }
+
+    stopPolling() {
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
+    }
+
+    async poll() {
+        if (!this.enabled || this.disposed) return;
+        const found = await this._bridgeFetch('/status');
+        if (!found) {
+            this.bridgeBase = null;
+            this.connected = false;
+            if (this.status !== 'no-bridge') {
+                this.setStatus('no-bridge');
+                this.scheduleReconnect();
+            }
+            return;
+        }
+        this.bridgeBase = found.base;
+        const wasConnected = this.connected;
+        this.connected = !!(found.data && found.data.connected);
+        if (this.connected && !wasConnected) {
             this.retryDelayIndex = 0;
-            this._wireSocket(socket);
-            try {
-                const ready = await this._waitForReady(socket);
-                if (!ready) {
-                    this.closeSocket();
-                    continue;
-                }
-                const auth = await this._authorize(socket);
-                if (!auth) {
-                    this.closeSocket();
-                    continue;
-                }
-                this.authorized = true;
-                this.setStatus('connected');
-                if (this.pendingActivity) {
-                    this.sendActivity(this.pendingActivity);
-                }
-                return;
-            } catch (error) {
-                if (error && error.permanent) {
-                    this.permanentlyBlocked = true;
-                    this.closeSocket();
-                    this.setStatus('blocked');
-                    return;
-                }
-                this.closeSocket();
-                if (!this.enabled) return;
-            }
+            this.setStatus('connected');
+            this.flushPendingActivity();
+        } else if (!this.connected && wasConnected) {
+            this.setStatus('offline');
+        } else if (!this.connected && this.status === 'connecting') {
+            this.setStatus('offline');
         }
-        if (this.enabled) {
-            this.scheduleReconnect();
-        }
-    }
-
-    _openPort(port) {
-        return new Promise((resolve) => {
-            let socket;
-            try {
-                socket = new WebSocket(
-                    `ws://127.0.0.1:${port}/?v=1&client_id=${encodeURIComponent(this.clientId)}&encoding=json`
-                );
-            } catch {
-                resolve(null);
-                return;
-            }
-            let settled = false;
-            const timeout = setTimeout(() => {
-                if (settled) return;
-                settled = true;
-                try {
-                    socket.close();
-                } catch {
-                    // ignore
-                }
-                resolve(null);
-            }, CONNECT_TIMEOUT_MS);
-            socket.onopen = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                resolve(socket);
-            };
-            socket.onerror = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                resolve(null);
-            };
-        });
-    }
-
-    _waitForReady(socket) {
-        return new Promise((resolve) => {
-            const handler = (event) => {
-                let data;
-                try {
-                    data = JSON.parse(event.data);
-                } catch {
-                    return;
-                }
-                if (data.cmd === 'DISPATCH' && data.evt === 'READY') {
-                    this._messageHandler = null;
-                    resolve(true);
-                }
-            };
-            this._messageHandler = handler;
-            setTimeout(() => {
-                if (this._messageHandler === handler) {
-                    this._messageHandler = null;
-                    resolve(false);
-                }
-            }, READY_TIMEOUT_MS);
-        });
-    }
-
-    _authorize(socket) {
-        return new Promise((resolve, reject) => {
-            let settled = false;
-            const finish = (result) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                if (result === true) {
-                    resolve(true);
-                } else if (result === 'permanent') {
-                    reject(
-                        Object.assign(new Error('Discord RPC authorization permanently failed'), { permanent: true })
-                    );
-                } else {
-                    resolve(false);
-                }
-            };
-            const timer = setTimeout(() => finish(false), AUTHORIZE_TIMEOUT_MS);
-            const nonce = crypto.randomUUID();
-            this.nonceHandlers.set(nonce, (data) => {
-                if (data.evt === 'ERROR') {
-                    const errorCode = data.data?.error?.code ?? data.data?.code;
-                    if (errorCode === 4001 || errorCode === 4002) {
-                        finish('permanent');
-                    } else {
-                        finish(false);
-                    }
-                    return;
-                }
-                if (data.data && typeof data.data === 'object') {
-                    finish(true);
-                }
-            });
-            try {
-                socket.send(
-                    JSON.stringify({
-                        cmd: 'AUTHORIZE',
-                        args: { client_id: this.clientId, scopes: [RPC_SCOPE] },
-                        nonce,
-                    })
-                );
-            } catch {
-                finish(false);
-            }
-        });
-    }
-
-    _wireSocket(socket) {
-        socket.onmessage = (event) => {
-            let data;
-            try {
-                data = JSON.parse(event.data);
-            } catch {
-                return;
-            }
-            if (this._messageHandler) {
-                this._messageHandler(event);
-            }
-            if (data.nonce && this.nonceHandlers.has(data.nonce)) {
-                const handler = this.nonceHandlers.get(data.nonce);
-                this.nonceHandlers.delete(data.nonce);
-                handler(data);
-            }
-        };
-        socket.onclose = (event) => {
-            if (this.socket !== socket) return;
-            this.socket = null;
-            this.socketOpen = false;
-            this.authorized = false;
-            if (this.disposed || !this.enabled) return;
-            if (event.code === 4001 || event.code === 4002 || event.code === 4004) {
-                this.permanentlyBlocked = true;
-                this.setStatus('blocked');
-                return;
-            }
-            this.scheduleReconnect();
-        };
-        socket.onerror = () => {
-            // handled via onclose
-        };
-    }
-
-    closeSocket() {
-        if (this.socket) {
-            try {
-                this.socket.onclose = null;
-                this.socket.close();
-            } catch {
-                // ignore
-            }
-            this.socket = null;
-        }
-        this.socketOpen = false;
-        this.authorized = false;
     }
 
     clearReconnectTimer() {
@@ -477,14 +360,13 @@ export class DiscordPresence {
     }
 
     scheduleReconnect() {
-        if (!this.enabled || this.disposed || this.permanentlyBlocked) return;
+        if (!this.enabled || this.disposed) return;
         const delay = RECONNECT_DELAYS_MS[this.retryDelayIndex] || RECONNECT_DELAYS_MS[RECONNECT_DELAYS_MS.length - 1];
         this.retryDelayIndex = Math.min(this.retryDelayIndex + 1, RECONNECT_DELAYS_MS.length - 1);
-        this.setStatus('offline');
         this.clearReconnectTimer();
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
-            if (this.enabled && !this.disposed && !this.permanentlyBlocked) {
+            if (this.enabled && !this.disposed) {
                 this.connect().catch(() => {});
             }
         }, delay);
@@ -493,6 +375,6 @@ export class DiscordPresence {
     destroy() {
         this.disposed = true;
         this.clearReconnectTimer();
-        this.closeSocket();
+        this.stopPolling();
     }
 }

@@ -5092,9 +5092,10 @@
                                     <div class="info">
                                         <span class="label">Setup</span>
                                         <span class="description" id="discord-rpc-hint"
-                                            >Create an application at the Discord Developer Portal and add your site's
-                                            origin (e.g. http://localhost:5173 or your deployed URL) to its "Rich
-                                            Presence" origins list so the local Discord client accepts this page.</span
+                                            >No origin whitelist needed. The app talks to a local bridge that speaks to
+                                            Discord Desktop's own IPC socket. In development the bridge runs inside 'npm
+                                            run dev'. For a deployed build, start it with 'npm run discord-bridge' and
+                                            keep Discord Desktop running.</span
                                         >
                                     </div>
                                 </div>

@@ -9,6 +9,7 @@
         "build:web": "vite build",
         "build": "vite build",
         "preview": "vite preview",
+        "discord-bridge": "node server/discord-bridge.js",
         "lint:js": "eslint .",
         "lint:css": "stylelint \"**/*.css\"",
         "lint:html": "htmlhint \"**/*.html\" --ignore=\"dist/**,legacy/**,node_modules/**\"",

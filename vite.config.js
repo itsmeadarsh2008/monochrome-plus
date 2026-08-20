@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { VitePWA } from 'vite-plugin-pwa';
 import authGatePlugin from './vite-plugin-auth-gate.js';
 import nodeFetch from './vite-plugin-proxy-fetch.js';
+import discordBridgePlugin from './vite-plugin-discord-bridge.js';
 
 const APP_REPO_URL = 'https://github.com/itsmeadarsh2008/monochrome-plus';
 const APP_REPO_API = 'https://api.github.com/repos/itsmeadarsh2008/monochrome-plus';
@@ -126,6 +127,7 @@ export default defineConfig(async () => {
         plugins: [
             nodeFetch(),
             authGatePlugin(),
+            discordBridgePlugin(),
             VitePWA({
                 registerType: 'prompt',
                 workbox: {

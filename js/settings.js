@@ -967,10 +967,10 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         'no-client-id': 'Add your Discord Application ID to enable Rich Presence',
         connecting: 'Connecting to Discord Desktop...',
         connected: 'Connected - showing your playback on Discord',
-        blocked: "Connection blocked - add this site's origin to your Discord Application and check the Application ID",
+        'no-bridge': "Bridge not found - run 'npm run dev' or 'npm run discord-bridge' to start it",
         offline: 'Discord Desktop not detected - retrying automatically',
         disabled:
-            'Show what you are listening to, with quality, on your Discord profile. Requires Discord Desktop and a Discord Application.',
+            'Show what you are listening to, with quality, on your Discord profile. Requires Discord Desktop, the local bridge, and a Discord Application.',
     };
 
     function updateDiscordUI() {
