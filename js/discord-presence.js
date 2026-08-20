@@ -238,14 +238,15 @@ export class DiscordPresence {
 
         const trackKey = `${title}\u0000${artist}\u0000${album}\u0000${quality || ''}`;
         const existing = this.pendingActivity;
+        const now = Date.now();
+        const durationMs =
+            track.duration && toPositiveInt(track.duration) ? toPositiveInt(track.duration) * 1000 : null;
 
         const activity = {
             type: 2,
             details: title,
             state: [artist, quality].filter(Boolean).join(' \u00b7 '),
-            timestamps: {
-                start: Date.now(),
-            },
+            timestamps: {},
             assets: {},
         };
         if (album) activity.assets.large_text = album;
@@ -253,19 +254,31 @@ export class DiscordPresence {
             activity.assets.large_image = coverUrl;
             if (album) activity.assets.small_text = album;
         }
-        if (track.duration && toPositiveInt(track.duration)) {
-            activity.secrets = { end: String(Date.now() + toPositiveInt(track.duration) * 1000) };
+
+        // Keep the original timestamps for updates of the same playing track
+        // (e.g. quality metadata arriving late), but restart the progress
+        // after a pause using the remaining time so the slider stays honest.
+        if (existing && existing._trackKey === trackKey && !existing._paused && existing.timestamps?.start) {
+            activity.timestamps.start = existing.timestamps.start;
+            if (existing.timestamps.end) {
+                activity.timestamps.end = existing.timestamps.end;
+            }
+        } else {
+            let remainingMs = durationMs;
+            if (existing && existing._trackKey === trackKey && existing._paused && existing._remainingMs) {
+                remainingMs = existing._remainingMs;
+            }
+            activity.timestamps.start = now;
+            if (durationMs !== null) {
+                activity.timestamps.end = now + remainingMs;
+            }
+        }
+        activity._trackKey = trackKey;
+        if (durationMs !== null && activity.timestamps.end) {
+            activity.secrets = { end: String(activity.timestamps.end) };
         }
 
         this.pendingActivity = activity;
-
-        // Keep the original start timestamp for updates of the same playing
-        // track (e.g. quality metadata arriving late), but restart the timer
-        // after a pause so Discord's elapsed counter stays honest.
-        if (existing && existing._trackKey === trackKey && !existing.timestamps?.end) {
-            activity.timestamps.start = existing.timestamps.start;
-        }
-        activity._trackKey = trackKey;
 
         if (this.isActive()) {
             this.sendActivity(activity);
@@ -274,10 +287,17 @@ export class DiscordPresence {
 
     setPaused() {
         if (!this.pendingActivity) return;
+        const now = Date.now();
+        const remainingMs =
+            this.pendingActivity.timestamps?.end && this.pendingActivity.timestamps.end > now
+                ? this.pendingActivity.timestamps.end - now
+                : null;
         this.pendingActivity = {
             ...this.pendingActivity,
             _trackKey: this.pendingActivity._trackKey,
-            timestamps: { end: Date.now() },
+            _paused: true,
+            _remainingMs: remainingMs,
+            timestamps: { ...this.pendingActivity.timestamps },
         };
         if (this.isActive()) {
             this.sendActivity(this.pendingActivity);
