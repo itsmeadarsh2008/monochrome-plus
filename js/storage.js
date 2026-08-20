@@ -250,6 +250,40 @@ export const lastFMStorage = {
     },
 };
 
+export const discordPresenceStorage = {
+    STORAGE_KEY: 'discord-rpc-enabled',
+    CLIENT_ID_KEY: 'discord-rpc-client-id',
+
+    isEnabled() {
+        try {
+            return localStorage.getItem(this.STORAGE_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    },
+
+    setEnabled(enabled) {
+        localStorage.setItem(this.STORAGE_KEY, enabled ? 'true' : 'false');
+    },
+
+    getClientId() {
+        try {
+            return (localStorage.getItem(this.CLIENT_ID_KEY) || '').trim();
+        } catch {
+            return '';
+        }
+    },
+
+    setClientId(clientId) {
+        const value = String(clientId || '').trim();
+        if (value) {
+            localStorage.setItem(this.CLIENT_ID_KEY, value);
+        } else {
+            localStorage.removeItem(this.CLIENT_ID_KEY);
+        }
+    },
+};
+
 export const nowPlayingSettings = {
     STORAGE_KEY: 'now-playing-mode',
     VALID_MODES: new Set(['cover', 'lyrics', 'album']),

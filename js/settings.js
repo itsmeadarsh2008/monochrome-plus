@@ -2,6 +2,7 @@
 import {
     themeManager,
     lastFMStorage,
+    discordPresenceStorage,
     nowPlayingSettings,
     lyricsSettings,
     backgroundSettings,
@@ -53,7 +54,7 @@ import { animationManager } from './animation-utils.js';
 import { responsiveManager } from './responsive-utils.js';
 import { HOME_COUNTRY_OPTIONS, getUserCountryCode, setUserCountryCode } from './api/home.js';
 
-export function initializeSettings(scrobbler, player, api, ui) {
+export function initializeSettings(scrobbler, player, api, ui, discord) {
     // Show the build commit so the deployed version can be matched to the repo
     const commitEl = document.getElementById('app-build-commit');
     if (commitEl) {
@@ -953,6 +954,67 @@ export function initializeSettings(scrobbler, player, api, ui) {
             hideCredentialAuth();
         });
     }
+
+    // ========================================
+    // Discord Rich Presence Settings
+    // ========================================
+    const discordToggle = document.getElementById('discord-rpc-toggle');
+    const discordClientIdSetting = document.getElementById('discord-rpc-client-id-setting');
+    const discordClientIdInput = document.getElementById('discord-rpc-client-id');
+    const discordStatusEl = document.getElementById('discord-rpc-status');
+
+    const DISCORD_STATUS_MESSAGES = {
+        'no-client-id': 'Add your Discord Application ID to enable Rich Presence',
+        connecting: 'Connecting to Discord Desktop...',
+        connected: 'Connected - showing your playback on Discord',
+        blocked: "Connection blocked - add this site's origin to your Discord Application and check the Application ID",
+        offline: 'Discord Desktop not detected - retrying automatically',
+        disabled:
+            'Show what you are listening to, with quality, on your Discord profile. Requires Discord Desktop and a Discord Application.',
+    };
+
+    function updateDiscordUI() {
+        const enabled = discordPresenceStorage.isEnabled();
+        discordToggle.checked = enabled;
+        discordClientIdSetting.style.display = enabled ? 'flex' : 'none';
+        discordClientIdInput.value = discordPresenceStorage.getClientId();
+        if (!enabled) {
+            discordStatusEl.textContent = DISCORD_STATUS_MESSAGES.disabled;
+        } else if (!discordPresenceStorage.getClientId()) {
+            discordStatusEl.textContent = DISCORD_STATUS_MESSAGES['no-client-id'];
+        }
+    }
+
+    if (discord) {
+        discord.onStatusChange = (status) => {
+            if (discordStatusEl && DISCORD_STATUS_MESSAGES[status]) {
+                discordStatusEl.textContent = DISCORD_STATUS_MESSAGES[status];
+            }
+        };
+    }
+
+    updateDiscordUI();
+
+    discordToggle?.addEventListener('change', () => {
+        const enabled = discordToggle.checked;
+        discordPresenceStorage.setEnabled(enabled);
+        updateDiscordUI();
+        if (enabled) {
+            if (discordPresenceStorage.getClientId() && discord) {
+                discord.connect().catch(() => {});
+            }
+        } else if (discord) {
+            discord.disconnect();
+        }
+    });
+
+    discordClientIdInput?.addEventListener('change', () => {
+        discordPresenceStorage.setClientId(discordClientIdInput.value);
+        updateDiscordUI();
+        if (discordPresenceStorage.isEnabled() && discordPresenceStorage.getClientId() && discord) {
+            discord.connect().catch(() => {});
+        }
+    });
 
     // ========================================
     // Global Scrobble Settings

@@ -1212,6 +1212,10 @@ export class Player {
                     if (fullscreenQuality) {
                         fullscreenQuality.innerHTML = createFullscreenQualityHTML(track);
                     }
+
+                    // Notify listeners (e.g. Discord Rich Presence) that the
+                    // track's real quality metadata is now available.
+                    document.dispatchEvent(new CustomEvent('monochrome:track-quality-updated'));
                 }
             } else if (track.isLocal && track.file) {
                 streamUrl = URL.createObjectURL(track.file);
@@ -1268,7 +1272,8 @@ export class Player {
             let isCrossOriginRegularFile = false;
             if (!isAdaptive && typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
                 try {
-                    isCrossOriginRegularFile = new URL(streamUrl, window.location.href).origin !== window.location.origin;
+                    isCrossOriginRegularFile =
+                        new URL(streamUrl, window.location.href).origin !== window.location.origin;
                 } catch {
                     /* Keep native playback for malformed/non-URL sources. */
                 }
@@ -1303,6 +1308,7 @@ export class Player {
                         if (fullscreenQuality) {
                             fullscreenQuality.innerHTML = createFullscreenQualityHTML(inspectedTrack);
                         }
+                        document.dispatchEvent(new CustomEvent('monochrome:track-quality-updated'));
                     })
                     .catch(() => {
                         /* inspection is best-effort */

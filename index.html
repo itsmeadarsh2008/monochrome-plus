@@ -5061,6 +5061,47 @@
                             <div class="settings-group">
                                 <div class="setting-item">
                                     <div class="info">
+                                        <span class="label">Discord Rich Presence</span>
+                                        <span class="description" id="discord-rpc-status"
+                                            >Show what you are listening to, with quality, on your Discord profile.
+                                            Requires Discord Desktop and a Discord Application.</span
+                                        >
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="discord-rpc-toggle" />
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="setting-item" id="discord-rpc-client-id-setting" style="display: none">
+                                    <div class="info">
+                                        <span class="label">Application ID</span>
+                                        <span class="description"
+                                            >Discord Developer Portal, your application, General Information</span
+                                        >
+                                    </div>
+                                    <input
+                                        type="text"
+                                        id="discord-rpc-client-id"
+                                        placeholder="0000000000000000000"
+                                        class="template-input"
+                                        style="width: 250px"
+                                    />
+                                </div>
+                                <div class="setting-item" style="padding: 0.5rem 0; border: none">
+                                    <div class="info">
+                                        <span class="label">Setup</span>
+                                        <span class="description" id="discord-rpc-hint"
+                                            >Create an application at the Discord Developer Portal and add your site's
+                                            origin (e.g. http://localhost:3000 or your deployed URL) to its "Rich
+                                            Presence" origins list so the local Discord client accepts this page.</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="settings-group">
+                                <div class="setting-item">
+                                    <div class="info">
                                         <span class="label">Maloja Scrobbling</span>
                                         <span class="description">Submit listens to a self-hosted Maloja server</span>
                                     </div>

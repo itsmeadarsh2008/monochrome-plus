@@ -16,7 +16,13 @@ import {
     copyTextToClipboard,
     escapeHtml,
 } from './utils.js';
-import { lastFMStorage, libreFmSettings, waveformSettings, hifiVisualSettings } from './storage.js';
+import {
+    lastFMStorage,
+    libreFmSettings,
+    waveformSettings,
+    hifiVisualSettings,
+    discordPresenceStorage,
+} from './storage.js';
 import { showNotification, downloadTrackWithMetadata, downloadAlbumAsZip, downloadPlaylistAsZip } from './downloads.js';
 import { downloadQualitySettings } from './storage.js';
 import { updateTabTitle, navigate } from './router.js';
@@ -25,10 +31,11 @@ import { syncManager } from './accounts/appwrite-sync.js';
 import { authManager } from './accounts/auth.js';
 import { waveformGenerator } from './waveform.js';
 import { audioContextManager } from './audio-context.js';
+import { DiscordPresence } from './discord-presence.js';
 
 let currentTrackIdForWaveform = null;
 
-export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
+export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, discord) {
     const playPauseBtn = document.querySelector('.now-playing-bar .play-pause-btn');
     const nextBtn = document.getElementById('next-btn');
     const prevBtn = document.getElementById('prev-btn');
@@ -216,6 +223,29 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         repeatBtn.title = 'Repeat';
     }
 
+    const updateDiscordPresence = () => {
+        if (!discord || !discordPresenceStorage.isEnabled()) return;
+        if (player.currentTrack) {
+            discord.setTrack(player.currentTrack);
+        }
+    };
+
+    const clearDiscordPresenceOnQueueEnd = () => {
+        if (!discord) return;
+        const queue = player.shuffleActive ? player.shuffledQueue : player.queue;
+        const isLastTrack = player.currentQueueIndex >= (Array.isArray(queue) ? queue.length - 1 : -1);
+        const willStop = isLastTrack && player.repeatMode !== REPEAT_MODE.ALL && player.repeatMode !== REPEAT_MODE.ONE;
+        if (willStop) {
+            discord.clear();
+        }
+    };
+
+    if (discord && discordPresenceStorage.isEnabled()) {
+        discord.connect().catch((error) => {
+            console.info('[Discord] Rich Presence unavailable:', error);
+        });
+    }
+
     audioPlayer.addEventListener('play', () => {
         // Initialize audio context manager for EQ (only once)
         if (!audioContextManager.isReady()) {
@@ -237,6 +267,8 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
             });
             lastStatusHeartbeatAt = Date.now();
             statusClearedForInactivity = false;
+
+            updateDiscordPresence();
 
             // Mark play candidate; commit to history only after enough playback progress.
             historyCandidateTrackKey = getHistoryTrackKey(player.currentTrack);
@@ -264,6 +296,10 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         statusClearedForInactivity = false;
         lastStatusHeartbeatAt = 0;
 
+        if (discord) {
+            discord.setPaused();
+        }
+
         syncMiniPlayPauseIcon();
         player.updateMediaSessionPlaybackState();
         player.updateMediaSessionPositionState();
@@ -273,7 +309,18 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui) {
         syncManager.clearPlaybackStatus();
         statusClearedForInactivity = false;
         lastStatusHeartbeatAt = 0;
+        clearDiscordPresenceOnQueueEnd();
         syncMiniPlayPauseIcon();
+    });
+
+    document.addEventListener('monochrome:track-quality-updated', () => {
+        updateDiscordPresence();
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if (discord) {
+            discord.clear();
+        }
     });
 
     audioPlayer.addEventListener('timeupdate', () => {

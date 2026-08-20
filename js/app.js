@@ -18,6 +18,7 @@ import { MultiScrobbler } from './multi-scrobbler.js';
 import { LyricsManager, openLyricsPanel, clearLyricsPanelSync } from './lyrics.js';
 import { createRouter, updateTabTitle, navigate } from './router.js';
 import { initializePlayerEvents, initializeTrackInteractions, handleTrackAction } from './events.js';
+import { DiscordPresence } from './discord-presence.js';
 import { initializeUIInteractions } from './ui-interactions.js';
 import { debounce, SVG_PLAY_MINI, getShareUrl, shareOrCopy } from './utils.js';
 import { SearchEngine } from './search-engine.js';
@@ -654,6 +655,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ui = new UIRenderer(api, player);
     const scrobbler = new MultiScrobbler();
     const lyricsManager = new LyricsManager(api);
+    const discord = new DiscordPresence();
+    discord.setApi(api);
 
     // Check browser support for local files
     const selectLocalBtn = document.getElementById('select-local-folder-btn');
@@ -686,7 +689,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Load settings module and initialize
     const { initializeSettings } = await loadSettingsModule();
-    initializeSettings(scrobbler, player, api, ui);
+    initializeSettings(scrobbler, player, api, ui, discord);
 
     // Track sidebar navigation clicks
     document.querySelectorAll('.sidebar-nav a').forEach((link) => {
@@ -698,7 +701,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    initializePlayerEvents(player, audioPlayer, scrobbler, ui);
+    initializePlayerEvents(player, audioPlayer, scrobbler, ui, discord);
     initializeTrackInteractions(
         player,
         api,
