@@ -995,6 +995,10 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
 
     updateDiscordUI();
 
+    if (discordPresenceStorage.isEnabled() && discordPresenceStorage.getClientId() && discord) {
+        discord.connect().catch(() => {});
+    }
+
     discordToggle?.addEventListener('change', () => {
         const enabled = discordToggle.checked;
         discordPresenceStorage.setEnabled(enabled);
