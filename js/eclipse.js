@@ -825,20 +825,29 @@ export class EclipseAPI {
 
     async searchTracks(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.tracks.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+            ? Math.max(0, Number(options.limit))
+            : null;
+        const items = limit == null ? data.tracks : data.tracks.slice(0, limit);
+        return { items, limit, offset: 0, totalNumberOfItems: data.tracks.length };
     }
 
     async searchAlbums(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.albums.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+            ? Math.max(0, Number(options.limit))
+            : null;
+        const items = limit == null ? data.albums : data.albums.slice(0, limit);
+        return { items, limit, offset: 0, totalNumberOfItems: data.albums.length };
     }
 
     async searchArtists(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.artists.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+            ? Math.max(0, Number(options.limit))
+            : null;
+        const items = limit == null ? data.artists : data.artists.slice(0, limit);
+        return { items, limit, offset: 0, totalNumberOfItems: data.artists.length };
     }
 
     /**
@@ -873,8 +882,11 @@ export class EclipseAPI {
 
     async searchPlaylists(query, options = {}) {
         const data = await this._search(query, options);
-        const items = data.playlists.slice(0, options.limit || 30);
-        return { items, limit: options.limit || 30, offset: 0, totalNumberOfItems: items.length };
+        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+            ? Math.max(0, Number(options.limit))
+            : null;
+        const items = limit == null ? data.playlists : data.playlists.slice(0, limit);
+        return { items, limit, offset: 0, totalNumberOfItems: data.playlists.length };
     }
 
     // ---- mappers --------------------------------------------------------

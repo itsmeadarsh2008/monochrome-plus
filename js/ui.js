@@ -6812,9 +6812,6 @@ export class UIRenderer {
         const allPlaylistsContainer = document.getElementById('search-all-playlists-container');
         const allUsersContainer = document.getElementById('search-all-users-container');
 
-        const allTabTrackLimit =
-            window.innerWidth >= 1400 ? 12 : window.innerWidth >= 1024 ? 10 : window.innerWidth >= 720 ? 8 : 6;
-
         // ── Top Result card ─────────────────────────────────────────
         if (layoutEl && topHitContent) {
             if (tracks === undefined && artists === undefined && albums === undefined) {
@@ -6902,7 +6899,7 @@ export class UIRenderer {
 
                     // Songs beside the top hit
                     if (allTracksContainer) {
-                        this.renderListWithTracks(allTracksContainer, tracks.slice(0, allTabTrackLimit), true);
+                        this.renderListWithTracks(allTracksContainer, tracks, true);
                     }
                 } else {
                     layoutEl.style.display = 'none';

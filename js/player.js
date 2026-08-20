@@ -1265,6 +1265,14 @@ export class Player {
                 (streamInfo && String(streamInfo.mediaType || '').toUpperCase() === 'HLS') ||
                 (streamInfo && /mpegurl|apple\.mpegurl/i.test(String(streamInfo.mimeType || '')));
             const isAdaptive = isDash || isHls;
+            let isCrossOriginRegularFile = false;
+            if (!isAdaptive && typeof streamUrl === 'string' && !streamUrl.startsWith('blob:')) {
+                try {
+                    isCrossOriginRegularFile = new URL(streamUrl, window.location.href).origin !== window.location.origin;
+                } catch {
+                    /* Keep native playback for malformed/non-URL sources. */
+                }
+            }
 
             // Ground truth from the media files themselves: the addon's quality
             // label is text that can be missing, vague or wrong (it carries no
@@ -1391,8 +1399,10 @@ export class Player {
                 }
             } else {
                 // Use the native audio element + Web Audio graph for regular
-                // files. HLS/DASH still use their manifest engines above, but
-                // the decoded output shares the same native graph.
+                // same-origin files. Cross-origin files use Howler's HTML5
+                // element directly: MediaElementSource can legally report
+                // playback while outputting silence when the CDN omits CORS.
+                // HLS/DASH still use their manifest engines above.
                 if (this.shakaInitialized && this.shakaPlayer) {
                     await this.shakaPlayer.unload();
                     this.shakaInitialized = false;
@@ -1402,7 +1412,11 @@ export class Player {
                     this.dashPlayer.reset();
                     this.dashInitialized = false;
                 }
-                await this.loadWithNativeAudio(streamUrl, startTime);
+                if (isCrossOriginRegularFile) {
+                    await this.loadWithHowler(streamUrl, startTime);
+                } else {
+                    await this.loadWithNativeAudio(streamUrl, startTime);
+                }
             }
 
             // Post-playback tasks
