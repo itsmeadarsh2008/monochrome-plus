@@ -253,6 +253,7 @@ export const lastFMStorage = {
 export const discordPresenceStorage = {
     STORAGE_KEY: 'discord-rpc-enabled',
     CLIENT_ID_KEY: 'discord-rpc-client-id',
+    DEFAULT_CLIENT_ID: '1466351059843809282',
 
     isEnabled() {
         try {
@@ -268,9 +269,9 @@ export const discordPresenceStorage = {
 
     getClientId() {
         try {
-            return (localStorage.getItem(this.CLIENT_ID_KEY) || '').trim();
+            return (localStorage.getItem(this.CLIENT_ID_KEY) || this.DEFAULT_CLIENT_ID).trim();
         } catch {
-            return '';
+            return this.DEFAULT_CLIENT_ID;
         }
     },
 
