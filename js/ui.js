@@ -3799,10 +3799,82 @@ export class UIRenderer {
                     if (id) this.updateLikeState(el, 'playlist', id);
                 }
             });
+            // Addon playlists often carry no cover in search results — fetch the
+            // detail (which returns tracks with covers) and render a collage.
+            this._upgradePlaylistCardCovers(container, normalized);
             return true;
         }
 
         return false;
+    }
+
+    _upgradePlaylistCardCovers(container, playlists) {
+        if (!container) return;
+        const cache = this._playlistCoverCache || (this._playlistCoverCache = new Map());
+
+        const applyCollage = (card, covers) => {
+            if (!covers || !covers.length) return;
+            const artEl = card.querySelector('.album-card__art');
+            if (!artEl) return;
+            const img = artEl.querySelector('img');
+            const imgs = covers
+                .slice(0, 4)
+                .map(
+                    (c) =>
+                        `<img src="${this.api.getCoverUrl(c)}" alt="" loading="lazy" onerror="window.handleCoverImageFallback(this)">`
+                )
+                .join('');
+            const collage = document.createElement('div');
+            collage.className = `card-image card-collage ${covers.length < 4 ? 'items-' + covers.length : ''}`;
+            collage.innerHTML = imgs;
+            if (img) img.replaceWith(collage);
+            else artEl.appendChild(collage);
+        };
+
+        (playlists || []).slice(0, 12).forEach((playlist) => {
+            const id = playlist.uuid || playlist.id;
+            if (!id) return;
+            const hasArt = Boolean(
+                playlist.squareImage ||
+                playlist.image ||
+                playlist.picture ||
+                playlist.cover ||
+                playlist.artworkURL ||
+                playlist.artworkUrl ||
+                playlist.artwork ||
+                playlist.thumbnail ||
+                (Array.isArray(playlist.images) && playlist.images.length)
+            );
+            if (hasArt) return;
+
+            const card = container.querySelector(`[data-playlist-id="${id}"]`);
+            if (!card) return;
+
+            if (cache.has(id)) {
+                applyCollage(card, cache.get(id));
+                return;
+            }
+
+            this.api
+                .getPlaylist(id)
+                .then(({ tracks }) => {
+                    const covers = [];
+                    const seen = new Set();
+                    for (const t of tracks || []) {
+                        const c = t?.album?.cover || t?.cover;
+                        if (c && !seen.has(c)) {
+                            seen.add(c);
+                            covers.push(c);
+                            if (covers.length >= 4) break;
+                        }
+                    }
+                    cache.set(id, covers);
+                    applyCollage(card, covers);
+                })
+                .catch(() => {
+                    cache.set(id, []);
+                });
+        });
     }
 
     _renderDiscoveryTrackList(containerId, items) {

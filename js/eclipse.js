@@ -966,6 +966,7 @@ export class EclipseAPI {
             p.pictureURL ||
             p.thumbnailURL ||
             (Array.isArray(p.images) ? p.images[0]?.url || p.images[0] : null) ||
+            (Array.isArray(p.image_rectangle) ? p.image_rectangle[0]?.url || p.image_rectangle[0] : null) ||
             p.images?.LARGE?.url ||
             p.images?.MEDIUM?.url ||
             p.images?.SMALL?.url ||
@@ -1245,6 +1246,7 @@ export class EclipseAPI {
             data.pictureURL ||
             data.thumbnailURL ||
             (Array.isArray(data.images) ? data.images[0]?.url || data.images[0] : null) ||
+            (Array.isArray(data.image_rectangle) ? data.image_rectangle[0]?.url || data.image_rectangle[0] : null) ||
             data.images?.LARGE?.url ||
             data.images?.MEDIUM?.url ||
             data.images?.SMALL?.url ||
