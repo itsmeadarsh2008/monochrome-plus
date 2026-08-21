@@ -825,27 +825,30 @@ export class EclipseAPI {
 
     async searchTracks(query, options = {}) {
         const data = await this._search(query, options);
-        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
-            ? Math.max(0, Number(options.limit))
-            : null;
+        const limit =
+            options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+                ? Math.max(0, Number(options.limit))
+                : null;
         const items = limit == null ? data.tracks : data.tracks.slice(0, limit);
         return { items, limit, offset: 0, totalNumberOfItems: data.tracks.length };
     }
 
     async searchAlbums(query, options = {}) {
         const data = await this._search(query, options);
-        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
-            ? Math.max(0, Number(options.limit))
-            : null;
+        const limit =
+            options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+                ? Math.max(0, Number(options.limit))
+                : null;
         const items = limit == null ? data.albums : data.albums.slice(0, limit);
         return { items, limit, offset: 0, totalNumberOfItems: data.albums.length };
     }
 
     async searchArtists(query, options = {}) {
         const data = await this._search(query, options);
-        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
-            ? Math.max(0, Number(options.limit))
-            : null;
+        const limit =
+            options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+                ? Math.max(0, Number(options.limit))
+                : null;
         const items = limit == null ? data.artists : data.artists.slice(0, limit);
         return { items, limit, offset: 0, totalNumberOfItems: data.artists.length };
     }
@@ -882,9 +885,10 @@ export class EclipseAPI {
 
     async searchPlaylists(query, options = {}) {
         const data = await this._search(query, options);
-        const limit = options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
-            ? Math.max(0, Number(options.limit))
-            : null;
+        const limit =
+            options.limit != null && options.limit !== '' && Number.isFinite(Number(options.limit))
+                ? Math.max(0, Number(options.limit))
+                : null;
         const items = limit == null ? data.playlists : data.playlists.slice(0, limit);
         return { items, limit, offset: 0, totalNumberOfItems: data.playlists.length };
     }
@@ -949,15 +953,33 @@ export class EclipseAPI {
     }
 
     mapSearchPlaylist(p) {
+        const artwork =
+            p.artworkURL ||
+            p.artworkUrl ||
+            p.artwork ||
+            p.cover ||
+            p.image ||
+            p.picture ||
+            p.thumbnail ||
+            p.coverUrl ||
+            p.imageUrl ||
+            p.pictureURL ||
+            p.thumbnailURL ||
+            (Array.isArray(p.images) ? p.images[0]?.url || p.images[0] : null) ||
+            p.images?.LARGE?.url ||
+            p.images?.MEDIUM?.url ||
+            p.images?.SMALL?.url ||
+            null;
+        const count = p.trackCount ?? p.numberOfTracks ?? p.totalTracks ?? p.track_count ?? p.count ?? 0;
         return {
-            uuid: p.id,
-            id: p.id,
-            title: p.title,
-            user: { name: p.creator || '' },
-            squareImage: p.artworkURL,
-            image: p.artworkURL,
-            numberOfTracks: p.trackCount,
-            description: '',
+            uuid: p.id ?? p.uuid,
+            id: p.id ?? p.uuid,
+            title: p.title ?? p.name ?? '',
+            user: { name: p.creator || p.user?.name || '' },
+            squareImage: artwork,
+            image: artwork,
+            numberOfTracks: Number(count) || 0,
+            description: p.description || '',
         };
     }
 
@@ -1210,18 +1232,55 @@ export class EclipseAPI {
 
     async getPlaylist(id) {
         const data = await this._request(`playlist/${id}`);
+        const artwork =
+            data.artworkURL ||
+            data.artworkUrl ||
+            data.artwork ||
+            data.cover ||
+            data.image ||
+            data.picture ||
+            data.thumbnail ||
+            data.coverUrl ||
+            data.imageUrl ||
+            data.pictureURL ||
+            data.thumbnailURL ||
+            (Array.isArray(data.images) ? data.images[0]?.url || data.images[0] : null) ||
+            data.images?.LARGE?.url ||
+            data.images?.MEDIUM?.url ||
+            data.images?.SMALL?.url ||
+            null;
+        const count =
+            data.trackCount ??
+            data.numberOfTracks ??
+            data.totalTracks ??
+            data.track_count ??
+            data.count ??
+            (Array.isArray(data.tracks) ? data.tracks.length : 0) ??
+            (Array.isArray(data.items) ? data.items.length : 0) ??
+            (Array.isArray(data.songs) ? data.songs.length : 0) ??
+            0;
         const playlist = {
-            uuid: data.id,
-            id: data.id,
-            title: data.title,
-            user: { name: data.creator || '' },
-            squareImage: data.artworkURL,
-            image: data.artworkURL,
-            numberOfTracks: data.trackCount,
+            uuid: data.id ?? data.uuid,
+            id: data.id ?? data.uuid,
+            title: data.title ?? data.name ?? '',
+            user: { name: data.creator || data.user?.name || '' },
+            squareImage: artwork,
+            image: artwork,
+            numberOfTracks: Number(count) || 0,
             description: data.description || '',
         };
-        const tracks = (data.tracks || []).map((t) =>
-            this.mapDetailTrack(t, { id: '', title: playlist.title, cover: data.artworkURL })
+        let rawTracks = data.tracks || data.items || data.songs || data.track || [];
+        if (rawTracks && typeof rawTracks === 'object' && !Array.isArray(rawTracks)) {
+            if (Array.isArray(rawTracks.items)) rawTracks = rawTracks.items;
+            else if (Array.isArray(rawTracks.data)) rawTracks = rawTracks.data;
+            else rawTracks = [];
+        }
+        // Unwrap pagination wrappers where tracks are { item: track } or { track: track }
+        if (Array.isArray(rawTracks) && rawTracks.length && rawTracks[0]?.item) {
+            rawTracks = rawTracks.map((entry) => entry.item || entry.track || entry);
+        }
+        const tracks = (Array.isArray(rawTracks) ? rawTracks : []).map((t) =>
+            this.mapDetailTrack(t, { id: '', title: playlist.title, cover: artwork })
         );
         return { playlist, tracks };
     }

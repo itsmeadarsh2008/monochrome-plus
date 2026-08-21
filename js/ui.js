@@ -82,28 +82,6 @@ const deriveAlbumsFromTracks = (tracks) => {
     return Array.from(albumMap.values());
 };
 
-const BILLBOARD_JSON_BASE_URL = 'https://raw.githubusercontent.com/KoreanThinker/billboard-json/main';
-const BILLBOARD_CHARTS = Object.freeze({
-    hot100: { slug: 'billboard-hot-100', label: 'Hot 100' },
-    global200: { slug: 'billboard-global-200', label: 'Global 200' },
-    billboard200: { slug: 'billboard-200', label: 'Billboard 200' },
-    artist100: { slug: 'billboard-artist-100', label: 'Artist 100' },
-});
-
-const BILLBOARD_REGIONAL_BY_COUNTRY = Object.freeze({
-    US: { slug: 'billboard-global-excl-us', label: 'Global Excl. US' },
-    GB: { slug: 'official-uk-songs', label: 'Official UK Songs' },
-    CA: { slug: 'canadian-hot-100', label: 'Canadian Hot 100' },
-    AU: { slug: 'australia-songs-hotw', label: 'Australia Songs HOTW' },
-    IN: { slug: 'india-songs-hotw', label: 'India Songs HOTW' },
-    KR: { slug: 'billboard-korea-hot-100', label: 'Korea Hot 100' },
-    JP: { slug: 'japan-hot-100', label: 'Japan Hot 100' },
-    DE: { slug: 'germany-songs-hotw', label: 'Germany Songs HOTW' },
-    FR: { slug: 'france-songs-hotw', label: 'France Songs HOTW' },
-    BR: { slug: 'billboard-brasil-hot-100', label: 'Brasil Hot 100' },
-    MX: { slug: 'mexico-songs-hotw', label: 'Mexico Songs HOTW' },
-});
-
 fontSettings.applyFont();
 fontSettings.applyFontSize();
 
@@ -779,7 +757,15 @@ export class UIRenderer {
             playlist.image ||
             playlist.picture ||
             playlist.cover ||
+            playlist.artworkURL ||
+            playlist.artworkUrl ||
+            playlist.artwork ||
+            playlist.thumbnail ||
+            playlist.coverUrl ||
             playlist.imageUrl ||
+            playlist.pictureURL ||
+            playlist.thumbnailURL ||
+            (Array.isArray(playlist.images) ? playlist.images[0]?.url || playlist.images[0] : null) ||
             playlist.images?.LARGE?.url ||
             playlist.images?.MEDIUM?.url ||
             playlist.images?.SMALL?.url ||
@@ -3645,9 +3631,6 @@ export class UIRenderer {
 
         const welcomeEl = document.getElementById('home-welcome');
         const contentEl = document.getElementById('home-content');
-        const editorsPicksSectionEmpty = document.getElementById('home-editors-picks-section-empty');
-        const editorsPicksSection = document.getElementById('home-editors-picks-section');
-
         // Set time-based greeting (24 unique hourly variants)
         const hour = new Date().getHours();
         const greetingByHour = [
@@ -3698,22 +3681,8 @@ export class UIRenderer {
 
         const hasActivity = history.length > 0 || favorites.length > 0 || playlists.length > 0;
 
-        // Handle Billboard charts visibility based on settings
-        if (!homePageSettings.shouldShowEditorsPicks()) {
-            if (editorsPicksSectionEmpty) editorsPicksSectionEmpty.style.display = 'none';
-            if (editorsPicksSection) editorsPicksSection.style.display = 'none';
-        } else {
-            // Show empty-state section at top when no activity, hide the bottom one
-            if (editorsPicksSectionEmpty) editorsPicksSectionEmpty.style.display = hasActivity ? 'none' : '';
-            // Show bottom section when has activity
-            if (editorsPicksSection) editorsPicksSection.style.display = hasActivity ? '' : 'none';
-        }
-
         // Clear discovery cache so all home rails refresh each time home is entered.
         this._homeDiscoveryCache = null;
-
-        // Render Billboard charts in the visible container.
-        this.renderHomeBillboard(false, hasActivity ? 'default' : 'empty');
 
         if (!hasActivity) {
             if (welcomeEl) welcomeEl.style.display = 'block';
@@ -5365,642 +5334,6 @@ export class UIRenderer {
             actionButtonsHTML: '',
             isCompact,
         });
-    }
-
-    _getBillboardRegionalChart() {
-        const country = String(localStorage.getItem('userCountryCode') || 'US')
-            .trim()
-            .toUpperCase();
-        return BILLBOARD_REGIONAL_BY_COUNTRY[country] || { slug: 'billboard-global-excl-us', label: 'Global Excl. US' };
-    }
-
-    _getBillboardChartUrl(slug) {
-        return `${BILLBOARD_JSON_BASE_URL}/${slug}/recent.json`;
-    }
-
-    async _fetchBillboardChart(slug, limit = 20) {
-        const response = await fetch(this._getBillboardChartUrl(slug), { cache: 'no-store' });
-        if (!response.ok) {
-            throw new Error(`Billboard chart fetch failed (${slug}): ${response.status}`);
-        }
-
-        const payload = await response.json();
-        const items = Array.isArray(payload?.data) ? payload.data : [];
-
-        return items.slice(0, limit).map((entry, index) => ({
-            ...entry,
-            rank: Number(entry?.rank) || index + 1,
-            name: String(entry?.name || '').trim(),
-            artist: String(entry?.artist || '').trim(),
-            image: String(entry?.image || '').trim(),
-            peak_rank: Number(entry?.peak_rank) || null,
-            weeks_on_chart: Number(entry?.weeks_on_chart) || null,
-            last_week_rank: Number(entry?.last_week_rank) || null,
-        }));
-    }
-
-    _normalizeBillboardText(value) {
-        return String(value || '')
-            .toLowerCase()
-            .replace(/\(.*?\)/g, ' ')
-            .replace(/[^a-z0-9\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-
-    _stripBracketedTitle(value) {
-        return String(value || '')
-            .replace(/\([^)]*\)/g, ' ')
-            .replace(/\[[^\]]*\]/g, ' ')
-            .replace(/\{[^}]*\}/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-
-    _containsVariantKeyword(value) {
-        const text = this._normalizeBillboardText(value);
-        if (!text) return false;
-        return /\b(karaoke|instrumental|cover|tribute|nightcore|slowed|speed up|sped up|reverb|remix|8d|acoustic)\b/.test(
-            text
-        );
-    }
-
-    _tokenizeBillboardText(value) {
-        const stopWords = new Set(['with', 'feat', 'featuring', 'ft', 'and', 'x', 'the']);
-        return this._normalizeBillboardText(value)
-            .split(' ')
-            .map((token) => token.trim())
-            .filter((token) => token && !stopWords.has(token));
-    }
-
-    _tokenOverlapRatio(aTokens = [], bTokens = []) {
-        if (!aTokens.length || !bTokens.length) return 0;
-        const bSet = new Set(bTokens);
-        let overlap = 0;
-        aTokens.forEach((token) => {
-            if (bSet.has(token)) overlap += 1;
-        });
-        return overlap / Math.max(aTokens.length, bTokens.length);
-    }
-
-    _selectBestBillboardTrackCandidate(entry, candidates = []) {
-        if (!Array.isArray(candidates) || !candidates.length) {
-            return { track: null, score: -1, confidence: 0 };
-        }
-
-        const scored = candidates
-            .map((candidate) => ({
-                candidate,
-                score: this._scoreBillboardTrackMatch(entry, candidate),
-            }))
-            .sort((a, b) => b.score - a.score);
-
-        const best = scored[0] || null;
-        const second = scored[1] || null;
-        const confidence = best ? best.score - (second?.score ?? -1) : 0;
-
-        return {
-            track: best?.candidate || null,
-            score: best?.score ?? -1,
-            confidence,
-        };
-    }
-
-    _scoreBillboardTrackMatch(entry, track) {
-        if (!track) return -1;
-
-        const entryTitle = this._normalizeBillboardText(entry?.name);
-        const entryArtist = this._normalizeBillboardText(entry?.artist);
-        const trackTitle = this._normalizeBillboardText(getTrackTitle(track));
-        const trackArtist = this._normalizeBillboardText(getTrackArtists(track));
-        const trackArtistRaw = getTrackArtists(track);
-
-        if (!entryTitle || !trackTitle) return -1;
-
-        const entryTitleTokens = this._tokenizeBillboardText(entryTitle);
-        const trackTitleTokens = this._tokenizeBillboardText(trackTitle);
-        const entryArtistTokens = this._tokenizeBillboardText(entryArtist);
-        const trackArtistTokens = this._tokenizeBillboardText(trackArtist);
-        const titleOverlap = this._tokenOverlapRatio(entryTitleTokens, trackTitleTokens);
-        const artistOverlap = this._tokenOverlapRatio(entryArtistTokens, trackArtistTokens);
-
-        let score = 0;
-        if (entryTitle === trackTitle) score += 9;
-        if (trackTitle.includes(entryTitle) || entryTitle.includes(trackTitle)) score += 4;
-        score += titleOverlap * 8;
-
-        if (entryArtist && trackArtist && (trackArtist.includes(entryArtist) || entryArtist.includes(trackArtist))) {
-            score += 4;
-        }
-        score += artistOverlap * 10;
-
-        // If title looks close but artist does not overlap at all, treat as likely wrong release/cover.
-        if (entryArtistTokens.length && artistOverlap === 0) {
-            score -= 6;
-        }
-
-        // Penalize common wrong variants unless the chart entry itself contains that keyword.
-        const entryHasVariant = this._containsVariantKeyword(entry?.name);
-        const trackHasVariant = this._containsVariantKeyword(getTrackTitle(track));
-        if (!entryHasVariant && trackHasVariant) {
-            score -= 10;
-        }
-
-        // Extra penalty for karaoke/tribute style artist identities.
-        if (!entryHasVariant && this._containsVariantKeyword(trackArtistRaw)) {
-            score -= 10;
-        }
-
-        return score;
-    }
-
-    _scoreBillboardAlbumMatch(entry, album) {
-        if (!album) return -1;
-
-        const entryTitle = this._normalizeBillboardText(entry?.name);
-        const entryArtist = this._normalizeBillboardText(entry?.artist);
-        const albumTitle = this._normalizeBillboardText(album?.title);
-        const albumArtist = this._normalizeBillboardText(album?.artist?.name || album?.artists?.[0]?.name || '');
-
-        if (!entryTitle || !albumTitle) return -1;
-
-        let score = 0;
-        if (entryTitle === albumTitle) score += 8;
-        if (albumTitle.includes(entryTitle) || entryTitle.includes(albumTitle)) score += 4;
-        if (entryArtist && albumArtist && (albumArtist.includes(entryArtist) || entryArtist.includes(albumArtist))) {
-            score += 3;
-        }
-
-        return score;
-    }
-
-    _scoreBillboardArtistMatch(entry, artist) {
-        if (!artist) return -1;
-
-        const entryName = this._normalizeBillboardText(entry?.name);
-        const artistName = this._normalizeBillboardText(artist?.name);
-        if (!entryName || !artistName) return -1;
-
-        if (entryName === artistName) return 10;
-        if (artistName.includes(entryName) || entryName.includes(artistName)) return 6;
-        return 0;
-    }
-
-    async _resolveBillboardAlbums(entries = [], provider = null, options = {}) {
-        const cache = this._billboardResolveAlbumCache || new Map();
-        this._billboardResolveAlbumCache = cache;
-
-        const resolveOne = async (entry) => {
-            const query = `${entry.name} ${entry.artist}`.trim();
-            const key = `${provider || 'default'}::album::${this._normalizeBillboardText(query)}`;
-            if (cache.has(key)) return { ...entry, resolvedAlbum: cache.get(key) };
-
-            const search = await this.api.searchAlbums(query, { limit: 8, provider, ...options });
-            const candidates = this._normalizeAlbumList(search);
-            let best = null;
-            let bestScore = -1;
-            candidates.forEach((candidate) => {
-                const score = this._scoreBillboardAlbumMatch(entry, candidate);
-                if (score > bestScore) {
-                    bestScore = score;
-                    best = candidate;
-                }
-            });
-
-            const resolved = bestScore >= 4 ? best : candidates[0] || null;
-            cache.set(key, resolved || null);
-            return { ...entry, resolvedAlbum: resolved || null };
-        };
-
-        const resolved = await Promise.allSettled(entries.map((entry) => resolveOne(entry)));
-        return resolved.map((item, index) =>
-            item.status === 'fulfilled' ? item.value : { ...entries[index], resolvedAlbum: null }
-        );
-    }
-
-    async _resolveBillboardArtists(entries = [], provider = null, options = {}) {
-        const cache = this._billboardResolveArtistCache || new Map();
-        this._billboardResolveArtistCache = cache;
-
-        const resolveOne = async (entry) => {
-            const query = String(entry.name || '').trim();
-            const key = `${provider || 'default'}::artist::${this._normalizeBillboardText(query)}`;
-            if (cache.has(key)) return { ...entry, resolvedArtist: cache.get(key) };
-
-            const search = await this.api.searchArtists(query, { limit: 8, provider, ...options });
-            const candidates = this._normalizeArtistList(search);
-            let best = null;
-            let bestScore = -1;
-            candidates.forEach((candidate) => {
-                const score = this._scoreBillboardArtistMatch(entry, candidate);
-                if (score > bestScore) {
-                    bestScore = score;
-                    best = candidate;
-                }
-            });
-
-            const resolved = bestScore >= 4 ? best : candidates[0] || null;
-            cache.set(key, resolved || null);
-            return { ...entry, resolvedArtist: resolved || null };
-        };
-
-        const resolved = await Promise.allSettled(entries.map((entry) => resolveOne(entry)));
-        return resolved.map((item, index) =>
-            item.status === 'fulfilled' ? item.value : { ...entries[index], resolvedArtist: null }
-        );
-    }
-
-    _syncBillboardModuleOrder(section, suffix = '') {
-        const content = section.querySelector('.home-discovery-content');
-        if (!content) return;
-
-        const ids = [
-            `home-billboard-hot100-module${suffix}`,
-            `home-billboard-global200-module${suffix}`,
-            `home-billboard-200-module${suffix}`,
-            `home-billboard-artist100-module${suffix}`,
-            `home-billboard-regional-module${suffix}`,
-            `home-billboard-india-module${suffix}`,
-            `home-billboard-japan-module${suffix}`,
-            `home-billboard-uk-module${suffix}`,
-        ];
-
-        const modules = ids.map((id) => document.getElementById(id)).filter(Boolean);
-        if (!modules.length) return;
-
-        modules.forEach((module) => content.appendChild(module));
-    }
-
-    _renderBillboardTrackList(containerId, entries = []) {
-        const container = document.getElementById(containerId);
-        if (!container) return false;
-        if (!entries.length) {
-            container.innerHTML = '';
-            return false;
-        }
-        container.classList.add('billboard-chart-list');
-
-        // Billboard chart entries are rendered like any other track list
-        // (same .track-item markup and CSS). Nothing is preloaded/resolved in
-        // the background — clicking a row resolves it through the addon at
-        // click time (with persistent retry) and plays it like a normal track.
-        const pseudoTracks = entries.slice(0, 15).map((entry) => {
-            const artistName = String(entry.artist || 'Unknown Artist');
-            return {
-                id: '',
-                title: String(entry.name || 'Untitled'),
-                artist: { name: artistName },
-                artists: [{ name: artistName }],
-                album: { title: '', cover: entry.image || null },
-                duration: 0,
-            };
-        });
-
-        this.renderListWithTracks(container, pseudoTracks, true, false, true);
-
-        const rows = container.querySelectorAll('.track-item');
-        rows.forEach((row, i) => {
-            const entry = entries[i];
-            const rank = Number(entry?.rank) || i + 1;
-            const numberEl = row.querySelector('.track-number');
-            if (numberEl) {
-                numberEl.textContent = rank;
-                if (rank === 1) numberEl.classList.add('rank-gold');
-                else if (rank === 2) numberEl.classList.add('rank-silver');
-                else if (rank === 3) numberEl.classList.add('rank-bronze');
-            }
-            const durationEl = row.querySelector('.track-item-duration');
-            if (durationEl) {
-                const peak = Number.isFinite(entry?.peak_rank) ? `Peak ${entry.peak_rank}` : 'Peak -';
-                const weeks = Number.isFinite(entry?.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
-                durationEl.textContent = `${peak} • ${weeks}`;
-            }
-            row.dataset.billboardName = String(entry?.name || '');
-            row.dataset.billboardArtist = String(entry?.artist || '');
-        });
-
-        // Bind the click handler once — the container persists across
-        // re-renders, and re-binding would make every click fire multiple
-        // concurrent searches/plays and overlap the same song.
-        if (container.dataset.billboardClickBound === '1') return true;
-        container.dataset.billboardClickBound = '1';
-
-        container.addEventListener('click', async (e) => {
-            const row = e.target.closest('.track-item');
-            if (!row) return;
-            e.preventDefault();
-            e.stopPropagation();
-
-            const storedTrack = trackDataStore.get(row);
-            if (storedTrack?.id) {
-                this.player.setQueue([storedTrack], 0);
-                this.player.playTrackFromQueue();
-                return;
-            }
-
-            row.classList.add('billboard-resolving');
-            try {
-                const provider =
-                    typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                const name = String(row.dataset.billboardName || '');
-                const artist = String(row.dataset.billboardArtist || '');
-                const entry = { name, artist };
-                const strippedName = this._stripBracketedTitle(name);
-                const primaryQuery = `${name} ${artist}`.trim();
-                const fallbackQuery = `${strippedName} ${artist}`.trim();
-
-                const results = await this.api.searchTracks(primaryQuery, { provider, retry: true });
-                let candidates = this._normalizeTrackList(results);
-                let bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
-
-                const shouldRetryWithoutBrackets =
-                    fallbackQuery && fallbackQuery !== primaryQuery && (!candidates.length || bestMatch.score < 6);
-                if (shouldRetryWithoutBrackets) {
-                    try {
-                        const fallbackResults = await this.api.searchTracks(fallbackQuery, { provider, retry: true });
-                        const fallbackCandidates = this._normalizeTrackList(fallbackResults);
-                        if (fallbackCandidates.length) {
-                            candidates = fallbackCandidates;
-                            bestMatch = this._selectBestBillboardTrackCandidate(entry, candidates);
-                        }
-                    } catch (error) {
-                        console.warn('[Billboard] Track fallback search failed:', error);
-                    }
-                }
-
-                const track = bestMatch.score >= 3 ? bestMatch.track : candidates[0] || null;
-                if (!track) {
-                    showNotification('No playable match found for this chart track.', 'warning');
-                    return;
-                }
-
-                trackDataStore.set(row, track);
-                this.player.setQueue([track], 0);
-                this.player.playTrackFromQueue();
-            } catch (error) {
-                console.warn('[Billboard] Track resolution failed:', error);
-                showNotification('Search unavailable right now — try again in a moment.', 'warning');
-            } finally {
-                row.classList.remove('billboard-resolving');
-            }
-        });
-
-        return true;
-    }
-
-    _renderBillboardAlbumCards(containerId, entries = []) {
-        const container = document.getElementById(containerId);
-        if (!container) return false;
-        if (!entries.length) {
-            container.innerHTML = '';
-            return false;
-        }
-
-        container.innerHTML = entries
-            .slice(0, 12)
-            .map((entry) => {
-                const name = escapeHtml(entry.name || 'Untitled Album');
-                const artist = escapeHtml(entry.artist || 'Unknown Artist');
-                const rank = Number(entry.rank) || 0;
-                const rankClass =
-                    rank === 1 ? ' rank-gold' : rank === 2 ? ' rank-silver' : rank === 3 ? ' rank-bronze' : '';
-                const cover = entry.resolvedAlbum?.cover || entry.image;
-                const image = cover ? this.api.getCoverUrl(cover, '320') : '/assets/appicon.png';
-                const weeks = Number.isFinite(entry.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
-                return `
-                    <article class="billboard-track-row billboard-album-row" data-album-name="${escapeHtml(entry.name || '')}" data-album-artist="${escapeHtml(entry.artist || '')}" data-album-id="${entry.resolvedAlbum?.id || ''}">
-                        <span class="billboard-rank${rankClass}">${rank}</span>
-                        <img src="${image}" alt="${name}" loading="lazy" onerror="this.onerror=null;this.src='/assets/appicon.png';" />
-                        <div class="billboard-track-meta">
-                            <h4>${name}</h4>
-                            <p>${artist}</p>
-                        </div>
-                        <small>${weeks}</small>
-                    </article>
-                `;
-            })
-            .join('');
-
-        container.querySelectorAll('.billboard-album-row').forEach((row) => {
-            row.addEventListener('click', async () => {
-                const resolvedId = row.dataset.albumId;
-                if (resolvedId) {
-                    navigate(`/album/${resolvedId}`);
-                    return;
-                }
-                const name = row.dataset.albumName || '';
-                const artist = row.dataset.albumArtist || '';
-                const provider =
-                    typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                let response;
-                try {
-                    response = await this.api.searchAlbums(`${name} ${artist}`, { limit: 5, provider });
-                } catch (error) {
-                    console.warn('[Billboard] Album search failed:', error);
-                    showNotification('Search unavailable right now — try again in a moment.', 'warning');
-                    return;
-                }
-                const albums = this._normalizeAlbumList(response);
-                const first = albums.find((album) => album?.id);
-                if (!first?.id) {
-                    showNotification('No album match found for this chart entry.', 'warning');
-                    return;
-                }
-                navigate(`/album/${first.id}`);
-            });
-        });
-
-        return true;
-    }
-
-    _renderBillboardArtistStrip(containerId, entries = []) {
-        const container = document.getElementById(containerId);
-        if (!container) return false;
-        if (!entries.length) {
-            container.innerHTML = '';
-            return false;
-        }
-
-        container.innerHTML = entries
-            .slice(0, 16)
-            .map((entry) => {
-                const name = escapeHtml(entry.name || 'Unknown Artist');
-                const rank = Number(entry.rank) || 0;
-                const rankClass =
-                    rank === 1 ? ' rank-gold' : rank === 2 ? ' rank-silver' : rank === 3 ? ' rank-bronze' : '';
-                const cover = entry.resolvedArtist?.picture || entry.resolvedArtist?.image || entry.image;
-                const image = cover ? this.api.getCoverUrl(cover, '320') : '/assets/appicon.png';
-                const weeks = Number.isFinite(entry.weeks_on_chart) ? `${entry.weeks_on_chart} wks` : 'New';
-                return `
-                    <article class="billboard-track-row billboard-artist-row" data-artist-name="${escapeHtml(entry.name || '')}" data-artist-id="${entry.resolvedArtist?.id || ''}">
-                        <span class="billboard-rank${rankClass}">${rank}</span>
-                        <img src="${image}" alt="${name}" loading="lazy" onerror="this.onerror=null;this.src='/assets/appicon.png';" />
-                        <div class="billboard-track-meta">
-                            <h4>${name}</h4>
-                        </div>
-                        <small>${weeks}</small>
-                    </article>
-                `;
-            })
-            .join('');
-
-        container.querySelectorAll('.billboard-artist-row').forEach((row) => {
-            row.addEventListener('click', async () => {
-                const resolvedId = row.dataset.artistId;
-                if (resolvedId) {
-                    navigate(`/artist/${resolvedId}`);
-                    return;
-                }
-                const name = row.dataset.artistName || '';
-                const provider =
-                    typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                let response;
-                try {
-                    response = await this.api.searchArtists(name, { limit: 8, provider });
-                } catch (error) {
-                    console.warn('[Billboard] Artist search failed:', error);
-                    showNotification('Search unavailable right now — try again in a moment.', 'warning');
-                    return;
-                }
-                const artists = this._normalizeArtistList(response);
-                const first = artists.find((artist) => artist?.id);
-                if (!first?.id) {
-                    showNotification('No artist match found for this chart entry.', 'warning');
-                    return;
-                }
-                navigate(`/artist/${first.id}`);
-            });
-        });
-
-        return true;
-    }
-
-    _upgradeBillboardModule(containerId, resolver, type = 'track') {
-        const container = document.getElementById(containerId);
-        if (!container || !container.children.length) return;
-        resolver()
-            .then((entries) => {
-                if (!entries || !entries.length) return;
-                if (type === 'album') {
-                    this._renderBillboardAlbumCards(containerId, entries);
-                } else if (type === 'artist') {
-                    this._renderBillboardArtistStrip(containerId, entries);
-                } else {
-                    this._renderBillboardTrackList(containerId, entries);
-                }
-            })
-            .catch(() => {
-                // Keep the phase-1 (unresolved) content — resolution is best-effort.
-            });
-    }
-
-    async renderHomeBillboard(forceRefresh = false, variant = 'default') {
-        const isEmptyVariant = variant === 'empty';
-        const suffix = isEmptyVariant ? '-empty' : '';
-        const sectionId = isEmptyVariant ? 'home-editors-picks-section-empty' : 'home-editors-picks-section';
-        const section = document.getElementById(sectionId);
-        if (!section) return;
-
-        try {
-            const regional = this._getBillboardRegionalChart();
-            const provider =
-                typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-            const regionalTitle = document.getElementById(`home-billboard-regional-title${suffix}`);
-            if (regionalTitle) {
-                regionalTitle.textContent = regional.label;
-            }
-
-            const [
-                hot100Result,
-                globalResult,
-                albumResult,
-                artistResult,
-                regionalResult,
-                ukResult,
-                japanResult,
-                indiaResult,
-            ] = await Promise.allSettled([
-                this._fetchBillboardChart(BILLBOARD_CHARTS.hot100.slug, 25),
-                this._fetchBillboardChart(BILLBOARD_CHARTS.global200.slug, 25),
-                this._fetchBillboardChart(BILLBOARD_CHARTS.billboard200.slug, 20),
-                this._fetchBillboardChart(BILLBOARD_CHARTS.artist100.slug, 30),
-                this._fetchBillboardChart(regional.slug, 25),
-                this._fetchBillboardChart(BILLBOARD_REGIONAL_BY_COUNTRY.GB.slug, 25),
-                this._fetchBillboardChart(BILLBOARD_REGIONAL_BY_COUNTRY.JP.slug, 25),
-                this._fetchBillboardChart(BILLBOARD_REGIONAL_BY_COUNTRY.IN.slug, 25),
-            ]);
-
-            const hot100 = hot100Result.status === 'fulfilled' ? hot100Result.value : [];
-            const global200 = globalResult.status === 'fulfilled' ? globalResult.value : [];
-            const albums200 = albumResult.status === 'fulfilled' ? albumResult.value : [];
-            const artists100 = artistResult.status === 'fulfilled' ? artistResult.value : [];
-            const regionalEntries = regionalResult.status === 'fulfilled' ? regionalResult.value : [];
-            const ukEntries = ukResult.status === 'fulfilled' ? ukResult.value : [];
-            const japanEntries = japanResult.status === 'fulfilled' ? japanResult.value : [];
-            const indiaEntries = indiaResult.status === 'fulfilled' ? indiaResult.value : [];
-
-            // Phase 1 — render immediately from raw chart data. Track/album/
-            // artist resolution is done in the background so the section never
-            // waits on the addon's serialized, rate-limited search queue.
-            const hasHot100 = this._renderBillboardTrackList(`home-billboard-hot100${suffix}`, hot100.slice(0, 15));
-            const hasGlobal200 = this._renderBillboardTrackList(
-                `home-billboard-global200${suffix}`,
-                global200.slice(0, 15)
-            );
-            const hasAlbums200 = this._renderBillboardAlbumCards(`home-billboard-200${suffix}`, albums200.slice(0, 12));
-            const hasArtists100 = this._renderBillboardArtistStrip(
-                `home-billboard-artist100${suffix}`,
-                artists100.slice(0, 16)
-            );
-            const hasRegional = this._renderBillboardTrackList(
-                `home-billboard-regional${suffix}`,
-                regionalEntries.slice(0, 15)
-            );
-            const hasUk = this._renderBillboardTrackList(`home-billboard-uk${suffix}`, ukEntries.slice(0, 15));
-            const hasJapan = this._renderBillboardTrackList(`home-billboard-japan${suffix}`, japanEntries.slice(0, 15));
-            const hasIndia = this._renderBillboardTrackList(`home-billboard-india${suffix}`, indiaEntries.slice(0, 15));
-
-            this._setDiscoveryModuleVisibility(`home-billboard-hot100-module${suffix}`, hasHot100);
-            this._setDiscoveryModuleVisibility(`home-billboard-global200-module${suffix}`, hasGlobal200);
-            this._setDiscoveryModuleVisibility(`home-billboard-200-module${suffix}`, hasAlbums200);
-            this._setDiscoveryModuleVisibility(`home-billboard-artist100-module${suffix}`, hasArtists100);
-            this._setDiscoveryModuleVisibility(`home-billboard-regional-module${suffix}`, hasRegional);
-            this._setDiscoveryModuleVisibility(`home-billboard-uk-module${suffix}`, hasUk);
-            this._setDiscoveryModuleVisibility(`home-billboard-japan-module${suffix}`, hasJapan);
-            this._setDiscoveryModuleVisibility(`home-billboard-india-module${suffix}`, hasIndia);
-
-            this._syncBillboardModuleOrder(section, suffix);
-
-            const hasAny =
-                hasHot100 ||
-                hasGlobal200 ||
-                hasAlbums200 ||
-                hasArtists100 ||
-                hasRegional ||
-                hasUk ||
-                hasJapan ||
-                hasIndia;
-            section.style.display = hasAny ? '' : 'none';
-            if (!hasAny) return;
-
-            // Track charts are rendered as normal track lists and resolve on
-            // click — nothing is preloaded in the background. Albums and artists
-            // still upgrade in place through the addon's background lane.
-            const bg = { background: true };
-            this._upgradeBillboardModule(
-                `home-billboard-200${suffix}`,
-                () => this._resolveBillboardAlbums(albums200.slice(0, 12), provider, bg),
-                'album'
-            );
-            this._upgradeBillboardModule(
-                `home-billboard-artist100${suffix}`,
-                () => this._resolveBillboardArtists(artists100.slice(0, 16), provider, bg),
-                'artist'
-            );
-        } catch (error) {
-            console.warn('[Home] Failed to render Billboard charts:', error);
-            section.style.display = 'none';
-        }
     }
 
     async renderHomeArtists(forceRefresh = false, profilePromise = null) {
@@ -7712,9 +7045,26 @@ export class UIRenderer {
                 const { playlist, tracks } = apiResult;
                 recentActivityManager.addPlaylist(playlist);
 
-                const imageId = playlist.squareImage || playlist.image;
+                const imageId =
+                    playlist.squareImage ||
+                    playlist.image ||
+                    playlist.picture ||
+                    playlist.cover ||
+                    playlist.artworkURL ||
+                    playlist.artworkUrl ||
+                    playlist.artwork ||
+                    playlist.thumbnail ||
+                    playlist.coverUrl ||
+                    playlist.imageUrl ||
+                    (Array.isArray(playlist.images) ? playlist.images[0]?.url || playlist.images[0] : null) ||
+                    playlist.images?.LARGE?.url ||
+                    playlist.images?.MEDIUM?.url ||
+                    playlist.images?.SMALL?.url ||
+                    null;
                 if (imageId) {
                     imageEl.src = this.api.getCoverUrl(imageId, '1080');
+                    imageEl.style.display = 'block';
+                    if (collageEl) collageEl.style.display = 'none';
                     const preferredVisualUrl = this.getEntityVisualUrl(
                         {
                             cover: imageId,
@@ -7728,9 +7078,44 @@ export class UIRenderer {
                         this.extractAndApplyColor(this.api.getCoverUrl(imageId, '160'));
                     }
                 } else {
-                    imageEl.src = '/assets/appicon.png';
-                    this.setPageBackground(null);
-                    this.resetVibrantColor();
+                    const tracksWithCovers = (tracks || []).filter((t) => t.album && t.album.cover);
+                    const uniqueCovers = [];
+                    const seen = new Set();
+                    for (const t of tracksWithCovers) {
+                        if (!seen.has(t.album.cover)) {
+                            seen.add(t.album.cover);
+                            uniqueCovers.push(t.album.cover);
+                            if (uniqueCovers.length >= 4) break;
+                        }
+                    }
+                    if (uniqueCovers.length > 0 && collageEl) {
+                        imageEl.style.display = 'none';
+                        collageEl.style.display = 'grid';
+                        collageEl.className = 'playlist-hero-collage';
+                        collageEl.innerHTML = '';
+                        const imagesToRender = [];
+                        for (let i = 0; i < 4; i++) {
+                            imagesToRender.push(uniqueCovers[i % uniqueCovers.length]);
+                        }
+                        imagesToRender.forEach((cover) => {
+                            const img = document.createElement('img');
+                            img.src = this.api.getCoverUrl(cover);
+                            collageEl.appendChild(img);
+                        });
+                        this.setPageBackground(
+                            this.api.getCoverUrl(uniqueCovers[0], '1080'),
+                            this.api.getCoverUrl(uniqueCovers[0])
+                        );
+                        if (!this.applyApiVibrantColor(playlist.vibrantColor)) {
+                            this.extractAndApplyColor(this.api.getCoverUrl(uniqueCovers[0], '160'));
+                        }
+                    } else {
+                        imageEl.src = '/assets/appicon.png';
+                        imageEl.style.display = 'block';
+                        if (collageEl) collageEl.style.display = 'none';
+                        this.setPageBackground(null);
+                        this.resetVibrantColor();
+                    }
                 }
 
                 titleEl.textContent = playlist.title;
