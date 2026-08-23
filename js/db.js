@@ -3,6 +3,7 @@ export class MusicDatabase {
         this.dbName = 'MonochromeDB';
         this.version = 10;
         this.db = null;
+        this.recentHistoryWrites = new Map();
     }
 
     async open() {
@@ -159,9 +160,17 @@ export class MusicDatabase {
     async addToHistory(track) {
         const storeName = 'history_tracks';
         const minified = this._minifyItem('track', track);
-        // Use sub-millisecond entropy to avoid timestamp key collisions in IndexedDB.
-        const timestamp = Number(`${Date.now()}.${Math.floor(Math.random() * 1000000)}`);
         const historyKey = this._getHistoryKey(track);
+        const now = Date.now();
+        const previousWrite = historyKey ? this.recentHistoryWrites.get(historyKey) : 0;
+
+        // Playback progress can be reported by more than one media event in
+        // the same moment. Do not turn that race into duplicate local plays.
+        if (historyKey && previousWrite && now - previousWrite < 15_000) return null;
+        if (historyKey) this.recentHistoryWrites.set(historyKey, now);
+
+        // Use sub-millisecond entropy to avoid timestamp key collisions in IndexedDB.
+        const timestamp = Number(`${now}.${Math.floor(Math.random() * 1000000)}`);
         const entry = { ...minified, timestamp, historyKey };
 
         const db = await this.open();

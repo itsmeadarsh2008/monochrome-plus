@@ -2208,21 +2208,6 @@
                                 <p>Add friends to start seeing live listening activity.</p>
                             </div>
                         </section>
-                        <section class="content-section home-recommended-artists-section">
-                            <div class="section-head section-head-compact section-head-discovery">
-                                <div>
-                                    <p class="section-eyebrow">Discover</p>
-                                    <h2 class="section-title" style="margin-bottom: 0">Recommended Artists</h2>
-                                    <p class="section-subtitle">
-                                        Freshly tuned to your listening profile and auto-refreshed.
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="card-grid recommended-artists-grid" id="home-recommended-artists"></div>
-                            <button class="btn-link" id="refresh-artists-btn" style="margin-top: var(--space-4)">
-                                Refresh with new artists
-                            </button>
-                        </section>
                         <section class="content-section jump-back-in-section">
                             <div class="section-header">
                                 <div class="section-header-left">
@@ -2255,65 +2240,6 @@
                             </div>
                             <div class="jump-back-carousel-wrapper">
                                 <div class="jump-back-carousel" id="home-recent-mixed"></div>
-                            </div>
-                        </section>
-                        <section class="content-section home-discovery-hub" id="home-discovery-hub-section">
-                            <div class="section-head section-head-compact section-head-discovery">
-                                <div>
-                                    <p class="section-eyebrow">Spotlight + Hot & New</p>
-                                    <h2 class="section-title" style="margin-bottom: 0">Discovery Deck</h2>
-                                    <p class="section-subtitle">
-                                        Live modules from your current region, seamlessly blended into Home.
-                                    </p>
-                                </div>
-                                <button id="home-start-infinite-radio-btn" class="btn-secondary">
-                                    Start Infinite Radio
-                                </button>
-                            </div>
-                            <div id="home-discovery-content" class="home-discovery-content">
-                                <div id="home-discovery-notice" class="home-discovery-notice" hidden></div>
-                                <section class="home-discovery-module" id="home-spotlight-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>Spotlight</h3>
-                                    </div>
-                                    <div id="home-spotlight-hero" class="home-spotlight-hero"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-hot-tracks-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>Hot Right Now</h3>
-                                    </div>
-                                    <div class="track-list" id="home-hot-tracks"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-new-tracks-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>New Tracks</h3>
-                                    </div>
-                                    <div class="track-list" id="home-new-tracks"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-hot-albums-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>Trending Albums</h3>
-                                    </div>
-                                    <div class="card-grid" id="home-hot-albums"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-new-albums-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>New Albums</h3>
-                                    </div>
-                                    <div class="card-grid" id="home-new-albums"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-featured-playlists-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>Featured Playlists</h3>
-                                    </div>
-                                    <div class="card-grid" id="home-featured-playlists"></div>
-                                </section>
-                                <section class="home-discovery-module" id="home-from-editors-module">
-                                    <div class="home-discovery-module-head">
-                                        <h3>From Editors</h3>
-                                    </div>
-                                    <div class="card-grid" id="home-from-editors"></div>
-                                </section>
                             </div>
                         </section>
                     </div>
@@ -4397,16 +4323,6 @@
                                 </div>
                                 <div class="setting-item">
                                     <div class="info">
-                                        <span class="label">Show Recommended Artists</span>
-                                        <span class="description">Display recommended artists on the home page</span>
-                                    </div>
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="show-recommended-artists-toggle" checked />
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                                <div class="setting-item">
-                                    <div class="info">
                                         <span class="label">Show Jump Back In</span>
                                         <span class="description"
                                             >Display recent albums, playlists, and mixes on the home page</span
@@ -4416,18 +4332,6 @@
                                         <input type="checkbox" id="show-jump-back-in-toggle" checked />
                                         <span class="slider"></span>
                                     </label>
-                                </div>
-                            </div>
-
-                            <div class="settings-group">
-                                <div class="setting-item">
-                                    <div class="info">
-                                        <span class="label">Home Country</span>
-                                        <span class="description"
-                                            >Choose the country used for Spotlight, Hot, and New modules</span
-                                        >
-                                    </div>
-                                    <select id="home-country-select" aria-label="Select home country"></select>
                                 </div>
                             </div>
 

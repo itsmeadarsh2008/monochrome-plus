@@ -189,10 +189,10 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, disco
             audioPlayer.currentTime >= HISTORY_RECORD_MIN_SECONDS ||
             (audioPlayer.duration > 0 && audioPlayer.currentTime / audioPlayer.duration >= 0.1)
         ) {
+            historyHasRecordedCurrentPlay = true;
             recordCurrentTrackHistory().catch((error) => {
                 console.warn('[Events] recordCurrentTrackHistory failed:', error);
             });
-            historyHasRecordedCurrentPlay = true;
         }
     });
 
@@ -200,10 +200,10 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, disco
         if (player.currentTrack && historyCandidateTrackKey && !historyHasRecordedCurrentPlay) {
             const playedTime = Math.max(0, audioPlayer.duration - historyCandidateStartTime);
             if (playedTime >= 1) {
+                historyHasRecordedCurrentPlay = true;
                 recordCurrentTrackHistory().catch((error) => {
                     console.warn('[Events] recordCurrentTrackHistory failed:', error);
                 });
-                historyHasRecordedCurrentPlay = true;
             }
         }
     });
@@ -363,10 +363,10 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, disco
         const shouldLogByProgress = duration > 0 && playedTime >= Math.max(1, duration * 0.1);
 
         if (shouldLogByTime || shouldLogByProgress) {
+            historyHasRecordedCurrentPlay = true;
             recordCurrentTrackHistory().catch((error) => {
                 console.warn('[Events] recordCurrentTrackHistory failed:', error);
             });
-            historyHasRecordedCurrentPlay = true;
         }
     });
 

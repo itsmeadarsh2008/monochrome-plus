@@ -55,7 +55,7 @@ import {
     renderTrackerTrackPage as renderTrackerTrackContent,
 } from './tracker.js';
 import { scrollToTop } from './smooth-scrolling.js';
-import { getHomeSections } from './api/home.js';
+import { fetchLastFmUserRecentTracks } from './lastfm.js';
 
 const deriveArtistsFromTracks = (tracks) => {
     const artistMap = new Map();
@@ -185,8 +185,6 @@ export class UIRenderer {
         this._friendsSuggestionQuery = '';
         this._friendsSuggestionTimer = null;
         this._friendsSuggestionRequestToken = 0;
-        this._homeDiscoveryLastHash = '';
-        this._homeDiscoveryCache = null;
         this.fullscreenDiscScrubCleanup = null;
         this._fullscreenAudioPlayer = null;
         this._fullscreenDiscResizeHandler = null;
@@ -3681,9 +3679,6 @@ export class UIRenderer {
 
         const hasActivity = history.length > 0 || favorites.length > 0 || playlists.length > 0;
 
-        // Clear discovery cache so all home rails refresh each time home is entered.
-        this._homeDiscoveryCache = null;
-
         if (!hasActivity) {
             if (welcomeEl) welcomeEl.style.display = 'block';
             if (contentEl) contentEl.style.display = 'none';
@@ -3694,12 +3689,10 @@ export class UIRenderer {
         if (contentEl) contentEl.style.display = 'block';
 
         const refreshSongsBtn = document.getElementById('refresh-songs-btn');
-        const refreshArtistsBtn = document.getElementById('refresh-artists-btn');
         const openFriendsBtn = document.getElementById('home-friends-open-btn');
         const clearRecentBtn = document.getElementById('clear-recent-btn');
 
         if (refreshSongsBtn) refreshSongsBtn.onclick = () => this.renderHomeSongs(true);
-        if (refreshArtistsBtn) refreshArtistsBtn.onclick = () => this.renderHomeArtists(true);
         if (openFriendsBtn) openFriendsBtn.onclick = () => navigate('/friends');
         if (clearRecentBtn)
             clearRecentBtn.onclick = () => {
@@ -3709,24 +3702,18 @@ export class UIRenderer {
                 }
             };
 
-        const recommendationProfilePromise = this.getRecentTrackProfile(true);
+        // Keep recommendations stable while navigating or playing. The
+        // refresh controls are the only way to request a new profile.
+        const recommendationProfilePromise = this.getRecentTrackProfile(false);
         Promise.allSettled([
             this.renderHomeSongs(false, recommendationProfilePromise),
             this.renderHomeAlbums(false, recommendationProfilePromise),
-            this.renderHomeArtists(false, recommendationProfilePromise),
         ]).catch((error) => {
             console.warn('[Home] Recommendation sections failed to load in parallel:', error);
         });
 
         this.renderHomeFriendsActivity();
         this.renderHomeRecent();
-        this.renderHomeDiscoverySections().catch((error) => {
-            console.warn('[Home] Failed to render discovery sections:', error);
-            const section = document.getElementById('home-discovery-hub-section');
-            if (section) {
-                section.style.display = 'none';
-            }
-        });
     }
 
     _extractEntity(item) {
@@ -3980,7 +3967,7 @@ export class UIRenderer {
         // Always refetch when navigating back to home so the deck stays fresh
         let data = this._homeDiscoveryCache;
         if (!data || forceRefresh) {
-            data = await getHomeSections();
+            data = {};
             this._homeDiscoveryCache = data;
         }
 
@@ -4362,11 +4349,17 @@ export class UIRenderer {
         }
 
         this._recentTrackProfilePromise = (async () => {
-            let history = [];
+            let history;
             try {
-                history = await db.getHistory().catch(() => []);
+                const lastFmHistory = await fetchLastFmUserRecentTracks({
+                    limit: 50,
+                    skipCache: forceRefresh,
+                });
+                history = await this._resolveLastFmRecentTracks(lastFmHistory);
+                if (history.length === 0) history = await db.getHistory().catch(() => []);
             } catch (error) {
                 console.error('[UI] Failed to load recent track history:', error);
+                history = await db.getHistory().catch(() => []);
             }
 
             const profile = this._buildRecentTrackProfile(history);
@@ -4380,6 +4373,53 @@ export class UIRenderer {
         } finally {
             this._recentTrackProfilePromise = null;
         }
+    }
+
+    async _resolveLastFmRecentTracks(tracks = []) {
+        if (!Array.isArray(tracks) || tracks.length === 0) return [];
+
+        const limitedTracks = tracks.slice(0, 50);
+        const groups = new Map();
+        limitedTracks.forEach((track) => {
+            const artist = String(track?.artist?.name || '').trim();
+            if (!artist) return;
+            const key = artist.toLowerCase();
+            if (!groups.has(key)) groups.set(key, { name: artist, tracks: [] });
+            groups.get(key).tracks.push(track);
+        });
+
+        const resolvedGroups = await Promise.all(
+            Array.from(groups.values()).slice(0, 12).map(async (group) => {
+                try {
+                    const found = await this.api.searchTracks(group.name, {
+                        limit: Math.min(30, Math.max(8, group.tracks.length * 2)),
+                        background: true,
+                        signal: typeof AbortSignal !== 'undefined' ? AbortSignal.timeout(3500) : undefined,
+                    });
+                    const items = Array.isArray(found) ? found : found?.items || [];
+                    const artistName = group.name.toLowerCase();
+                    return group.tracks.map((track) => {
+                        const title = track.title.toLowerCase();
+                        const match = items.find(
+                            (item) =>
+                                String(item.title || '').toLowerCase() === title &&
+                                String(item.artist?.name || item.artists?.[0]?.name || '').toLowerCase() === artistName
+                        );
+                        if (!match) return null;
+                        return {
+                            ...match,
+                            timestamp: track.playedAt || Date.now(),
+                            lastFmPlayedAt: track.playedAt || null,
+                            album: match.album || track.album,
+                        };
+                    }).filter(Boolean);
+                } catch (error) {
+                    console.warn('[UI] Failed to resolve Last.fm history group:', group.name, error?.message || error);
+                    return [];
+                }
+            })
+        );
+        return resolvedGroups.flat();
     }
 
     async getSeeds(forceRefresh = false) {
@@ -4464,7 +4504,11 @@ export class UIRenderer {
             const artistName = String(album.artist?.name || album.artists?.[0]?.name || '').trim();
             if (!id && !title) return;
 
-            const key = id ? `id:${id}` : `title:${title.toLowerCase()}::artist:${artistName.toLowerCase()}`;
+            // Providers can assign different IDs to the same release. Use the
+            // normalized title/artist identity so it renders only once.
+            const titleKey = title.toLowerCase().replace(/\s+/g, ' ');
+            const artistKey = artistName.toLowerCase().replace(/\s+/g, ' ');
+            const key = titleKey ? `title:${titleKey}::artist:${artistKey}` : `id:${id}`;
             if (byKey.has(key)) return;
             byKey.set(key, {
                 ...album,
@@ -4616,15 +4660,9 @@ export class UIRenderer {
     }
 
     _scheduleHomeArtistsAutoload(delayMs = 2500) {
-        if (this._homeArtistsRetryCount >= this._homeArtistsMaxRetries) return;
-
-        this._clearHomeArtistsRetryTimer();
-        this._homeArtistsRetryTimer = setTimeout(() => {
-            this._homeArtistsRetryTimer = null;
-            if (!this._isHomeRouteActive()) return;
-            this._homeArtistsRetryCount += 1;
-            this.renderHomeArtists(true);
-        }, delayMs);
+        // Recommendation sections refresh only through an explicit user
+        // action; never retry them in the background.
+        void delayMs;
     }
 
     async _loadFallbackRecommendedArtists() {
@@ -4864,7 +4902,7 @@ export class UIRenderer {
                     const normalized = this._dedupeAlbums(this._normalizeAlbumList(albums));
                     normalized.forEach((album, index) => {
                         if (!album?.id) return;
-                        const key = `id:${album.id}`;
+                        const key = this._albumNameKey(album) || `id:${album.id}`;
                         const rankWeight = Math.max(0.25, 1 - index / Math.max(normalized.length, 12));
                         const score = seedScore * rankWeight;
                         const existing = albumCandidates.get(key);
@@ -4882,7 +4920,7 @@ export class UIRenderer {
                 // Render an immediate baseline from the user's own recent albums
                 // while recommendation requests run — never leave bare skeletons.
                 const renderAlbums = (albums) => {
-                    const displayedAlbums = albums.slice(0, 12);
+                    const displayedAlbums = this._dedupeAlbums(albums).slice(0, 12);
                     albumsContainer.innerHTML = displayedAlbums
                         .map((album) => this.createAlbumCardHTML(album))
                         .join('');
@@ -5441,16 +5479,11 @@ export class UIRenderer {
                 }));
 
                 if (seedArtists.length === 0) {
-                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
-                    if (fallbackArtists.length > 0) {
-                        fallbackArtists.forEach((artist) => seedArtists.push({ ...artist, score: 1 }));
-                    } else {
-                        artistsContainer.innerHTML = createPlaceholder(
-                            'Play more tracks to get artist recommendations from your recent history.'
-                        );
-                        this._scheduleHomeArtistsAutoload(3200);
-                        return;
-                    }
+                    artistsContainer.innerHTML = createPlaceholder(
+                        'Connect Last.fm and scrobble more tracks to unlock recommendations.'
+                    );
+                    this._scheduleHomeArtistsAutoload(3200);
+                    return;
                 }
 
                 const artistCandidates = new Map();
@@ -5517,8 +5550,11 @@ export class UIRenderer {
                 }
 
                 if (artistCandidates.size === 0) {
-                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
-                    pushArtists(fallbackArtists, 1);
+                    artistsContainer.innerHTML = createPlaceholder(
+                        'Last.fm has no artist recommendations available right now.'
+                    );
+                    this._scheduleHomeArtistsAutoload(3200);
+                    return;
                 }
 
                 const exclusions = await this._getRecommendationExclusions(forceRefresh, profilePromise);
@@ -5587,39 +5623,7 @@ export class UIRenderer {
                 }
             } catch (e) {
                 console.error(e);
-                try {
-                    const provider =
-                        typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                    const fallbackArtists = await this._loadFallbackRecommendedArtists();
-                    const hydratedFallback = await this._hydrateArtistsForProvider(fallbackArtists, provider, 18);
-                    const filteredFallback = await this.filterUserContent(hydratedFallback, 'artist').catch(() => {
-                        return hydratedFallback;
-                    });
-                    const renderableFallback = (filteredFallback.length > 0 ? filteredFallback : hydratedFallback)
-                        .filter((artist) => artist && artist.id)
-                        .slice(0, 12);
-
-                    if (renderableFallback.length > 0) {
-                        artistsContainer.innerHTML = renderableFallback
-                            .map((artist) => this.createArtistCircularCardHTML(artist))
-                            .join('');
-                        renderableFallback.forEach((artist) => {
-                            const el = artistsContainer.querySelector(`[data-artist-id="${artist.id}"]`);
-                            if (el) {
-                                trackDataStore.set(el, artist);
-                                this.updateLikeState(el, 'artist', artist.id);
-                            }
-                        });
-                        this._scheduleHomeArtistsAutoload(forceRefresh ? 5000 : 3200);
-                        return;
-                    }
-                } catch (fallbackError) {
-                    console.warn('[Home] Fallback artist recommendations failed:', fallbackError);
-                }
-
-                artistsContainer.innerHTML = createPlaceholder(
-                    'No artist recommendations available right now. Try refresh.'
-                );
+                artistsContainer.innerHTML = createPlaceholder('Last.fm recommendations failed to load. Try refresh.');
                 this._scheduleHomeArtistsAutoload(forceRefresh ? 5000 : 3200);
             }
         }
@@ -7852,12 +7856,21 @@ export class UIRenderer {
         container.innerHTML = this.createSkeletonTracks(10, true);
 
         try {
-            const history = await db.getHistory();
+            let syncedLastFmHistory = [];
+            try {
+                const lastFmHistory = await fetchLastFmUserRecentTracks({ limit: 50 });
+                syncedLastFmHistory = await this._resolveLastFmRecentTracks(lastFmHistory);
+            } catch (error) {
+                console.warn('[UI] Last.fm history unavailable, using local history:', error?.message || error);
+            }
+
+            const usingLastFmHistory = syncedLastFmHistory.length > 0;
+            const history = usingLastFmHistory ? syncedLastFmHistory : await db.getHistory().catch(() => []);
             const latestHistory = Array.isArray(history) ? history : [];
 
             // Show/hide clear button based on whether there's history
             if (clearBtn) {
-                clearBtn.style.display = latestHistory.length > 0 ? 'flex' : 'none';
+                clearBtn.style.display = !usingLastFmHistory && latestHistory.length > 0 ? 'flex' : 'none';
             }
 
             if (latestHistory.length === 0) {

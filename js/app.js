@@ -719,19 +719,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeUIInteractions(player, api, ui);
     initializeKeyboardShortcuts(player, audioPlayer);
 
-    document.getElementById('home-start-infinite-radio-btn')?.addEventListener('click', async () => {
-        const { showNotification } = await loadDownloadsModule();
-        try {
-            const history = await db.getHistory();
-            const seeds = player.currentTrack ? [player.currentTrack] : history.slice(0, 6);
-            const started = await startInfiniteRadioFromSeeds(player, api, seeds, 40);
-            showNotification(started ? 'Infinite Radio started' : 'No recommendations available right now');
-        } catch (error) {
-            console.error('Failed to start Infinite Radio from Home:', error);
-            showNotification('Failed to start Infinite Radio');
-        }
-    });
-
     // Restore UI state for the current track (like button, theme)
     if (player.currentTrack) {
         ui.setCurrentTrack(player.currentTrack);

@@ -9,11 +9,187 @@ const LASTFM_PLACEHOLDER_HASHES = new Set([
 ]);
 const LASTFM_IMAGE_PRIORITY = ['mega', 'extralarge', 'large', 'medium', 'small'];
 
+const recommendationCache = new Map();
+const RECOMMENDATION_CACHE_TTL = 10 * 60 * 1000;
+let personalizedRecommendationPromise = null;
+
 function resolveLastFmApiKey() {
     if (lastFMStorage.useCustomCredentials()) {
         return lastFMStorage.getCustomApiKey() || LASTFM_DEFAULT_API_KEY;
     }
     return LASTFM_DEFAULT_API_KEY;
+}
+
+async function lastFmRecommendationRequest(method, params = {}, options = {}) {
+    const query = new URLSearchParams({
+        method,
+        api_key: options.apiKey || resolveLastFmApiKey(),
+        format: 'json',
+        ...params,
+    });
+    const cacheKey = query.toString();
+    const cached = recommendationCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < RECOMMENDATION_CACHE_TTL) return cached.data;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 3500);
+    try {
+        const response = await fetch(`https://ws.audioscrobbler.com/2.0/?${query}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Last.fm request failed (${response.status})`);
+        const data = await response.json();
+        if (data.error) throw new Error(data.message || 'Last.fm API error');
+        recommendationCache.set(cacheKey, { at: Date.now(), data });
+        return data;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+const normalizeRecommendationText = (value) => String(value || '').trim().toLowerCase();
+
+export async function fetchLastFmSimilarTracks(track, options = {}) {
+    const title = typeof track === 'string' ? track : track?.title;
+    const artist = typeof track === 'string' ? options.artist : track?.artist?.name || track?.artists?.[0]?.name;
+    if (!title || !artist) return [];
+    try {
+        const data = await lastFmRecommendationRequest('track.getSimilar', {
+            artist,
+            track: title,
+            autocorrect: 1,
+            limit: options.limit || 20,
+        }, options);
+        return (data?.similartracks?.track || []).map((candidate) => ({
+            title: candidate.name,
+            artist: { name: candidate.artist?.name || '' },
+            match: Number(candidate.match) || 0,
+            image: getBestLastFmImage(candidate.image, { tryUpscale: false }),
+        })).filter((candidate) => candidate.title && candidate.artist.name);
+    } catch (error) {
+        console.warn('[Last.fm] Similar track lookup failed:', error?.message || error);
+        return [];
+    }
+}
+
+/**
+ * Last.fm's authenticated recommendation feed is artist-based. The API does
+ * not currently expose a personalized recommended-tracks method, so callers
+ * can use these artists as seeds for artist.getTopTracks/getTopAlbums.
+ */
+export async function fetchLastFmPersonalizedArtists(options = {}) {
+    if (personalizedRecommendationPromise && !options.skipCache) return personalizedRecommendationPromise;
+
+    const scrobbler = new LastFMScrobbler();
+    if (!scrobbler.isAuthenticated()) return [];
+
+    const request = scrobbler
+        .makeRequest(
+            'user.getRecommendedArtists',
+            {
+                user: scrobbler.username,
+                limit: options.limit || 30,
+            },
+            true
+        )
+        .then(
+            (data) =>
+                data?.recommendations?.artist ||
+                data?.recommendedartists?.artist ||
+                data?.artists?.artist ||
+                []
+        )
+        .catch((error) => {
+            console.warn('[Last.fm] Personalized recommendations unavailable:', error?.message || error);
+            return [];
+        });
+    personalizedRecommendationPromise = Promise.race([
+        request,
+        new Promise((resolve) => setTimeout(() => resolve([]), options.timeoutMs || 3500)),
+    ]);
+
+    try {
+        return await personalizedRecommendationPromise;
+    } finally {
+        if (options.skipCache) personalizedRecommendationPromise = null;
+    }
+}
+
+export async function fetchLastFmUserRecentTracks(options = {}) {
+    const scrobbler = new LastFMScrobbler();
+    if (!scrobbler.isAuthenticated() || !scrobbler.username) return [];
+
+    try {
+        const data = await lastFmRecommendationRequest('user.getRecentTracks', {
+            user: scrobbler.username,
+            limit: options.limit || 50,
+            extended: 1,
+        }, options);
+        return (data?.recenttracks?.track || [])
+            .filter(
+                (track) =>
+                    track?.name &&
+                    track?.artist?.name &&
+                    track?.['@attr']?.nowplaying !== 'true' &&
+                    track?.['@attr']?.nowplaying !== true
+            )
+            .map((track) => ({
+                title: track.name,
+                artist: { name: track.artist.name },
+                album: track.album?.['#text']
+                    ? { title: track.album['#text'], artist: { name: track.artist.name } }
+                    : null,
+                cover: getBestLastFmImage(track.image, { tryUpscale: false }),
+                playedAt: track.date?.uts ? Number(track.date.uts) * 1000 : null,
+            }));
+    } catch (error) {
+        console.warn('[Last.fm] Recent tracks lookup failed:', error?.message || error);
+        return [];
+    }
+}
+
+export async function fetchLastFmArtistTopTracks(artist, options = {}) {
+    const name = typeof artist === 'string' ? artist : artist?.name;
+    if (!name) return [];
+    try {
+        const data = await lastFmRecommendationRequest('artist.getTopTracks', {
+            artist: name,
+            autocorrect: 1,
+            limit: options.limit || 8,
+        }, options);
+        return (data?.toptracks?.track || []).map((track) => ({
+            title: track.name,
+            artist: { name: track.artist?.name || name },
+            match: Number(track.listeners) || 0,
+        })).filter((track) => track.title && track.artist.name);
+    } catch (error) {
+        console.warn('[Last.fm] Artist top tracks lookup failed:', error?.message || error);
+        return [];
+    }
+}
+
+export async function fetchLastFmSimilarArtists(artist, options = {}) {
+    const name = typeof artist === 'string' ? artist : artist?.name;
+    if (!name) return [];
+    try {
+        const data = await lastFmRecommendationRequest('artist.getSimilar', {
+            artist: name,
+            autocorrect: 1,
+            limit: options.limit || 20,
+        }, options);
+        return (data?.similarartists?.artist || []).map((candidate) => ({
+            name: candidate.name,
+            match: Number(candidate.match) || 0,
+            picture: getBestLastFmImage(candidate.image, { tryUpscale: false }),
+        })).filter((candidate) => candidate.name);
+    } catch (error) {
+        console.warn('[Last.fm] Similar artist lookup failed:', error?.message || error);
+        return [];
+    }
+}
+
+export function isSameLastFmTrack(candidate, track) {
+    return normalizeRecommendationText(candidate?.title) === normalizeRecommendationText(track?.title) &&
+        normalizeRecommendationText(candidate?.artist?.name) ===
+            normalizeRecommendationText(track?.artist?.name || track?.artists?.[0]?.name);
 }
 
 function isValidLastFmImageUrl(url) {
@@ -489,7 +665,7 @@ export class LastFMScrobbler {
             return md5(signatureString);
         } catch (e) {
             console.error('MD5 library not available', e);
-            throw new Error('MD5 library required for Last.fm');
+            throw new Error('MD5 library required for Last.fm', { cause: e });
         }
     }
 

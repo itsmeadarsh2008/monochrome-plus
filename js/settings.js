@@ -52,7 +52,6 @@ import { syncManager } from './accounts/appwrite-sync.js';
 import { performanceMode } from './performance-mode.js';
 import { animationManager } from './animation-utils.js';
 import { responsiveManager } from './responsive-utils.js';
-import { HOME_COUNTRY_OPTIONS, getUserCountryCode, setUserCountryCode } from './api/home.js';
 
 export function initializeSettings(scrobbler, player, api, ui, discord) {
     // Show the build commit so the deployed version can be matched to the repo
@@ -3285,14 +3284,6 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         });
     }
 
-    const showRecommendedArtistsToggle = document.getElementById('show-recommended-artists-toggle');
-    if (showRecommendedArtistsToggle) {
-        showRecommendedArtistsToggle.checked = homePageSettings.shouldShowRecommendedArtists();
-        showRecommendedArtistsToggle.addEventListener('change', (e) => {
-            homePageSettings.setShowRecommendedArtists(e.target.checked);
-        });
-    }
-
     const showJumpBackInToggle = document.getElementById('show-jump-back-in-toggle');
     if (showJumpBackInToggle) {
         showJumpBackInToggle.checked = homePageSettings.shouldShowJumpBackIn();
@@ -3306,35 +3297,6 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         showEditorsPicksToggle.checked = homePageSettings.shouldShowEditorsPicks();
         showEditorsPicksToggle.addEventListener('change', (e) => {
             homePageSettings.setShowEditorsPicks(e.target.checked);
-        });
-    }
-
-    const homeCountrySelect = document.getElementById('home-country-select');
-    if (homeCountrySelect) {
-        const currentCountry = getUserCountryCode();
-        const hasCurrent = HOME_COUNTRY_OPTIONS.some((entry) => entry.code === currentCountry);
-        const options = hasCurrent
-            ? HOME_COUNTRY_OPTIONS
-            : [...HOME_COUNTRY_OPTIONS, { code: currentCountry, label: currentCountry }];
-
-        homeCountrySelect.innerHTML = options
-            .map((entry) => `<option value="${entry.code}">${entry.label} (${entry.code})</option>`)
-            .join('');
-        homeCountrySelect.value = currentCountry;
-
-        homeCountrySelect.addEventListener('change', async (event) => {
-            const nextCountry = String(event.target.value || 'US')
-                .trim()
-                .toUpperCase();
-            setUserCountryCode(nextCountry);
-
-            try {
-                if (ui && typeof ui.renderHomeDiscoverySections === 'function') {
-                    await ui.renderHomeDiscoverySections(true);
-                }
-            } catch (error) {
-                console.warn('[Settings] Failed to refresh Home discovery after country change:', error);
-            }
         });
     }
 
