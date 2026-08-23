@@ -4783,27 +4783,7 @@ export class UIRenderer {
                 }
 
                 if (candidateTracks.length === 0) {
-                    const provider =
-                        typeof this.api.getCurrentProvider === 'function' ? this.api.getCurrentProvider() : undefined;
-                    const fallbackSeeds = profile.artistSeeds.filter((artistSeed) => artistSeed.name).slice(0, 5);
-                    const fallbackResults = await Promise.allSettled(
-                        fallbackSeeds.map((artistSeed) =>
-                            this.api.searchTracks(artistSeed.name, {
-                                limit: 10,
-                                provider,
-                                background: true,
-                            })
-                        )
-                    );
-
-                    fallbackResults.forEach((result, index) => {
-                        if (result.status === 'fulfilled') {
-                            candidateTracks.push(...this._normalizeTrackList(result.value));
-                            return;
-                        }
-                        const artistName = fallbackSeeds[index]?.name || 'unknown artist';
-                        console.warn('[Home] searchTracks fallback failed for', artistName, result.reason);
-                    });
+                    console.warn('[Home] Last.fm similar-track recommendations returned no playable tracks.');
                 }
 
                 const recentTrackIds = new Set(profile.recentTracks.map((track) => track.id).filter(Boolean));

@@ -5,12 +5,7 @@
 
 import { EclipseAPI } from './eclipse.js';
 import { musicProviderSettings } from './storage.js';
-import {
-    fetchLastFmArtistTopTracks,
-    fetchLastFmPersonalizedArtists,
-    fetchLastFmSimilarArtists,
-    fetchLastFmSimilarTracks,
-} from './lastfm.js';
+import { fetchLastFmPersonalizedArtists, fetchLastFmSimilarArtists, fetchLastFmSimilarTracks } from './lastfm.js';
 
 export class MusicAPI {
     static instance = null;
@@ -170,20 +165,13 @@ export class MusicAPI {
         const seeds = Array.isArray(tracks) ? tracks.filter((track) => track?.title) : [];
         if (seeds.length === 0) return [];
 
-        const personalizedArtists = await fetchLastFmPersonalizedArtists({
-            limit: 16,
-            skipCache: options.skipCache,
-        });
-        let candidates = personalizedArtists.length
-            ? (await Promise.all(personalizedArtists.slice(0, 5).map((artist) => fetchLastFmArtistTopTracks(artist, { limit: 5 })))).flat()
-            : [];
-
-        if (candidates.length === 0) {
-            const similarBySeed = await Promise.all(
-                seeds.slice(0, 4).map((seed) => fetchLastFmSimilarTracks(seed, { limit: 8 }))
-            );
-            candidates = similarBySeed.flat();
-        }
+        // The supplied playlist/history tracks are the recommendation seeds.
+        // Use Last.fm's track similarity graph directly; do not replace these
+        // seeds with the account's broad personalized artist feed.
+        const similarBySeed = await Promise.all(
+            seeds.slice(0, 4).map((seed) => fetchLastFmSimilarTracks(seed, { limit: 8 }))
+        );
+        const candidates = similarBySeed.flat();
         const resolved = await this._resolveTracks(candidates, { ...options, resolveLimit: options.resolveLimit || 18 });
         return this._dedupeResolvedTracks(resolved).slice(0, limit);
     }

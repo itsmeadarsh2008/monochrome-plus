@@ -19629,3 +19629,14 @@ button:active {
 .carousel-item-album .card-image {
     border-radius: 15px;
 }
+
+/* Override the broader homepage card treatment for Recommended Albums. */
+#page-home #home-recommended-albums > .card {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+#page-home #home-recommended-albums > .card .card-image-wrapper,
+#page-home #home-recommended-albums > .card .card-image {
+    border-radius: 15px 15px 0 0;
+}
