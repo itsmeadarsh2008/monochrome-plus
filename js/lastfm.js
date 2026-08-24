@@ -146,6 +146,50 @@ export async function fetchLastFmUserRecentTracks(options = {}) {
     }
 }
 
+export async function fetchAllLastFmUserRecentTracks(options = {}) {
+    const scrobbler = new LastFMScrobbler();
+    if (!scrobbler.isAuthenticated() || !scrobbler.username) return [];
+
+    const pageSize = Math.min(200, Math.max(1, options.limit || 200));
+    const allTracks = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+        const query = new URLSearchParams({
+            user: scrobbler.username,
+            limit: pageSize,
+            page,
+            extended: 1,
+        });
+        const data = await lastFmRecommendationRequest('user.getRecentTracks', Object.fromEntries(query), options);
+        const recentTracks = data?.recenttracks?.track || [];
+        totalPages = Math.max(1, Number(data?.recenttracks?.['@attr']?.totalPages) || page);
+        allTracks.push(
+            ...recentTracks
+                .filter(
+                    (track) =>
+                        track?.name &&
+                        track?.artist?.name &&
+                        track?.['@attr']?.nowplaying !== 'true' &&
+                        track?.['@attr']?.nowplaying !== true
+                )
+                .map((track) => ({
+                    title: track.name,
+                    artist: { name: track.artist.name },
+                    album: track.album?.['#text']
+                        ? { title: track.album['#text'], artist: { name: track.artist.name } }
+                        : null,
+                    cover: getBestLastFmImage(track.image, { tryUpscale: false }),
+                    playedAt: track.date?.uts ? Number(track.date.uts) * 1000 : null,
+                }))
+        );
+        page++;
+    } while (page <= totalPages);
+
+    return allTracks;
+}
+
 export async function fetchLastFmArtistTopTracks(artist, options = {}) {
     const name = typeof artist === 'string' ? artist : artist?.name;
     if (!name) return [];

@@ -132,13 +132,13 @@ export class MusicAPI {
         const artistName = options.seedName || options.artistName;
         if (!artistName) return this.tidalAPI.getSimilarArtists(this.stripProviderPrefix(artistId), options);
 
-        const personalized = await fetchLastFmPersonalizedArtists({
-            limit: options.limit || 12,
-            skipCache: options.skipCache,
-        });
-        const candidates = personalized.length
-            ? personalized
-            : await fetchLastFmSimilarArtists(artistName, { limit: options.limit || 20 });
+        const similar = await fetchLastFmSimilarArtists(artistName, { limit: options.limit || 20 });
+        const candidates = similar.length
+            ? similar
+            : await fetchLastFmPersonalizedArtists({
+                  limit: options.limit || 12,
+                  skipCache: options.skipCache,
+              });
         return this._resolveArtists(candidates, { ...options, resolveLimit: options.resolveLimit || 12 });
     }
 
@@ -148,15 +148,17 @@ export class MusicAPI {
         const artistName = options.seedArtistName || options.artistName;
         if (!artistName) return this.tidalAPI.getSimilarAlbums(this.stripProviderPrefix(albumId), options);
 
-        const personalizedArtists = await fetchLastFmPersonalizedArtists({
-            limit: options.artistLimit || 6,
-            skipCache: options.skipCache,
+        const similarArtists = await fetchLastFmSimilarArtists(artistName, {
+            limit: options.artistLimit || 10,
         });
-        const similarArtists = personalizedArtists.length
-            ? personalizedArtists
-            : await fetchLastFmSimilarArtists(artistName, { limit: options.artistLimit || 10 });
+        const artistCandidates = similarArtists.length
+            ? similarArtists
+            : await fetchLastFmPersonalizedArtists({
+                  limit: options.artistLimit || 6,
+                  skipCache: options.skipCache,
+              });
         const albums = await Promise.all(
-            similarArtists.slice(0, 4).map((artist) => this.searchAlbums(artist.name, { limit: 4 }))
+            artistCandidates.slice(0, 4).map((artist) => this.searchAlbums(artist.name, { limit: 4 }))
         );
         return albums.flatMap((result) => (Array.isArray(result) ? result : result?.items || []));
     }

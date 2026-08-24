@@ -197,6 +197,43 @@ export class MusicDatabase {
         });
     }
 
+    async importHistory(tracks = []) {
+        if (!Array.isArray(tracks) || tracks.length === 0) return 0;
+
+        const existing = await this.getHistory();
+        const existingKeys = new Set(
+            existing.map((entry) => entry.historyKey).filter((key) => typeof key === 'string' && key)
+        );
+        const entries = tracks
+            .map((track, index) => {
+                const title = String(track?.title || '').trim();
+                const artist = String(track?.artist?.name || track?.artists?.[0]?.name || '').trim();
+                const playedAt = Number(track?.playedAt) || 0;
+                if (!title || !artist || !playedAt) return null;
+                const historyKey = `lastfm:${title.toLowerCase()}::${artist.toLowerCase()}::${playedAt}`;
+                if (existingKeys.has(historyKey)) return null;
+                existingKeys.add(historyKey);
+                return {
+                    ...this._minifyItem('track', track),
+                    timestamp: playedAt + index / 1000,
+                    historyKey,
+                };
+            })
+            .filter(Boolean);
+
+        if (entries.length === 0) return 0;
+        const db = await this.open();
+        await new Promise((resolve, reject) => {
+            const transaction = db.transaction('history_tracks', 'readwrite');
+            const store = transaction.objectStore('history_tracks');
+            entries.forEach((entry) => store.put(entry));
+            transaction.oncomplete = resolve;
+            transaction.onerror = (event) => reject(event.target.error);
+        });
+        window.dispatchEvent(new CustomEvent('history-changed'));
+        return entries.length;
+    }
+
     async _syncHistoryItemToCloud(entry) {
         try {
             const { syncManager } = await import('./accounts/appwrite-sync.js');

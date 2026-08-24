@@ -135,6 +135,9 @@ export class SidePanelManager {
     }
 
     close() {
+        if (this.currentView === 'lyrics') {
+            this.panel.__lyricsControlsAutoHideCleanup?.();
+        }
         this.panel.classList.remove('active');
         this.currentView = null;
         this._updateBodyPanelState();

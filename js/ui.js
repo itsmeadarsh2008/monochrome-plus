@@ -55,7 +55,7 @@ import {
     renderTrackerTrackPage as renderTrackerTrackContent,
 } from './tracker.js';
 import { scrollToTop } from './smooth-scrolling.js';
-import { fetchLastFmUserRecentTracks } from './lastfm.js';
+import { fetchAllLastFmUserRecentTracks, fetchLastFmUserRecentTracks } from './lastfm.js';
 
 const deriveArtistsFromTracks = (tracks) => {
     const artistMap = new Map();
@@ -176,7 +176,7 @@ export class UIRenderer {
         this._homeArtistsMaxRetries = 4;
         this._recentTrackProfileCache = null;
         this._recentTrackProfileCacheAt = 0;
-        this._recentTrackProfileCacheTtlMs = 0;
+        this._recentTrackProfileCacheTtlMs = 10 * 60 * 1000;
         this._recentTrackProfilePromise = null;
         this._recommendationExclusionCache = null;
         this._recommendationExclusionCacheAt = 0;
@@ -932,6 +932,13 @@ export class UIRenderer {
     }
 
     createAlbumCardHTML(album) {
+        // Keep lightweight album metadata available for addons that expose
+        // album search results but not the album detail endpoint.
+        if (album?.id && typeof window !== 'undefined') {
+            window.__monochromeAlbumCache ||= new Map();
+            window.__monochromeAlbumCache.set(String(album.id), album);
+        }
+
         const explicitBadge = hasExplicitContent(album) ? this.createExplicitBadge() : '';
         const qualityBadge = createQualityBadgeHTML(album);
         const isBlocked = contentBlockingSettings?.shouldHideAlbum(album);
@@ -967,6 +974,49 @@ export class UIRenderer {
                 ? `title="Blocked: ${contentBlockingSettings.isAlbumBlocked(album.id) ? 'Album blocked' : 'Artist blocked'}"`
                 : '',
         });
+    }
+
+    async loadAlbumFromSearchFallback(albumId) {
+        const cachedAlbum = window.__monochromeAlbumCache?.get(String(albumId));
+        if (!cachedAlbum?.title) return null;
+
+        const artistName =
+            typeof cachedAlbum.artist === 'string'
+                ? cachedAlbum.artist
+                : cachedAlbum.artist?.name || cachedAlbum.artists?.[0]?.name || '';
+        const query = [cachedAlbum.title, artistName].filter(Boolean).join(' ');
+        const result = await this.api.searchTracks(query, { limit: 50 });
+        const candidates = result?.items || result?.tracks || [];
+        const normalizedTitle = String(cachedAlbum.title).trim().toLowerCase();
+        const normalizedArtist = artistName.trim().toLowerCase();
+
+        const tracks = candidates
+            .filter((track) => {
+                const trackAlbum = track.album || {};
+                const albumMatches =
+                    String(trackAlbum.id || track.albumId || '') === String(albumId) ||
+                    String(trackAlbum.title || track.albumTitle || '').trim().toLowerCase() === normalizedTitle;
+                if (!albumMatches) return false;
+                if (!normalizedArtist) return true;
+                const trackArtist =
+                    typeof track.artist === 'string'
+                        ? track.artist
+                        : track.artist?.name || track.artists?.[0]?.name || '';
+                return trackArtist.trim().toLowerCase() === normalizedArtist;
+            })
+            .map((track, index) => ({
+                ...track,
+                trackNumber: track.trackNumber || index + 1,
+                album: cachedAlbum,
+                albumId: String(albumId),
+                albumTitle: cachedAlbum.title,
+            }));
+
+        if (!tracks.length) return null;
+        return {
+            album: { ...cachedAlbum, id: String(albumId), numberOfTracks: tracks.length },
+            tracks,
+        };
     }
 
     createArtistCardHTML(artist) {
@@ -4344,6 +4394,13 @@ export class UIRenderer {
     }
 
     async getRecentTrackProfile(forceRefresh = false) {
+        if (
+            !forceRefresh &&
+            this._recentTrackProfileCache &&
+            Date.now() - this._recentTrackProfileCacheAt < this._recentTrackProfileCacheTtlMs
+        ) {
+            return this._recentTrackProfileCache;
+        }
         if (!forceRefresh && this._recentTrackProfilePromise) {
             return this._recentTrackProfilePromise;
         }
@@ -4351,12 +4408,15 @@ export class UIRenderer {
         this._recentTrackProfilePromise = (async () => {
             let history;
             try {
-                const lastFmHistory = await fetchLastFmUserRecentTracks({
-                    limit: 50,
+                const lastFmHistory = await fetchAllLastFmUserRecentTracks({
+                    limit: 200,
                     skipCache: forceRefresh,
+                    timeoutMs: 8000,
                 });
-                history = await this._resolveLastFmRecentTracks(lastFmHistory);
-                if (history.length === 0) history = await db.getHistory().catch(() => []);
+                await db.importHistory(lastFmHistory);
+                history = await this._resolveLastFmRecentTracks(lastFmHistory.slice(0, 50));
+                const localHistory = await db.getHistory().catch(() => []);
+                history = [...history, ...localHistory];
             } catch (error) {
                 console.error('[UI] Failed to load recent track history:', error);
                 history = await db.getHistory().catch(() => []);
@@ -4805,47 +4865,21 @@ export class UIRenderer {
                     (track) => !track?.id || !recentTrackIds.has(track.id)
                 );
 
-                const listenedCandidates = [...listenedPool]
-                    .filter((track) => !track?.id || !dedupedCandidates.some((candidate) => candidate?.id === track.id))
-                    .sort(() => Math.random() - 0.5);
-
-                const totalTarget = 20;
-                const unheardTarget = 12;
-                const listenedTarget = totalTarget - unheardTarget;
-                const diversityCap = 2;
+                const totalTarget = 16;
+                const unheardTarget = totalTarget;
+                const diversityCap = 1;
 
                 // Artist diversity: cap how many tracks any single artist can
                 // contribute so recommendations aren't dominated by a handful
                 // of seed artists.
                 const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap);
-                const diversifiedListened = this._diversifyByArtist(listenedCandidates, diversityCap);
-
-                let mixedTracks = [
-                    ...diversifiedUnheard.slice(0, unheardTarget),
-                    ...diversifiedListened.slice(0, listenedTarget),
-                ];
-
-                const backfillPool = this._dedupeTracks([...unheardCandidates, ...listenedCandidates]);
-                let backfillIndex = 0;
-                while (mixedTracks.length < totalTarget && backfillIndex < backfillPool.length) {
-                    const nextTrack = backfillPool[backfillIndex++];
-                    if (!nextTrack?.id || mixedTracks.some((track) => track?.id === nextTrack.id)) continue;
-                    mixedTracks.push(nextTrack);
-                }
-
-                // Enforce the per-artist cap across the final mix, filling the
-                // tail from same-artist leftovers only if the pool is too thin.
-                mixedTracks = this._diversifyByArtist(mixedTracks, diversityCap, totalTarget);
+                const mixedTracks = diversifiedUnheard.slice(0, unheardTarget);
 
                 const shuffledMixedTracks = [...mixedTracks].sort(() => Math.random() - 0.5);
                 const filteredTracks = await this.filterUserContent(shuffledMixedTracks, 'track');
 
                 if (filteredTracks.length > 0) {
                     this.renderListWithTracks(songsContainer, filteredTracks.slice(0, totalTarget), true);
-                } else {
-                    songsContainer.innerHTML = createPlaceholder(
-                        'No mixed recommendations found right now. Try refreshing for a new blend.'
-                    );
                 }
             } catch (e) {
                 console.error(e);
@@ -6469,7 +6503,18 @@ export class UIRenderer {
         `;
 
         try {
-            const { album, tracks } = await this.api.getAlbum(albumId, provider);
+            let albumData;
+            try {
+                albumData = await this.api.getAlbum(albumId, provider);
+            } catch (error) {
+                const isUnsupported = /not supported|http\s*404|addon error/i.test(String(error?.message || error));
+                if (!isUnsupported) throw error;
+                albumData = await this.loadAlbumFromSearchFallback(albumId);
+                if (!albumData) throw error;
+                console.warn('[UI] Used search fallback for unsupported album details:', albumId);
+            }
+
+            const { album, tracks } = albumData;
             recentActivityManager.addAlbum(album);
 
             const coverUrl = this.api.getCoverUrl(album.cover);

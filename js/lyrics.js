@@ -27,10 +27,8 @@ const LYRICS_SOURCE_PRIORITY = {
     plain: 10,
 };
 const DEV_CORS_PROXY_PREFIX = '/cors-proxy/';
-const PROD_CORS_PROXY_PREFIX = '/proxy?url=';
-const CORSPROXY_IO_PREFIX = 'https://corsproxy.io/?url=';
-const EMPTY_LYRICS_URL = '/empty-lyrics.json';
 const LYRICS_PROXY_HOSTS = new Set([
+    'lrclib.net',
     'lyricsplus.binimum.org',
     'lyricsplus.atomix.one',
     'lyricsplus-seven.vercel.app',
@@ -73,14 +71,14 @@ function getRewrittenLyricsRequestUrl(rawUrl) {
         if (!shouldProxyLyricsUrl(parsed)) return rawUrl;
 
         if (isLocalBrowserDev()) {
-            if (LYRICS_PROXY_HOSTS.has(parsed.hostname.toLowerCase())) {
-                return EMPTY_LYRICS_URL;
-            }
-            return `${CORSPROXY_IO_PREFIX}${encodeURIComponent(parsed.toString())}`;
+            // Keep lyrics requests same-origin in development. This avoids
+            // browser preflights (LRCLIB rejects the User-Agent header) and
+            // lets Vite's generic proxy add the CORS response headers.
+            return `${DEV_CORS_PROXY_PREFIX}${encodeURIComponent(parsed.toString())}`;
         }
 
-        // Official domain/static hosting: use same-origin proxy for lyrics backends.
-        return `${PROD_CORS_PROXY_PREFIX}${encodeURIComponent(parsed.toString())}`;
+        // The deployed static host rewrites this route to corsproxy.io.
+        return `${DEV_CORS_PROXY_PREFIX}${encodeURIComponent(parsed.toString())}`;
     } catch {
         return rawUrl;
     }
@@ -1306,8 +1304,55 @@ export function openLyricsPanel(track, audioPlayer, lyricsManager, forceOpen = f
 
     sidePanelManager.open('lyrics', 'Lyrics', renderControls, renderContent, forceOpen);
 
+    // Keep the lyrics toolbar unobtrusive while still making it easy to reach.
+    // Pointer movement starts (or restarts) the short visibility window.
+    setupLyricsControlsAutoHide();
+
     // Update panel track info for mobile
     updatePanelTrackInfo(track);
+}
+
+const LYRICS_CONTROLS_HIDE_DELAY = 2500;
+
+function setupLyricsControlsAutoHide() {
+    const panel = sidePanelManager.panel;
+    if (!panel) return;
+
+    panel.__lyricsControlsAutoHideCleanup?.();
+
+    let hideTimer = null;
+    const showControls = () => {
+        panel.classList.add('lyrics-controls-visible');
+        window.clearTimeout(hideTimer);
+        hideTimer = window.setTimeout(() => {
+            // Do not hide a toolbar while a control still has keyboard focus.
+            if (!panel.querySelector('.panel-header :focus')) {
+                panel.classList.remove('lyrics-controls-visible');
+            }
+        }, LYRICS_CONTROLS_HIDE_DELAY);
+    };
+    const hideControls = () => {
+        window.clearTimeout(hideTimer);
+        panel.classList.remove('lyrics-controls-visible');
+    };
+
+    panel.addEventListener('pointerenter', showControls);
+    panel.addEventListener('pointermove', showControls);
+    panel.addEventListener('pointerleave', hideControls);
+    panel.addEventListener('touchstart', showControls, { passive: true });
+    panel.addEventListener('focusin', showControls);
+
+    panel.__lyricsControlsAutoHideCleanup = () => {
+        window.clearTimeout(hideTimer);
+        panel.classList.remove('lyrics-controls-visible');
+        panel.removeEventListener('pointerenter', showControls);
+        panel.removeEventListener('pointermove', showControls);
+        panel.removeEventListener('pointerleave', hideControls);
+        panel.removeEventListener('touchstart', showControls);
+        panel.removeEventListener('focusin', showControls);
+        delete panel.__lyricsControlsAutoHideCleanup;
+    };
+
 }
 
 function getLyricsHighlightColor() {
@@ -1468,6 +1513,20 @@ async function renderLyricsComponent(container, track, audioPlayer, lyricsManage
                     transform: translateZ(0);
                     backface-visibility: hidden;
                     contain: paint;
+                }
+
+                /* Place the lyric canvas itself one quarter down the viewport.
+                   The outer panel cannot do this reliably because am-lyrics
+                   owns a full-height internal scroller in its shadow root. */
+                .lyrics-container {
+                    padding-top: 25vh !important;
+                    scroll-padding-block-start: 25%;
+                }
+
+                @media (min-width: 769px) {
+                    .lyrics-header {
+                        top: 90px !important;
+                    }
                 }
 
                 /* Wrap by words on short screens and avoid letter-level breaking */

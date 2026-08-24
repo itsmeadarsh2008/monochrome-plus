@@ -34,6 +34,7 @@ import './smooth-scrolling.js';
 import { openEditProfile } from './profile.js';
 import './commandPalette.js';
 import { initImageLoader } from './image-loader.js';
+import { initTablerIcons } from './tabler-icons.js';
 
 import { parseCSV, parseJSPF, parseXSPF, parseXML, parseM3U } from './playlist-importer.js';
 
@@ -378,6 +379,7 @@ async function uploadCoverImage(file) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     initImageLoader();
+    initTablerIcons();
 
     // Ping Appwrite to verify setup
     client
