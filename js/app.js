@@ -2955,6 +2955,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelector('.now-playing-bar .play-pause-btn').innerHTML = SVG_PLAY_MINI;
 
     const router = createRouter(ui);
+    let lastPathname = window.location.pathname;
 
     const handleRouteChange = async (event) => {
         if (!enforceAuthLock()) {
@@ -2966,6 +2967,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (isFullscreenOpen && window.location.hash !== '#fullscreen') {
             ui.closeFullscreenCover();
+            // Closing the fullscreen cover returns to the same underlying page
+            // (album/artist/track). Do not re-render it — the DOM is already
+            // intact underneath the overlay and re-fetching would flash skeletons.
+            if (window.location.pathname === lastPathname) {
+                return;
+            }
         }
 
         if (event && event.state && event.state.exitTrap) {
@@ -2995,6 +3002,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         console.log('[Router] Handling route change to:', window.location.pathname);
         await router();
+        lastPathname = window.location.pathname;
         updateTabTitle(player);
 
         // Update Open Graph and canonical meta tags dynamically

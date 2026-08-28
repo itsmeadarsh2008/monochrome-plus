@@ -182,6 +182,8 @@ export class UIRenderer {
         this._recommendationExclusionCacheAt = 0;
         this._recommendationExclusionCacheTtlMs = 2 * 60 * 1000;
         this._recommendationExclusionPromise = null;
+        this._detailPageCache = new Map();
+        this._detailPageCacheTtlMs = 10 * 60 * 1000;
         this._friendsSuggestionQuery = '';
         this._friendsSuggestionTimer = null;
         this._friendsSuggestionRequestToken = 0;
@@ -995,7 +997,9 @@ export class UIRenderer {
                 const trackAlbum = track.album || {};
                 const albumMatches =
                     String(trackAlbum.id || track.albumId || '') === String(albumId) ||
-                    String(trackAlbum.title || track.albumTitle || '').trim().toLowerCase() === normalizedTitle;
+                    String(trackAlbum.title || track.albumTitle || '')
+                        .trim()
+                        .toLowerCase() === normalizedTitle;
                 if (!albumMatches) return false;
                 if (!normalizedArtist) return true;
                 const trackArtist =
@@ -4214,6 +4218,25 @@ export class UIRenderer {
         this._recommendationExclusionPromise = null;
     }
 
+    _getDetailPageCache(key) {
+        const entry = this._detailPageCache.get(key);
+        if (!entry) return null;
+        if (Date.now() - entry.ts > this._detailPageCacheTtlMs) {
+            this._detailPageCache.delete(key);
+            return null;
+        }
+        return entry.data;
+    }
+
+    _setDetailPageCache(key, data) {
+        this._detailPageCache.set(key, { data, ts: Date.now() });
+        // Prevent unbounded growth — keep at most 50 entries
+        if (this._detailPageCache.size > 50) {
+            const firstKey = this._detailPageCache.keys().next().value;
+            this._detailPageCache.delete(firstKey);
+        }
+    }
+
     _toLowerText(value) {
         return String(value || '')
             .trim()
@@ -4449,35 +4472,44 @@ export class UIRenderer {
         });
 
         const resolvedGroups = await Promise.all(
-            Array.from(groups.values()).slice(0, 12).map(async (group) => {
-                try {
-                    const found = await this.api.searchTracks(group.name, {
-                        limit: Math.min(30, Math.max(8, group.tracks.length * 2)),
-                        background: true,
-                        signal: typeof AbortSignal !== 'undefined' ? AbortSignal.timeout(3500) : undefined,
-                    });
-                    const items = Array.isArray(found) ? found : found?.items || [];
-                    const artistName = group.name.toLowerCase();
-                    return group.tracks.map((track) => {
-                        const title = track.title.toLowerCase();
-                        const match = items.find(
-                            (item) =>
-                                String(item.title || '').toLowerCase() === title &&
-                                String(item.artist?.name || item.artists?.[0]?.name || '').toLowerCase() === artistName
+            Array.from(groups.values())
+                .slice(0, 12)
+                .map(async (group) => {
+                    try {
+                        const found = await this.api.searchTracks(group.name, {
+                            limit: Math.min(30, Math.max(8, group.tracks.length * 2)),
+                            background: true,
+                            signal: typeof AbortSignal !== 'undefined' ? AbortSignal.timeout(3500) : undefined,
+                        });
+                        const items = Array.isArray(found) ? found : found?.items || [];
+                        const artistName = group.name.toLowerCase();
+                        return group.tracks
+                            .map((track) => {
+                                const title = track.title.toLowerCase();
+                                const match = items.find(
+                                    (item) =>
+                                        String(item.title || '').toLowerCase() === title &&
+                                        String(item.artist?.name || item.artists?.[0]?.name || '').toLowerCase() ===
+                                            artistName
+                                );
+                                if (!match) return null;
+                                return {
+                                    ...match,
+                                    timestamp: track.playedAt || Date.now(),
+                                    lastFmPlayedAt: track.playedAt || null,
+                                    album: match.album || track.album,
+                                };
+                            })
+                            .filter(Boolean);
+                    } catch (error) {
+                        console.warn(
+                            '[UI] Failed to resolve Last.fm history group:',
+                            group.name,
+                            error?.message || error
                         );
-                        if (!match) return null;
-                        return {
-                            ...match,
-                            timestamp: track.playedAt || Date.now(),
-                            lastFmPlayedAt: track.playedAt || null,
-                            album: match.album || track.album,
-                        };
-                    }).filter(Boolean);
-                } catch (error) {
-                    console.warn('[UI] Failed to resolve Last.fm history group:', group.name, error?.message || error);
-                    return [];
-                }
-            })
+                        return [];
+                    }
+                })
         );
         return resolvedGroups.flat();
     }
@@ -6469,6 +6501,8 @@ export class UIRenderer {
     }
 
     async renderAlbumPage(albumId, provider = null) {
+        const cacheKey = `album:${provider || 'default'}:${albumId}`;
+        const cached = this._getDetailPageCache(cacheKey);
         this.showPage('album');
 
         const imageEl = document.getElementById('album-detail-image');
@@ -6484,34 +6518,39 @@ export class UIRenderer {
         const mixBtn = document.getElementById('album-mix-btn');
         if (mixBtn) mixBtn.style.display = 'none';
 
-        imageEl.src = '';
-        imageEl.style.backgroundColor = 'var(--muted)';
-        titleEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
-        metaEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
-        if (prodEl)
-            prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
-        if (descEl)
-            descEl.innerHTML = '<div class="skeleton" style="height: 14px; width: 300px; max-width: 90%;"></div>';
-        tracklistContainer.innerHTML = `
-            <div class="track-list-header">
-                <span style="width: 40px; text-align: center;">#</span>
-                <span>Title</span>
-                <span class="duration-header">Duration</span>
-                <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
-            </div>
-            ${this.createSkeletonTracks(10, false)}
-        `;
+        if (!cached) {
+            imageEl.src = '';
+            imageEl.style.backgroundColor = 'var(--muted)';
+            titleEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
+            metaEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+            if (prodEl)
+                prodEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 200px; max-width: 80%;"></div>';
+            if (descEl)
+                descEl.innerHTML = '<div class="skeleton" style="height: 14px; width: 300px; max-width: 90%;"></div>';
+            tracklistContainer.innerHTML = `
+                <div class="track-list-header">
+                    <span style="width: 40px; text-align: center;">#</span>
+                    <span>Title</span>
+                    <span class="duration-header">Duration</span>
+                    <span style="display: flex; justify-content: flex-end; opacity: 0.8;">Menu</span>
+                </div>
+                ${this.createSkeletonTracks(10, false)}
+            `;
+        }
 
         try {
-            let albumData;
-            try {
-                albumData = await this.api.getAlbum(albumId, provider);
-            } catch (error) {
-                const isUnsupported = /not supported|http\s*404|addon error/i.test(String(error?.message || error));
-                if (!isUnsupported) throw error;
-                albumData = await this.loadAlbumFromSearchFallback(albumId);
-                if (!albumData) throw error;
-                console.warn('[UI] Used search fallback for unsupported album details:', albumId);
+            let albumData = cached;
+            if (!albumData) {
+                try {
+                    albumData = await this.api.getAlbum(albumId, provider);
+                } catch (error) {
+                    const isUnsupported = /not supported|http\s*404|addon error/i.test(String(error?.message || error));
+                    if (!isUnsupported) throw error;
+                    albumData = await this.loadAlbumFromSearchFallback(albumId);
+                    if (!albumData) throw error;
+                    console.warn('[UI] Used search fallback for unsupported album details:', albumId);
+                }
+                this._setDetailPageCache(cacheKey, albumData);
             }
 
             const { album, tracks } = albumData;
@@ -7444,6 +7483,8 @@ export class UIRenderer {
     }
 
     async renderArtistPage(artistId, provider = null) {
+        const cacheKey = `artist:${provider || 'default'}:${artistId}`;
+        const cached = this._getDetailPageCache(cacheKey);
         this.showPage('artist');
         this._artistRenderToken = (this._artistRenderToken || 0) + 1;
         const renderToken = this._artistRenderToken;
@@ -7471,39 +7512,45 @@ export class UIRenderer {
         const dlBtn = document.getElementById('download-discography-btn');
         if (dlBtn) dlBtn.innerHTML = `${SVG_DOWNLOAD}<span>Download Discography</span>`;
 
-        imageEl.classList.add('img-loading');
-        if (heroHeaderEl) {
-            heroHeaderEl.classList.add('img-loading');
-            heroHeaderEl.style.setProperty('--artist-hero-bg-image', 'none');
+        if (!cached) {
+            imageEl.classList.add('img-loading');
+            if (heroHeaderEl) {
+                heroHeaderEl.classList.add('img-loading');
+                heroHeaderEl.style.setProperty('--artist-hero-bg-image', 'none');
+            }
+            imageEl.removeAttribute('src');
+            imageEl.style.backgroundColor = 'var(--muted)';
+            nameEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
+            metaEl.innerHTML = '';
+            metaEl.style.display = 'none';
+            const heroActionsEl = document.querySelector('#page-artist .artist-hero-actions');
+            if (heroActionsEl && heroContentEl && !heroContentEl.contains(heroActionsEl)) {
+                heroContentEl.appendChild(heroActionsEl);
+            }
+            if (aboutTopEl) {
+                aboutTopEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 220px;"></div>';
+            }
+            if (bioEl) {
+                bioEl.textContent = '';
+                bioEl.classList.remove('expanded');
+            }
+            if (bioSection) bioSection.style.display = 'none';
+            tracksContainer.innerHTML = this.createSkeletonTracks(5, true);
+            albumsContainer.innerHTML = this.createSkeletonCards(6, false);
+            if (epsContainer) epsContainer.innerHTML = this.createSkeletonCards(6, false);
+            if (epsSection) epsSection.style.display = 'none';
+            const loadUnreleasedSection = document.getElementById('artist-section-load-unreleased');
+            if (loadUnreleasedSection) loadUnreleasedSection.style.display = 'none';
+            if (similarContainer) similarContainer.innerHTML = this.createSkeletonCards(6, true);
+            if (similarSection) similarSection.style.display = 'block';
         }
-        imageEl.removeAttribute('src');
-        imageEl.style.backgroundColor = 'var(--muted)';
-        nameEl.innerHTML = '<div class="skeleton" style="height: 48px; width: 300px; max-width: 90%;"></div>';
-        metaEl.innerHTML = '';
-        metaEl.style.display = 'none';
-        const heroActionsEl = document.querySelector('#page-artist .artist-hero-actions');
-        if (heroActionsEl && heroContentEl && !heroContentEl.contains(heroActionsEl)) {
-            heroContentEl.appendChild(heroActionsEl);
-        }
-        if (aboutTopEl) {
-            aboutTopEl.innerHTML = '<div class="skeleton" style="height: 16px; width: 220px;"></div>';
-        }
-        if (bioEl) {
-            bioEl.textContent = '';
-            bioEl.classList.remove('expanded');
-        }
-        if (bioSection) bioSection.style.display = 'none';
-        tracksContainer.innerHTML = this.createSkeletonTracks(5, true);
-        albumsContainer.innerHTML = this.createSkeletonCards(6, false);
-        if (epsContainer) epsContainer.innerHTML = this.createSkeletonCards(6, false);
-        if (epsSection) epsSection.style.display = 'none';
-        const loadUnreleasedSection = document.getElementById('artist-section-load-unreleased');
-        if (loadUnreleasedSection) loadUnreleasedSection.style.display = 'none';
-        if (similarContainer) similarContainer.innerHTML = this.createSkeletonCards(6, true);
-        if (similarSection) similarSection.style.display = 'block';
 
         try {
-            const artist = await this.api.getArtist(artistId, provider);
+            let artist = cached;
+            if (!artist) {
+                artist = await this.api.getArtist(artistId, provider);
+                this._setDetailPageCache(cacheKey, artist);
+            }
             if (renderToken !== this._artistRenderToken) return;
             recentActivityManager.addArtist(artist);
 
