@@ -1410,13 +1410,13 @@ export class UIRenderer {
         const safeTitle = escapeHtml(rawTitle || '');
         if (!safeTitle) return qualityBadge || '';
 
-        const bracketMatches = safeTitle.match(/\[[^\]]+\]/g) || [];
+        const bracketMatches = safeTitle.match(/(?:\[[^\]]+\]|\([^)]+\))/g) || [];
         if (bracketMatches.length === 0) {
             return `${safeTitle}${qualityBadge ? ` ${qualityBadge}` : ''}`;
         }
 
         const mainTitle = safeTitle
-            .replace(/\s*\[[^\]]+\]/g, '')
+            .replace(/\s*(?:\[[^\]]+\]|\([^)]+\))/g, '')
             .replace(/\s{2,}/g, ' ')
             .trim();
         const bracketHtml = bracketMatches
