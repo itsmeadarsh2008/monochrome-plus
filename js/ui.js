@@ -1023,7 +1023,81 @@ export class UIRenderer {
         };
     }
 
+    async loadArtistFromSearchFallback(artistId) {
+        const cachedArtist = window.__monochromeArtistCache?.get(String(artistId));
+        const artistName = String(cachedArtist?.name || '').trim();
+        if (!artistName) {
+            return {
+                id: String(artistId),
+                name: `Artist ${artistId}`,
+                picture: null,
+                image: null,
+                biography: '',
+                albums: [],
+                tracks: [],
+                eps: [],
+                mixes: {},
+                topTracks: [],
+            };
+        }
+
+        try {
+            const result = await this.api.searchTracks(artistName, { limit: 50 });
+            const candidates = result?.items || result?.tracks || result || [];
+            const normalizedArtist = artistName.toLowerCase();
+            const tracks = candidates.filter((track) => {
+                const trackArtist = String(track.artist?.name || track.artists?.[0]?.name || track.artist || '')
+                    .trim()
+                    .toLowerCase();
+                return (
+                    trackArtist === normalizedArtist ||
+                    trackArtist.includes(normalizedArtist) ||
+                    normalizedArtist.includes(trackArtist)
+                );
+            });
+
+            if (!tracks.length) return null;
+
+            const albumMap = new Map();
+            tracks.forEach((track) => {
+                const albumId = String(track.album?.id || track.albumId || '');
+                if (!albumId) return;
+                if (!albumMap.has(albumId)) {
+                    albumMap.set(albumId, {
+                        id: albumId,
+                        title: track.album?.title || track.albumTitle || 'Unknown Album',
+                        cover: track.album?.cover,
+                        artist: { name: artistName },
+                        artists: [{ name: artistName }],
+                        releaseDate: track.album?.releaseDate || '',
+                    });
+                }
+            });
+
+            const albums = Array.from(albumMap.values());
+
+            return {
+                id: String(artistId),
+                name: artistName,
+                picture: cachedArtist?.picture || null,
+                image: cachedArtist?.picture || cachedArtist?.image || null,
+                biography: '',
+                albums,
+                tracks: tracks.slice(0, 20),
+                eps: [],
+                mixes: {},
+                topTracks: tracks.slice(0, 10),
+            };
+        } catch {
+            return null;
+        }
+    }
+
     createArtistCardHTML(artist) {
+        if (artist?.id) {
+            window.__monochromeArtistCache ||= new Map();
+            window.__monochromeArtistCache.set(String(artist.id), artist);
+        }
         const isCompact = cardSettings.isCompactArtist();
         const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
         const picture = artist?.picture || 'assets/appicon.png';
@@ -3221,7 +3295,7 @@ export class UIRenderer {
                             },
                         });
                     } catch (error) {
-                        fail(error.message);
+                        fail(error?.message || String(error || 'Unknown error'));
                     }
                 };
                 tryCandidate(0);
@@ -6768,7 +6842,9 @@ export class UIRenderer {
             }
         } catch (error) {
             console.error('Failed to load album:', error);
-            tracklistContainer.innerHTML = createPlaceholder(`Could not load album details. ${error.message}`);
+            tracklistContainer.innerHTML = createPlaceholder(
+                `Could not load album details. ${error?.message || String(error || 'Unknown error')}`
+            );
         }
     }
 
@@ -7332,7 +7408,9 @@ export class UIRenderer {
             this.setupTracklistSearch();
         } catch (error) {
             console.error('Failed to load playlist:', error);
-            tracklistContainer.innerHTML = createPlaceholder(`Could not load playlist details. ${error.message}`);
+            tracklistContainer.innerHTML = createPlaceholder(
+                `Could not load playlist details. ${error?.message || String(error || 'Unknown error')}`
+            );
         }
     }
 
@@ -7478,7 +7556,9 @@ export class UIRenderer {
             document.title = displayTitle;
         } catch (error) {
             console.error('Failed to load mix:', error);
-            tracklistContainer.innerHTML = createPlaceholder(`Could not load mix details. ${error.message}`);
+            tracklistContainer.innerHTML = createPlaceholder(
+                `Could not load mix details. ${error?.message || String(error || 'Unknown error')}`
+            );
         }
     }
 
@@ -7548,7 +7628,16 @@ export class UIRenderer {
         try {
             let artist = cached;
             if (!artist) {
-                artist = await this.api.getArtist(artistId, provider);
+                try {
+                    artist = await this.api.getArtist(artistId, provider);
+                } catch (error) {
+                    const msg = String(error?.message || error || '');
+                    const isUnsupported = /not supported|404|addon error/i.test(msg);
+                    if (!isUnsupported) throw error;
+                    artist = await this.loadArtistFromSearchFallback(artistId);
+                    if (!artist) throw error;
+                    console.warn('[UI] Used search fallback for unsupported artist:', artistId);
+                }
                 this._setDetailPageCache(cacheKey, artist);
             }
             if (renderToken !== this._artistRenderToken) return;
@@ -7915,7 +8004,7 @@ export class UIRenderer {
         } catch (error) {
             console.error('Failed to load artist:', error);
             tracksContainer.innerHTML = albumsContainer.innerHTML = createPlaceholder(
-                `Could not load artist details. ${error.message}`
+                `Could not load artist details. ${error?.message || String(error || 'Unknown error')}`
             );
         }
     }

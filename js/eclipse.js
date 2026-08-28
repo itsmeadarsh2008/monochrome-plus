@@ -659,7 +659,7 @@ export class EclipseAPI {
                 }
                 throw new Error('Addon timed out');
             }
-            throw new Error(`Addon unreachable: ${error.message}`);
+            throw new Error(`Addon unreachable: ${error?.message || String(error || 'Unknown error')}`);
         }
 
         if (res.status === 429) {
