@@ -446,6 +446,13 @@ export const createFullscreenQualityHTML = (track) => {
     const bitrateKbps = toPositiveInt(track.bitrateKbps);
     const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
 
+    // For lossy 320kbps the 44.1 kHz readout is redundant — hide it so
+    // the display reads "HIGH · AAC · 320 KBPS" instead of
+    // "HIGH · 44.1 kHz · AAC · 320 kbps".
+    if (lossy && bitrateKbps === 320 && sampleRate === 44100) {
+        sampleRateStr = null;
+    }
+
     // Determine quality label and logo
     let qualityLabel = '';
     let logoHtml = '';
