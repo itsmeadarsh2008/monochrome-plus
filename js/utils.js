@@ -810,7 +810,7 @@ export const getTrackArtistsHTML = (track = {}, { fallback = 'Unknown Artist' } 
                     return `<span class="artist-link tracker-artist-link" data-tracker-sheet-id="${escapedSheetId}">${escapedName}</span>`;
                 }
                 // For normal tracks, use the artist ID
-                return `<span class="artist-link" data-artist-id="${escapedId}">${escapedName}</span>`;
+                return `<span class="artist-link" data-artist-id="${escapedId}" data-artist-name="${escapedName}">${escapedName}</span>`;
             })
             .join(', ');
     }

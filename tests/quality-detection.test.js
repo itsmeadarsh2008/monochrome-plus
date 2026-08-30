@@ -100,6 +100,7 @@ test('track artist links support singular artist metadata', () => {
     assert.match(html, /class="artist-link"/);
     assert.match(html, /Artist A/);
     assert.match(html, /data-artist-id=""/);
+    assert.match(html, /data-artist-name="Artist A"/);
 });
 
 test('recommendation merging keeps multiple distinct tracks instead of collapsing to one', () => {

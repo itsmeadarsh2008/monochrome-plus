@@ -2230,13 +2230,18 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
             e.stopPropagation();
             const artistId = artistLink.dataset.artistId;
             const trackerSheetId = artistLink.dataset.trackerSheetId;
+            const artistName = artistLink.dataset.artistName || artistLink.textContent.trim();
             if (trackerSheetId) {
                 navigate(`/unreleased/${trackerSheetId}`);
             } else if (artistId) {
+                if (artistName) {
+                    window.__monochromeArtistCache ||= new Map();
+                    window.__monochromeArtistCache.set(String(artistId), { id: artistId, name: artistName });
+                }
                 navigate(`/artist/${artistId}`);
             } else {
                 // Addon tracks have no artist id on search results - resolve by name
-                const name = artistLink.textContent.trim();
+                const name = artistName;
                 if (name) {
                     try {
                         const resolvedId = await ui.api.resolveArtistIdByName(name);
