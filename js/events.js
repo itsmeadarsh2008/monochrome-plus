@@ -315,6 +315,11 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, disco
 
     document.addEventListener('monochrome:track-quality-updated', () => {
         updateDiscordPresence();
+
+        const fullscreenOverlay = document.getElementById('fullscreen-cover-overlay');
+        if (fullscreenOverlay && getComputedStyle(fullscreenOverlay).display !== 'none' && player.currentTrack) {
+            ui.updateFullscreenMetadata(player.currentTrack, player.getNextTrack());
+        }
     });
 
     window.addEventListener('beforeunload', () => {

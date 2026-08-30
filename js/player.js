@@ -1193,6 +1193,7 @@ export class Player {
                 // Store stream quality metadata on track for UI display —
                 // applied on every path so the fullscreen quality readout is exact.
                 if (streamInfo && typeof streamInfo === 'object' && streamInfo.url) {
+                    track.streamInfo = { ...streamInfo };
                     if (streamInfo.bitDepth != null) track.bitDepth = streamInfo.bitDepth;
                     if (streamInfo.sampleRate != null) track.sampleRate = streamInfo.sampleRate;
                     if (streamInfo.audioQuality) track.audioQuality = streamInfo.audioQuality;
@@ -1293,14 +1294,17 @@ export class Player {
                         let changed = false;
                         if (real.sampleRate && real.sampleRate !== inspectedTrack.sampleRate) {
                             inspectedTrack.sampleRate = real.sampleRate;
+                            inspectedTrack.streamInfo = { ...inspectedTrack.streamInfo, sampleRate: real.sampleRate };
                             changed = true;
                         }
                         if (real.bitDepth && real.bitDepth !== inspectedTrack.bitDepth) {
                             inspectedTrack.bitDepth = real.bitDepth;
+                            inspectedTrack.streamInfo = { ...inspectedTrack.streamInfo, bitDepth: real.bitDepth };
                             changed = true;
                         }
                         if (real.bitrateKbps && real.bitrateKbps !== inspectedTrack.bitrateKbps) {
                             inspectedTrack.bitrateKbps = real.bitrateKbps;
+                            inspectedTrack.streamInfo = { ...inspectedTrack.streamInfo, bitrateKbps: real.bitrateKbps };
                             changed = true;
                         }
                         if (!changed) return;

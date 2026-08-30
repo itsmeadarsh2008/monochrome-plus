@@ -332,20 +332,17 @@ function notifyRateLimitedOnce() {
     window.dispatchEvent(new CustomEvent('addon-rate-limited', { detail: { message: RATE_LIMIT_ERROR_MESSAGE } }));
 }
 
-const extractBitDepth = (streamInfo) => {
+export const extractBitDepth = (streamInfo) => {
     const quality = `${streamInfo?.quality || ''} ${streamInfo?.streamQuality || ''}`;
     const match = quality.match(/(\d+)\s*-?\s*bit/i);
     if (match) return parseInt(match[1], 10);
-    if (/LOSSLESS/i.test(quality)) return 16;
     return null;
 };
 
-const extractSampleRate = (streamInfo) => {
+export const extractSampleRate = (streamInfo) => {
     const quality = `${streamInfo?.quality || ''} ${streamInfo?.streamQuality || ''}`;
     const match = quality.match(/([\d.]+)\s*kHz/i);
     if (match) return Math.round(parseFloat(match[1]) * 1000);
-    if (/HI_RES/i.test(quality)) return 96000;
-    if (/LOSSLESS/i.test(quality)) return 44100;
     return null;
 };
 
