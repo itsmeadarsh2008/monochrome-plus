@@ -183,8 +183,24 @@ export class MusicAPI {
             timeoutMs: 3500,
         }).catch(() => []);
 
+        const seedArtistNames = Array.from(
+            new Set(
+                seeds
+                    .map((seed) => seed?.artist?.name || seed?.artists?.[0]?.name)
+                    .filter(Boolean)
+                    .map((name) => String(name).trim())
+            )
+        ).slice(0, 4);
+        const similarArtistsBySeed = await Promise.all(
+            seedArtistNames.slice(0, 2).map((artistName) =>
+                fetchLastFmSimilarArtists(artistName, { limit: 4 }).catch(() => [])
+            )
+        );
+
         const artistSeedSets = await Promise.all(
-            personalizedArtists.slice(0, 4).map((artist) => fetchLastFmArtistTopTracks(artist.name || artist, { limit: 6 }))
+            [...personalizedArtists.slice(0, 4), ...similarArtistsBySeed.flat().slice(0, 8)].map((artist) =>
+                fetchLastFmArtistTopTracks(artist.name || artist, { limit: 6 })
+            )
         );
 
         const candidates = mergeRecommendationCandidates(similarBySeed.flat(), ...artistSeedSets);
