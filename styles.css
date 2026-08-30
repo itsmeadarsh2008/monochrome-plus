@@ -6361,20 +6361,27 @@ input:checked + .slider::before {
 }
 
 #fullscreen-cover-image {
+    --art-outline-width: clamp(1px, 0.18vmin, 2px);
     max-width: min(48vw, 620px);
     max-height: min(38vh, 520px);
     border-radius: var(--radius);
     box-shadow:
-        0 0 0 1px rgb(150, 156, 163),
+        0 0 0 var(--art-outline-width) rgb(150, 156, 163),
         0 24px 48px rgb(0, 0, 0, 0.5);
+    outline: var(--art-outline-width) solid rgb(255 255 255 / 0.08);
+    outline-offset: calc(var(--art-outline-width) * 0.8);
     object-fit: contain;
     margin-bottom: 1rem;
     z-index: 1;
-    transition: border-radius 0.3s ease;
+    transition:
+        border-radius 0.3s ease,
+        outline-width 0.3s ease,
+        outline-offset 0.3s ease;
 }
 
 /* Vinyl disc container - default state (no disc) */
 #vinyl-disc-container {
+    container-type: inline-size;
     position: relative;
     display: flex;
     align-items: center;
@@ -6532,10 +6539,11 @@ input:checked + .slider::before {
     max-height: none;
     border-radius: var(--radius-full);
     box-shadow:
-        0 0 0 1px rgb(150, 156, 163),
-        0 0 0 4px rgb(20, 20, 20),
-        0 0 0 6px rgb(8, 8, 8),
+        0 0 0 clamp(1px, 0.3cqw, 2px) rgb(150, 156, 163),
+        0 0 0 clamp(2px, 1cqw, 5px) rgb(20, 20, 20),
+        0 0 0 clamp(4px, 1.5cqw, 8px) rgb(8, 8, 8),
         0 4px 12px rgb(0, 0, 0, 0.5);
+    outline: none;
     object-fit: cover;
     z-index: 3;
     margin-bottom: 0;
