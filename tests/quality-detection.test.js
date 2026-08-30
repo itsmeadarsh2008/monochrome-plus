@@ -31,6 +31,7 @@ globalThis.indexedDB = {
 
 const { extractBitDepth, extractSampleRate } = await import('../js/eclipse.js');
 const { deriveTrackQuality, createFullscreenQualityHTML } = await import('../js/utils.js');
+const { mergeRecommendationCandidates } = await import('../js/lastfm.js');
 
 test('generic lossless labels do not imply hardcoded bit depth or sample rate', () => {
     assert.equal(extractBitDepth({ quality: 'LOSSLESS' }), null);
@@ -91,4 +92,23 @@ test('fullscreen quality reads numeric details from the stream quality string', 
     assert.match(html, /24-bit/i);
     assert.match(html, /96\s*kHz/i);
     assert.match(html, /FLAC/i);
+});
+
+test('recommendation merging keeps multiple distinct tracks instead of collapsing to one', () => {
+    const candidates = mergeRecommendationCandidates(
+        [
+            { title: 'Dawn', artist: { name: 'Artist A' }, match: 0.92 },
+            { title: 'Night', artist: { name: 'Artist A' }, match: 0.81 },
+        ],
+        [
+            { title: 'Echo', artist: { name: 'Artist B' }, match: 0.88 },
+            { title: 'Drift', artist: { name: 'Artist C' }, match: 0.75 },
+        ]
+    );
+
+    assert.equal(candidates.length, 4);
+    assert.deepEqual(
+        candidates.map((item) => `${item.artist.name}:${item.title}`),
+        ['Artist A:Dawn', 'Artist B:Echo', 'Artist A:Night', 'Artist C:Drift']
+    );
 });

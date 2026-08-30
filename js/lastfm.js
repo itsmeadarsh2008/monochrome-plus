@@ -47,6 +47,35 @@ async function lastFmRecommendationRequest(method, params = {}, options = {}) {
 
 const normalizeRecommendationText = (value) => String(value || '').trim().toLowerCase();
 
+export function mergeRecommendationCandidates(...candidateGroups) {
+    const byKey = new Map();
+
+    candidateGroups.forEach((group) => {
+        const items = Array.isArray(group) ? group : [];
+        items.forEach((candidate) => {
+            if (!candidate || typeof candidate !== 'object' || !candidate.title) return;
+
+            const artistName = String(candidate.artist?.name || candidate.artist || '').trim();
+            if (!artistName) return;
+
+            const key = `${normalizeRecommendationText(candidate.title)}::${normalizeRecommendationText(artistName)}`;
+            const existing = byKey.get(key);
+            const matchScore = Number(candidate.match) || 0;
+
+            if (!existing || matchScore > Number(existing.match) || (matchScore === Number(existing.match) && !existing.image && candidate.image)) {
+                byKey.set(key, {
+                    ...candidate,
+                    title: candidate.title,
+                    artist: { ...candidate.artist, name: artistName },
+                    match: matchScore,
+                });
+            }
+        });
+    });
+
+    return Array.from(byKey.values()).sort((a, b) => (Number(b.match) || 0) - (Number(a.match) || 0));
+}
+
 export async function fetchLastFmSimilarTracks(track, options = {}) {
     const title = typeof track === 'string' ? track : track?.title;
     const artist = typeof track === 'string' ? options.artist : track?.artist?.name || track?.artists?.[0]?.name;

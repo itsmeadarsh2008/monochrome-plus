@@ -5,7 +5,13 @@
 
 import { EclipseAPI } from './eclipse.js';
 import { musicProviderSettings } from './storage.js';
-import { fetchLastFmPersonalizedArtists, fetchLastFmSimilarArtists, fetchLastFmSimilarTracks } from './lastfm.js';
+import {
+    fetchLastFmArtistTopTracks,
+    fetchLastFmPersonalizedArtists,
+    fetchLastFmSimilarArtists,
+    fetchLastFmSimilarTracks,
+    mergeRecommendationCandidates,
+} from './lastfm.js';
 
 export class MusicAPI {
     static instance = null;
@@ -167,13 +173,21 @@ export class MusicAPI {
         const seeds = Array.isArray(tracks) ? tracks.filter((track) => track?.title) : [];
         if (seeds.length === 0) return [];
 
-        // The supplied playlist/history tracks are the recommendation seeds.
-        // Use Last.fm's track similarity graph directly; do not replace these
-        // seeds with the account's broad personalized artist feed.
         const similarBySeed = await Promise.all(
             seeds.slice(0, 4).map((seed) => fetchLastFmSimilarTracks(seed, { limit: 8 }))
         );
-        const candidates = similarBySeed.flat();
+
+        const personalizedArtists = await fetchLastFmPersonalizedArtists({
+            limit: 12,
+            skipCache: options.skipCache,
+            timeoutMs: 3500,
+        }).catch(() => []);
+
+        const artistSeedSets = await Promise.all(
+            personalizedArtists.slice(0, 4).map((artist) => fetchLastFmArtistTopTracks(artist.name || artist, { limit: 6 }))
+        );
+
+        const candidates = mergeRecommendationCandidates(similarBySeed.flat(), ...artistSeedSets);
         const resolved = await this._resolveTracks(candidates, { ...options, resolveLimit: options.resolveLimit || 18 });
         return this._dedupeResolvedTracks(resolved).slice(0, limit);
     }
@@ -185,10 +199,21 @@ export class MusicAPI {
         if (!seedTrack) {
             seedTrack = await this.getTrackMetadata(cleanId).catch(() => null);
         }
-        const candidates = await fetchLastFmSimilarTracks(seedTrack, { limit: options.limit || 20 });
+
+        const seedArtist = seedTrack?.artist?.name || seedTrack?.artists?.[0]?.name || null;
+        const [similarTracks, artistTopTracks] = await Promise.all([
+            fetchLastFmSimilarTracks(seedTrack, { limit: options.limit || 24 }),
+            seedArtist ? fetchLastFmArtistTopTracks(seedArtist, { limit: 12 }) : Promise.resolve([]),
+        ]);
+
+        const candidates = mergeRecommendationCandidates(similarTracks, artistTopTracks);
         const items = this._dedupeResolvedTracks(
-            await this._resolveTracks(candidates, { ...options, resolveLimit: options.resolveLimit || 18 })
+            await this._resolveTracks(candidates, {
+                ...options,
+                resolveLimit: options.resolveLimit || 24,
+            })
         );
+
         return { items, limit: items.length, offset: 0, totalNumberOfItems: items.length };
     }
 

@@ -4973,12 +4973,12 @@ export class UIRenderer {
 
                 const totalTarget = 16;
                 const unheardTarget = totalTarget;
-                const diversityCap = 1;
+                const diversityCap = 2;
 
                 // Artist diversity: cap how many tracks any single artist can
                 // contribute so recommendations aren't dominated by a handful
                 // of seed artists.
-                const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap);
+                const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap, Math.max(12, unheardTarget));
                 const mixedTracks = diversifiedUnheard.slice(0, unheardTarget);
 
                 const shuffledMixedTracks = [...mixedTracks].sort(() => Math.random() - 0.5);
