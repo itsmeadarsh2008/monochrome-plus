@@ -4906,10 +4906,13 @@ export class UIRenderer {
                 const listenedPool = this._dedupeTracks(profile.recentTracks)
                     .filter((track) => track?.id)
                     .slice(0, 32);
+                const totalTarget = 20;
+                const listenedTarget = Math.round(totalTarget * 0.4);
+                const unheardTarget = totalTarget - listenedTarget;
 
                 // Render an immediate familiar baseline while fresh recommendation requests run.
                 if (listenedPool.length > 0) {
-                    const instantMix = [...listenedPool].sort(() => Math.random() - 0.5).slice(0, 10);
+                    const instantMix = [...listenedPool].sort(() => Math.random() - 0.5).slice(0, listenedTarget);
                     this.renderListWithTracks(songsContainer, instantMix, true);
                 }
 
@@ -4971,15 +4974,19 @@ export class UIRenderer {
                     (track) => !track?.id || !recentTrackIds.has(track.id)
                 );
 
-                const totalTarget = 16;
-                const unheardTarget = totalTarget;
                 const diversityCap = 2;
 
                 // Artist diversity: cap how many tracks any single artist can
                 // contribute so recommendations aren't dominated by a handful
                 // of seed artists.
-                const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap, Math.max(12, unheardTarget));
-                const mixedTracks = diversifiedUnheard.slice(0, unheardTarget);
+                const diversifiedUnheard = this._diversifyByArtist(unheardCandidates, diversityCap, unheardTarget);
+                const newTracks = diversifiedUnheard.slice(0, unheardTarget);
+                const listenedTracks = [...listenedPool].sort(() => Math.random() - 0.5).slice(0, listenedTarget);
+
+                // Keep the requested 40/60 split whenever both pools have
+                // enough items, while still showing available content when a
+                // provider returns fewer recommendations than requested.
+                const mixedTracks = [...listenedTracks, ...newTracks];
 
                 const shuffledMixedTracks = [...mixedTracks].sort(() => Math.random() - 0.5);
                 const filteredTracks = await this.filterUserContent(shuffledMixedTracks, 'track');
