@@ -783,12 +783,22 @@ export const getTrackArtists = (track = {}, { fallback = 'Unknown Artist' } = {}
         return track.artists.map((artist) => artist?.name).join(', ');
     }
 
+    if (track?.artist) {
+        return typeof track.artist === 'string' ? track.artist : track.artist.name || fallback;
+    }
+
     return fallback;
 };
 
 export const getTrackArtistsHTML = (track = {}, { fallback = 'Unknown Artist' } = {}) => {
-    if (track?.artists?.length) {
-        return track.artists
+    const artists = track?.artists?.length
+        ? track.artists
+        : track?.artist
+          ? [typeof track.artist === 'string' ? { name: track.artist } : track.artist]
+          : [];
+
+    if (artists.length) {
+        return artists
             .map((artist) => {
                 const escapedName = escapeHtml(artist.name || 'Unknown Artist');
                 const escapedId = escapeHtml(artist.id || '');

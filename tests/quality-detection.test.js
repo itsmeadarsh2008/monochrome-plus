@@ -30,7 +30,7 @@ globalThis.indexedDB = {
 };
 
 const { extractBitDepth, extractSampleRate } = await import('../js/eclipse.js');
-const { deriveTrackQuality, createFullscreenQualityHTML } = await import('../js/utils.js');
+const { deriveTrackQuality, createFullscreenQualityHTML, getTrackArtistsHTML } = await import('../js/utils.js');
 const { mergeRecommendationCandidates } = await import('../js/lastfm.js');
 
 test('generic lossless labels do not imply hardcoded bit depth or sample rate', () => {
@@ -92,6 +92,14 @@ test('fullscreen quality reads numeric details from the stream quality string', 
     assert.match(html, /24-bit/i);
     assert.match(html, /96\s*kHz/i);
     assert.match(html, /FLAC/i);
+});
+
+test('track artist links support singular artist metadata', () => {
+    const html = getTrackArtistsHTML({ artist: { name: 'Artist A' } });
+
+    assert.match(html, /class="artist-link"/);
+    assert.match(html, /Artist A/);
+    assert.match(html, /data-artist-id=""/);
 });
 
 test('recommendation merging keeps multiple distinct tracks instead of collapsing to one', () => {
