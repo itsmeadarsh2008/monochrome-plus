@@ -1197,6 +1197,33 @@ const syncManager = {
         }
     },
 
+    async getCommunityStats() {
+        try {
+            const [userCount, activeUsers] = await Promise.all([
+                databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.limit(1)]),
+                databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.notEqual('status', ''), Query.limit(500)]),
+            ]);
+
+            const now = Date.now();
+            const onlineUsers = (activeUsers.documents || []).filter((record) => {
+                try {
+                    const status = JSON.parse(record.status || '{}');
+                    return Number(status.expiresAt) > now && status.state !== 'stopped';
+                } catch {
+                    return false;
+                }
+            }).length;
+
+            return {
+                totalUsers: Number(userCount.total) || 0,
+                onlineUsers,
+            };
+        } catch (error) {
+            console.warn('[Appwrite Sync] Failed to load community stats:', error?.message || error);
+            return null;
+        }
+    },
+
     _minifyItem(type, item) {
         if (!item) return item;
         const base = {

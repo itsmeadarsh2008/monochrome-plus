@@ -120,6 +120,8 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
     const statMonthTime = document.getElementById('account-stat-month-time');
     const statMonthPlays = document.getElementById('account-stat-month-plays');
     const statMonthArtists = document.getElementById('account-stat-month-artists');
+    const statTotalUsers = document.getElementById('account-stat-total-users');
+    const statOnlineUsers = document.getElementById('account-stat-online-users');
     const statsTitle = document.getElementById('account-stats-title');
     const statsPeriodButtons = Array.from(document.querySelectorAll('.account-stats-period-btn'));
     const topArtistsList = document.getElementById('account-top-artists-list');
@@ -127,6 +129,14 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
     let authMode = 'signup';
     let accountStatsRenderToken = 0;
     let activeStatsPeriod = 'month';
+
+    const renderCommunityStats = async () => {
+        if (!statTotalUsers || !statOnlineUsers || !authManager.user) return;
+        const communityStats = await syncManager.getCommunityStats();
+        if (!communityStats) return;
+        statTotalUsers.textContent = communityStats.totalUsers.toLocaleString();
+        statOnlineUsers.textContent = communityStats.onlineUsers.toLocaleString();
+    };
 
     const formatDuration = (totalSeconds = 0) => {
         const seconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -463,6 +473,9 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
 
         renderStatsList(topArtistsList, stats.topArtists, 'artist', periodLabel);
         renderStatsList(topTracksList, stats.topTracks, 'track', periodLabel);
+        renderCommunityStats().catch((error) => {
+            console.warn('[Account Stats] Community stats refresh failed:', error);
+        });
     };
 
     const updateStatsPeriodButtons = () => {
@@ -639,6 +652,12 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
             console.warn('[Account Stats] History refresh failed:', error);
         });
     });
+
+    window.setInterval(() => {
+        if (authManager.user) {
+            renderCommunityStats().catch(() => {});
+        }
+    }, 60_000);
 
     document.getElementById('email-password-reset-btn')?.addEventListener('click', async () => {
         const email = document.getElementById('auth-email-password-email')?.value?.trim();
