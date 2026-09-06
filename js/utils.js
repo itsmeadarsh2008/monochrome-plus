@@ -398,9 +398,7 @@ const parseQualityStringSpec = (source) => {
     return {
         bitDepth: bitDepthMatch ? parseInt(bitDepthMatch[1], 10) : null,
         sampleRate: sampleRateMatch
-            ? Math.round(
-                  parseFloat(sampleRateMatch[1]) * (sampleRateMatch[0].toLowerCase().includes('khz') ? 1000 : 1)
-              )
+            ? Math.round(parseFloat(sampleRateMatch[1]) * (sampleRateMatch[0].toLowerCase().includes('khz') ? 1000 : 1))
             : null,
     };
 };
@@ -428,7 +426,11 @@ export const createFullscreenQualityHTML = (track) => {
     const quality = deriveTrackQuality(track);
 
     const streamSpec = parseQualityStringSpec(
-        streamInfo.quality || streamInfo.streamQuality || streamInfo.audioQuality || track.audioQuality || track.streamedQuality
+        streamInfo.quality ||
+            streamInfo.streamQuality ||
+            streamInfo.audioQuality ||
+            track.audioQuality ||
+            track.streamedQuality
     );
 
     // Prefer the actual stream specs, then fall back to the track/album metadata.
@@ -455,7 +457,14 @@ export const createFullscreenQualityHTML = (track) => {
     // Actual codec reported by the addon (AAC, Opus, MP3, …) — this is the
     // exact answer to "what am I listening to", preferred over container names.
     const codec = extractCodecFromMime(
-        streamInfo.codec ?? track.codec ?? streamInfo.mimeType ?? track.mimeType ?? streamInfo.format ?? track.format ?? streamInfo.mediaType ?? track.mediaType
+        streamInfo.codec ??
+            track.codec ??
+            streamInfo.mimeType ??
+            track.mimeType ??
+            streamInfo.format ??
+            track.format ??
+            streamInfo.mediaType ??
+            track.mediaType
     );
 
     // Container format reported by the addon (MP4, WEBM, FLAC, …). Wrapper
@@ -467,8 +476,18 @@ export const createFullscreenQualityHTML = (track) => {
 
     const formatStr = codec || containerFormat || null;
 
-    // Lossy codecs/containers can never carry a lossless label
-    const lossy = codec ? isLossyCodec(codec) : isLossyContainer(track.format || track.mediaType);
+    // Exact bitrate when the addon reports it (e.g. 128 → "128 kbps")
+    const bitrateKbps = toPositiveInt(streamInfo.bitrateKbps ?? track.bitrateKbps);
+    const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
+
+    // Lossy codecs/containers can never carry a lossless label.
+    // Also consider explicit bitrates ≤ 320 as lossy even when the addon
+    // wraps the stream as HLS/DASH (codec extraction returns null for wrappers).
+    const lossyCodec = codec ? isLossyCodec(codec) : false;
+    const lossyContainer = isLossyContainer(
+        streamInfo.format ?? track.format ?? streamInfo.mediaType ?? track.mediaType
+    );
+    const lossy = lossyCodec || lossyContainer || (bitrateKbps != null && bitrateKbps <= 320);
 
     // Lossy streams have no real bit depth: the sample entry's samplesize
     // is a nominal 16 for AAC/Opus/MP3. Drop any bit depth claim so the
@@ -476,10 +495,6 @@ export const createFullscreenQualityHTML = (track) => {
     if (lossy) {
         bitDepthStr = null;
     }
-
-    // Exact bitrate when the addon reports it (e.g. 128 → "128 kbps")
-    const bitrateKbps = toPositiveInt(track.bitrateKbps ?? streamInfo.bitrateKbps);
-    const bitrateStr = bitrateKbps ? `${bitrateKbps} kbps` : null;
 
     // For lossy 320kbps the 44.1 kHz readout is redundant — hide it so
     // the display reads "HIGH · AAC · 320 KBPS" instead of
@@ -675,7 +690,11 @@ export const deriveTrackQuality = (track) => {
 
     const streamInfo = track.streamInfo && typeof track.streamInfo === 'object' ? track.streamInfo : {};
     const streamSpec = parseQualityStringSpec(
-        streamInfo.quality || streamInfo.streamQuality || streamInfo.audioQuality || track.audioQuality || track.streamedQuality
+        streamInfo.quality ||
+            streamInfo.streamQuality ||
+            streamInfo.audioQuality ||
+            track.audioQuality ||
+            track.streamedQuality
     );
 
     // Dolby Atmos is a format marker, not a bit-depth/sample-rate claim —
@@ -702,12 +721,14 @@ export const deriveTrackQuality = (track) => {
                 ? streamInfo.format
                 : streamInfo.mediaType != null
                   ? streamInfo.mediaType
-                  : track.codec ?? track.mimeType ?? track.format ?? track.mediaType
+                  : (track.codec ?? track.mimeType ?? track.format ?? track.mediaType)
     );
 
     // A lossy container (AAC, MP3, …) can never be lossless, no matter what
     // the provider's quality label claims — clamp it to at most HIGH.
-    const lossy = isLossyCodec(streamCodec) || isLossyContainer(streamInfo.format || track.format || streamInfo.mediaType || track.mediaType);
+    const lossy =
+        isLossyCodec(streamCodec) ||
+        isLossyContainer(streamInfo.format || track.format || streamInfo.mediaType || track.mediaType);
 
     // Prefer the actual stream specs when known — these are exact numbers
     // reported by the addon and more truthful than provider quality labels.
