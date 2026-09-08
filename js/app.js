@@ -3062,7 +3062,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const canScroll = goingRight ? canScrollRight : canScrollLeft;
                 if (!canScroll) return;
                 e.preventDefault();
-                scroller.scrollBy({ left: e.deltaY, behavior: 'smooth' });
+                scroller.scrollBy({ left: e.deltaY * 1.8, behavior: 'smooth' });
             },
             { passive: false }
         );
