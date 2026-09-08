@@ -3043,6 +3043,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Horizontal wheel scroll for carousels (mouse): translate vertical wheel to horizontal
+    const setupHorizontalWheel = () => {
+        document.addEventListener(
+            'wheel',
+            (e) => {
+                if (e.ctrlKey || e.shiftKey || e.metaKey) return;
+                if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+                if (e.deltaY === 0) return;
+                const scroller = e.target.closest('.card-grid, .jump-back-carousel, .carousel-track');
+                if (!scroller) return;
+                const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+                if (maxScroll <= 0) return;
+                // Allow page scroll to take over when the carousel is at an edge
+                const goingRight = e.deltaY > 0;
+                const canScrollRight = scroller.scrollLeft < maxScroll - 1;
+                const canScrollLeft = scroller.scrollLeft > 1;
+                const canScroll = goingRight ? canScrollRight : canScrollLeft;
+                if (!canScroll) return;
+                e.preventDefault();
+                scroller.scrollBy({ left: e.deltaY, behavior: 'auto' });
+            },
+            { passive: false }
+        );
+    };
+    setupHorizontalWheel();
+
     const syncNowPlayingCoverRotation = () => {
         const coverEl = document.querySelector('.now-playing-bar .cover-shell');
         if (!coverEl) return;
