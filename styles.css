@@ -751,6 +751,44 @@ body {
     height: 100%;
     position: fixed;
     width: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+}
+
+/* Pre-expanded album art — no scale/expand animation on load */
+.album-hero-cover,
+.playlist-hero-cover,
+.album-hero-image,
+.playlist-hero-image,
+#album-detail-image,
+#playlist-detail-image,
+#artist-detail-image,
+.artist-hero-image,
+#page-album .album-hero-cover img,
+#page-playlist .playlist-hero-cover img,
+#page-artist .artist-hero-cover img {
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
 }
 
 img {
