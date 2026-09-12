@@ -1,8 +1,8 @@
 {
-    "name": "monochrome-plus",
+    "name": "wesper",
     "type": "module",
     "version": "4.1.0",
-    "description": "[<img src=\"https://github.com/itsmeadarsh2008/monochrome-plus/blob/main/public/assets/512.png?raw=true\" alt=\"Monochrome+ Logo\">](https://monochrome-plus.appwrite.network)",
+    "description": "[<img src=\"https://github.com/itsmeadarsh2008/wesper/blob/main/public/assets/512.png?raw=true\" alt=\"Wesper Logo\">](https://wesper.appwrite.network)",
     "main": "sw.js",
     "scripts": {
         "dev": "vite",
@@ -19,15 +19,15 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/itsmeadarsh2008/monochrome-plus.git"
+        "url": "git+https://github.com/itsmeadarsh2008/wesper.git"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "bugs": {
-        "url": "https://github.com/itsmeadarsh2008/monochrome-plus/issues"
+        "url": "https://github.com/itsmeadarsh2008/wesper/issues"
     },
-    "homepage": "https://github.com/itsmeadarsh2008/monochrome-plus#readme",
+    "homepage": "https://github.com/itsmeadarsh2008/wesper#readme",
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "cookie-session": "^2.1.1",

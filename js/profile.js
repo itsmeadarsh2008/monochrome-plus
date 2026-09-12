@@ -74,7 +74,7 @@ async function uploadImage(file) {
         // Construct the preview URL (using the project endpoint)
         // Format: [endpoint]/storage/buckets/[bucketId]/files/[fileId]/preview?project=[projectId]
         const endpoint = 'https://sgp.cloud.appwrite.io/v1';
-        const projectId = 'monochrome-plus';
+        const projectId = 'wesper';
         const url = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${result.$id}/view?project=${projectId}`;
 
         console.log('[Profile] Upload successful! URL:', url);
@@ -347,7 +347,7 @@ export async function loadProfile(username) {
     // Real-time status updates
     if (profileSubscription) profileSubscription();
 
-    const DATABASE_ID = 'monochrome-plus';
+    const DATABASE_ID = 'wesper';
     const USERS_COLLECTION = 'DB_users';
 
     profileSubscription = client.subscribe(
@@ -1058,9 +1058,9 @@ async function handleTrackClick(title, artist) {
         const results = await api.searchTracks(query, { limit: 1 });
         if (results.items.length > 0) {
             const track = results.items[0];
-            if (window.monochromePlayer) {
-                window.monochromePlayer.setQueue([track], 0);
-                window.monochromePlayer.playTrackFromQueue();
+            if (window.wesperPlayer) {
+                window.wesperPlayer.setQueue([track], 0);
+                window.wesperPlayer.playTrackFromQueue();
             }
         } else {
             alert('Track not found');

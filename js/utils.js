@@ -934,7 +934,7 @@ export const getShareUrl = (path) => {
     const origin = window.location.origin;
     const isLocalOrigin =
         !origin || origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('file:');
-    const baseUrl = configuredBase || (isLocalOrigin ? 'https://monochrome.plus' : origin);
+    const baseUrl = configuredBase || (isLocalOrigin ? 'https://wesper.plus' : origin);
     const safePath = path.startsWith('/') ? path : `/${path}`;
     return `${baseUrl}${safePath}`;
 };

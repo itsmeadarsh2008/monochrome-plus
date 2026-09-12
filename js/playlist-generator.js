@@ -197,7 +197,7 @@ export function generateNFO(playlist, tracks, type = 'playlist') {
  */
 export function generateJSON(playlist, tracks, type = 'playlist') {
     const data = {
-        format: 'monochrome-playlist',
+        format: 'wesper-playlist',
         version: '1.0',
         type: type,
         generated: new Date().toISOString(),

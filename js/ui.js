@@ -937,8 +937,8 @@ export class UIRenderer {
         // Keep lightweight album metadata available for addons that expose
         // album search results but not the album detail endpoint.
         if (album?.id && typeof window !== 'undefined') {
-            window.__monochromeAlbumCache ||= new Map();
-            window.__monochromeAlbumCache.set(String(album.id), album);
+            window.__wesperAlbumCache ||= new Map();
+            window.__wesperAlbumCache.set(String(album.id), album);
         }
 
         const explicitBadge = hasExplicitContent(album) ? this.createExplicitBadge() : '';
@@ -979,7 +979,7 @@ export class UIRenderer {
     }
 
     async loadAlbumFromSearchFallback(albumId) {
-        const cachedAlbum = window.__monochromeAlbumCache?.get(String(albumId));
+        const cachedAlbum = window.__wesperAlbumCache?.get(String(albumId));
         if (!cachedAlbum?.title) return null;
 
         const artistName =
@@ -1024,7 +1024,7 @@ export class UIRenderer {
     }
 
     async loadArtistFromSearchFallback(artistId) {
-        const cachedArtist = window.__monochromeArtistCache?.get(String(artistId));
+        const cachedArtist = window.__wesperArtistCache?.get(String(artistId));
         const artistName = String(cachedArtist?.name || '').trim();
         if (!artistName) {
             return {
@@ -1095,8 +1095,8 @@ export class UIRenderer {
 
     createArtistCardHTML(artist) {
         if (artist?.id) {
-            window.__monochromeArtistCache ||= new Map();
-            window.__monochromeArtistCache.set(String(artist.id), artist);
+            window.__wesperArtistCache ||= new Map();
+            window.__wesperArtistCache.set(String(artist.id), artist);
         }
         const isCompact = cardSettings.isCompactArtist();
         const isBlocked = contentBlockingSettings?.shouldHideArtist(artist);
@@ -4238,7 +4238,7 @@ export class UIRenderer {
                     <div class="profile-card-content" style="padding: 2rem;">
                         <div style="font-size: 4rem; margin-bottom: 2rem; filter: saturate(0.5); opacity: 0.8;">👤</div>
                         <h2 style="margin-bottom: 1rem; font-weight: 800; letter-spacing: -0.02em;">Not Signed In</h2>
-                        <p style="color: var(--muted-foreground); margin-bottom: 2.5rem; line-height: 1.6;">Join the Monochrome+ community to sync your library, follow friends, and personalize your experience.</p>
+                        <p style="color: var(--muted-foreground); margin-bottom: 2.5rem; line-height: 1.6;">Join the Wesper community to sync your library, follow friends, and personalize your experience.</p>
                         <button class="btn-primary" style="width: 100%; padding: 1rem;" onclick="window.navigate('/account')">Create or Link Account</button>
                         <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--muted-foreground); opacity: 0.7;">
                             If you've just signed in, we're currently synchronizing your session.
@@ -7251,7 +7251,7 @@ export class UIRenderer {
                     recentActivityManager.addPlaylist(userPlaylistRecentData);
                 };
 
-                document.title = `${playlistData.name || playlistData.title} - Monochrome+`;
+                document.title = `${playlistData.name || playlistData.title} - Wesper`;
 
                 // Setup playlist search
                 this.setupTracklistSearch();
@@ -8699,9 +8699,9 @@ export class UIRenderer {
                             e.stopPropagation();
                             const playlist = collabPlaylists[index];
                             const tracks = playlist.tracks || [];
-                            if (tracks.length > 0 && window.monochromePlayer) {
-                                window.monochromePlayer.setQueue(tracks, 0);
-                                window.monochromePlayer.playTrackFromQueue();
+                            if (tracks.length > 0 && window.wesperPlayer) {
+                                window.wesperPlayer.setQueue(tracks, 0);
+                                window.wesperPlayer.playTrackFromQueue();
                             }
                         };
                     }
@@ -9144,19 +9144,19 @@ export class UIRenderer {
         // Button handlers
         if (playBtn) {
             playBtn.onclick = () => {
-                if (tracks.length > 0 && window.monochromePlayer) {
-                    window.monochromePlayer.setQueue(tracks, 0);
-                    window.monochromePlayer.playTrackFromQueue();
+                if (tracks.length > 0 && window.wesperPlayer) {
+                    window.wesperPlayer.setQueue(tracks, 0);
+                    window.wesperPlayer.playTrackFromQueue();
                 }
             };
         }
 
         if (shuffleBtn) {
             shuffleBtn.onclick = () => {
-                if (tracks.length > 0 && window.monochromePlayer) {
+                if (tracks.length > 0 && window.wesperPlayer) {
                     const shuffled = [...tracks].sort(() => Math.random() - 0.5);
-                    window.monochromePlayer.setQueue(shuffled, 0);
-                    window.monochromePlayer.playTrackFromQueue();
+                    window.wesperPlayer.setQueue(shuffled, 0);
+                    window.wesperPlayer.playTrackFromQueue();
                 }
             };
         }

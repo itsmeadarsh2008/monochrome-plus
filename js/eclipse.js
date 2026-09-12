@@ -10,9 +10,9 @@ import { DashDownloader } from './dash-downloader.js';
 import { HlsDownloader } from './hls-downloader.js';
 import { getExtensionFromBlob, isLossyCodec, isLossyContainer, RATE_LIMIT_ERROR_MESSAGE } from './utils.js';
 
-const ADDON_STORAGE_KEY = 'monochrome-eclipse-addons-v1';
-const LEGACY_ADDON_STORAGE_KEY = 'monochrome-eclipse-addon-v2';
-const ACTIVE_ADDON_STORAGE_KEY = 'monochrome-eclipse-active-addon';
+const ADDON_STORAGE_KEY = 'wesper-eclipse-addons-v1';
+const LEGACY_ADDON_STORAGE_KEY = 'wesper-eclipse-addon-v2';
+const ACTIVE_ADDON_STORAGE_KEY = 'wesper-eclipse-active-addon';
 
 function addonIdentity(addon) {
     return String(addon?.manifest?.id || addon?.id || addon?.baseUrl || '').trim();

@@ -1,10 +1,10 @@
 <p align="center">
-  <a href="https://monochrome-plus.appwrite.network">
-    <img src="https://github.com/itsmeadarsh2008/monochrome-plus/blob/master/public/assets/512.png?raw=true" alt="Monochrome+ Logo" width="140px">
+  <a href="https://wesper.appwrite.network">
+    <img src="https://github.com/itsmeadarsh2008/wesper/blob/master/public/assets/512.png?raw=true" alt="Wesper Logo" width="140px">
   </a>
 </p>
 
-<h1 align="center">Monochrome+</h1>
+<h1 align="center">Wesper</h1>
 
 <p align="center">
   <strong>An open-source, privacy-respecting, ad-free Hi-Fi music client.</strong><br>
@@ -12,23 +12,23 @@
 </p>
 
 <p align="center">
-  <a href="https://monochrome-plus.appwrite.network">
-    <img src="https://img.shields.io/badge/monochrome%2B-000000?style=for-the-badge&logo=rocket&logoColor=ffffff&label=Live" alt="Live instance">
+  <a href="https://wesper.appwrite.network">
+    <img src="https://img.shields.io/badge/wesper%2B-000000?style=for-the-badge&logo=rocket&logoColor=ffffff&label=Live" alt="Live instance">
   </a>
-  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/stargazers">
-    <img src="https://img.shields.io/github/stars/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub stars">
+  <a href="https://github.com/itsmeadarsh2008/wesper/stargazers">
+    <img src="https://img.shields.io/github/stars/itsmeadarsh2008/wesper?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub stars">
   </a>
-  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/forks">
-    <img src="https://img.shields.io/github/forks/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub forks">
+  <a href="https://github.com/itsmeadarsh2008/wesper/forks">
+    <img src="https://img.shields.io/github/forks/itsmeadarsh2008/wesper?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub forks">
   </a>
-  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/issues">
-    <img src="https://img.shields.io/github/issues/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub issues">
+  <a href="https://github.com/itsmeadarsh2008/wesper/issues">
+    <img src="https://img.shields.io/github/issues/itsmeadarsh2008/wesper?style=for-the-badge&logo=github&logoColor=ffffff&color=000000&labelColor=000000" alt="GitHub issues">
   </a>
-  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/blob/master/license">
-    <img src="https://img.shields.io/github/license/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=opensourceinitiative&logoColor=ffffff&color=000000&labelColor=000000" alt="License">
+  <a href="https://github.com/itsmeadarsh2008/wesper/blob/master/license">
+    <img src="https://img.shields.io/github/license/itsmeadarsh2008/wesper?style=for-the-badge&logo=opensourceinitiative&logoColor=ffffff&color=000000&labelColor=000000" alt="License">
   </a>
-  <a href="https://github.com/itsmeadarsh2008/monochrome-plus/commits/master">
-    <img src="https://img.shields.io/github/last-commit/itsmeadarsh2008/monochrome-plus?style=for-the-badge&logo=git&logoColor=ffffff&color=000000&labelColor=000000" alt="Last commit">
+  <a href="https://github.com/itsmeadarsh2008/wesper/commits/master">
+    <img src="https://img.shields.io/github/last-commit/itsmeadarsh2008/wesper?style=for-the-badge&logo=git&logoColor=ffffff&color=000000&labelColor=000000" alt="Last commit">
   </a>
   <a href="https://discord.gg/ncKKpJpZbk">
     <img src="https://img.shields.io/badge/join-000000?style=for-the-badge&logo=discord&logoColor=ffffff&label=Discord" alt="Discord">
@@ -36,7 +36,7 @@
 </p>
 
 <p align="center">
-  <a href="#what-is-monochrome">About</a> •
+  <a href="#what-is-wesper">About</a> •
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#usage">Usage</a> •
@@ -47,9 +47,9 @@
 
 ---
 
-## What is Monochrome+?
+## What is Wesper?
 
-**Monochrome+** is a fork of [Monochrome](https://github.com/monochrome-music/monochrome) reimagined
+**Wesper** is a fork of [Wesper](https://github.com/wesper-music/wesper) reimagined
 as a **bring-your-own-source** music client. It ships with **no music provider built in and no
 hard-coded API**. Instead, it is a fully **Eclipse-compatible** app — any addon that speaks the
 [Eclipse addon protocol](https://eclipsemusic.app/docs) becomes your stream source.
@@ -61,7 +61,7 @@ lock-in, no vendor tie-in.
 
 ## Why bring your own source?
 
-> Monochrome+ never decides what you listen to — **you do**.
+> Wesper never decides what you listen to — **you do**.
 
 - **Your data, your rules.** No built-in tracking, no ads, no third-party analytics.
 - **Any Eclipse addon works.** TIDAL, Qobuz, self-hosted servers, or your own Cloudflare Worker.
@@ -132,12 +132,12 @@ of traditional platforms.
 
 ```bash
 # Just open it in your browser
-https://monochrome-plus.appwrite.network
+https://wesper.appwrite.network
 ```
 
 ### 2. Install an addon
 
-Monochrome+ needs an Eclipse addon for search and streaming:
+Wesper needs an Eclipse addon for search and streaming:
 
 1. Deploy (or pick) an addon — see the [Eclipse addon docs](https://eclipsemusic.app/docs),
    e.g. a TIDAL or Qobuz addon
@@ -187,8 +187,8 @@ To sync your library, history, and playlists across devices:
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/itsmeadarsh2008/monochrome-plus.git
-cd monochrome-plus
+git clone https://github.com/itsmeadarsh2008/wesper.git
+cd wesper
 docker compose up -d
 ```
 

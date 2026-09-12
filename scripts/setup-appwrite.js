@@ -5,7 +5,7 @@ dotenv.config();
 
 const client = new Client()
     .setEndpoint('https://sgp.cloud.appwrite.io/v1')
-    .setProject('monochrome-plus')
+    .setProject('wesper')
     .setKey(process.env.APPWRITE_API_KEY); // Requires an API key with database permissions
 
 const databases = new Databases(client);
@@ -15,8 +15,8 @@ const SYNC_COLLECTION_METADATA =
     process.argv.includes('--sync-collection-metadata') ||
     process.env.APPWRITE_SETUP_SYNC_COLLECTION_METADATA === 'true';
 
-const DATABASE_ID = 'monochrome-plus';
-const DATABASE_NAME = 'Monochrome+';
+const DATABASE_ID = 'wesper';
+const DATABASE_NAME = 'Wesper';
 const USERS_COLLECTION_ID = 'DB_users';
 
 function wait(ms) {

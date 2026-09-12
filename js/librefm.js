@@ -2,8 +2,8 @@ import { libreFmSettings, lastFMStorage } from './storage.js';
 
 export class LibreFmScrobbler {
     constructor() {
-        this.API_KEY = 'monochrome_music_app';
-        this.API_SECRET = 'monochrome_music_secret_2024';
+        this.API_KEY = 'wesper_music_app';
+        this.API_SECRET = 'wesper_music_secret_2024';
         this.API_URL = 'https://libre.fm/2.0/';
 
         this.sessionKey = null;

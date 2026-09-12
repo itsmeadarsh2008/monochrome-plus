@@ -1,5 +1,5 @@
 // js/carousel.js
-// Carousel component for Monochrome music player
+// Carousel component for Wesper music player
 // YouTube Music-style horizontal scrolling carousels for artists and albums
 // Features: infinite scroll, dynamic loading, touch/drag support
 

@@ -4,7 +4,7 @@ export class APICache {
         this.memoryCache = new Map();
         this.maxSize = options.maxSize || 200;
         this.ttl = options.ttl || 1000 * 60 * 30;
-        this.dbName = 'monochrome-cache';
+        this.dbName = 'wesper-cache';
         this.dbVersion = 1;
         this.db = null;
         this.initDB();
