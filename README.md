@@ -49,7 +49,7 @@
 
 ## What is Wesper?
 
-**Wesper** is a fork of [Wesper](https://github.com/wesper-music/wesper) reimagined
+**Wesper** is an ancient music app reimagined
 as a **bring-your-own-source** music client. It ships with **no music provider built in and no
 hard-coded API**. Instead, it is a fully **Eclipse-compatible** app — any addon that speaks the
 [Eclipse addon protocol](https://eclipsemusic.app/docs) becomes your stream source.
