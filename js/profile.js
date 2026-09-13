@@ -1058,9 +1058,9 @@ async function handleTrackClick(title, artist) {
         const results = await api.searchTracks(query, { limit: 1 });
         if (results.items.length > 0) {
             const track = results.items[0];
-            if (window.monochromePlayer) {
-                window.monochromePlayer.setQueue([track], 0);
-                window.monochromePlayer.playTrackFromQueue();
+            if (window.wesperPlayer) {
+                window.wesperPlayer.setQueue([track], 0);
+                window.wesperPlayer.playTrackFromQueue();
             }
         } else {
             alert('Track not found');

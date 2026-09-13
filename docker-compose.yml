@@ -1,12 +1,12 @@
 services:
     # Production frontend -- always runs
-    monochrome:
+    wesper:
         build:
             context: .
             dockerfile: Dockerfile
-        container_name: monochrome
+        container_name: wesper
         ports:
-            - '${MONOCHROME_PORT:-3000}:4173'
+            - '${WESPER_PORT:-3000}:4173'
         environment:
             AUTH_ENABLED: ${AUTH_ENABLED:-true}
             AUTH_SECRET: ${AUTH_SECRET:-}
@@ -17,7 +17,7 @@ services:
             SESSION_MAX_AGE: ${SESSION_MAX_AGE:-604800000}
         restart: unless-stopped
         networks:
-            - monochrome-network
+            - wesper-network
         healthcheck:
             test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4173/health']
             interval: 30s
@@ -28,7 +28,7 @@ services:
     # PocketBase backend -- only starts with: docker compose --profile pocketbase up -d
     pocketbase:
         image: ghcr.io/muchobien/pocketbase:latest
-        container_name: monochrome-pocketbase
+        container_name: wesper-pocketbase
         profiles:
             - pocketbase
         restart: unless-stopped
@@ -50,27 +50,27 @@ services:
             retries: 3
             start_period: 30s
         networks:
-            - monochrome-network
+            - wesper-network
 
     # Development server -- only starts with: docker compose --profile dev up -d
-    monochrome-dev:
+    wesper-dev:
         build:
             context: .
             dockerfile: Dockerfile.dev
-        container_name: monochrome-dev
+        container_name: wesper-dev
         profiles:
             - dev
         ports:
-            - '${MONOCHROME_DEV_PORT:-5173}:5173'
+            - '${WESPER_DEV_PORT:-5173}:5173'
         volumes:
             - .:/app
             - /app/node_modules
         command: npm run dev -- --host 0.0.0.0
         networks:
-            - monochrome-network
+            - wesper-network
 
 networks:
-    monochrome-network:
+    wesper-network:
         driver: bridge
 
 volumes:

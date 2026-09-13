@@ -50,12 +50,12 @@ In `docker-compose.yml`, it looks like this:
 
 ```yaml
 services:
-    monochrome: # no profile -- always starts
+    wesper: # no profile -- always starts
 
     pocketbase:
         profiles: ['pocketbase'] # opt-in
 
-    monochrome-dev:
+    wesper-dev:
         profiles: ['dev'] # opt-in
 ```
 
@@ -98,7 +98,7 @@ services:
         ports:
             - '4000:4000'
         networks:
-            - monochrome-network
+            - wesper-network
 ```
 
 Override files can extend existing services (add labels, env vars, networks) and define entirely new services. See the [Docker docs](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) for the full merge behavior.

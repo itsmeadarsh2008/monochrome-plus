@@ -13,7 +13,7 @@ This guide will show you how to set up your own authentication system and databa
 - [Step 2: PocketBase Setup](#step-2-pocketbase-setup)
 - [Step 3: Cloudflare Tunnel Setup](#step-3-cloudflare-tunnel-setup)
 - [Step 4: Getting Configurations](#step-4-getting-configurations)
-- [Step 5: Linking with Wesper](#step-5-linking-with-monochrome)
+- [Step 5: Linking with Wesper](#step-5-linking-with-wesper)
 - [Troubleshooting](#troubleshooting)
 
 ---

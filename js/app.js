@@ -488,7 +488,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const currentQuality = localStorage.getItem('playback-quality') || 'HI_RES_LOSSLESS';
     const player = new Player(audioPlayer, api, currentQuality);
-    window.monochromePlayer = player;
+    window.wesperPlayer = player;
 
     // Centralized cover image fallback helper. Used by img onerror and as a safety net via window error capture.
     window.handleCoverImageFallback = (img) => {
@@ -582,7 +582,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const controller = new AbortController();
         bgWebLock = controller;
         navigator.locks
-            .request('monochrome-audio-playback', { signal: controller.signal }, () => {
+            .request('wesper-audio-playback', { signal: controller.signal }, () => {
                 // Hold the lock until released – return a promise that never resolves
                 return new Promise(() => {});
             })

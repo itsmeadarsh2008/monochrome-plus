@@ -3414,7 +3414,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `monochrome-library-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `wesper-library-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     });
