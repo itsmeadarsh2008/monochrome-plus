@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-### Monochrome Only
+### Wesper Only
 
 ```bash
 docker compose up -d
@@ -18,7 +18,7 @@ cp .env.example .env
 docker compose --profile pocketbase up -d
 ```
 
-- Monochrome: `http://localhost:3000`
+- Wesper: `http://localhost:3000`
 - PocketBase admin: `http://localhost:8090/_/`
 
 Configure PocketBase collections per [self-hosted-database.md](self-hosted-database.md).
@@ -41,10 +41,10 @@ Docker Compose [profiles](https://docs.docker.com/compose/how-tos/profiles/) con
 
 | Command                                                   | What starts                          |
 | --------------------------------------------------------- | ------------------------------------ |
-| `docker compose up -d`                                    | Monochrome                           |
-| `docker compose --profile pocketbase up -d`               | Monochrome + PocketBase              |
-| `docker compose --profile dev up -d`                      | Monochrome + Dev server              |
-| `docker compose --profile dev --profile pocketbase up -d` | Monochrome + Dev server + PocketBase |
+| `docker compose up -d`                                    | Wesper                           |
+| `docker compose --profile pocketbase up -d`               | Wesper + PocketBase              |
+| `docker compose --profile dev up -d`                      | Wesper + Dev server              |
+| `docker compose --profile dev --profile pocketbase up -d` | Wesper + Dev server + PocketBase |
 
 In `docker-compose.yml`, it looks like this:
 

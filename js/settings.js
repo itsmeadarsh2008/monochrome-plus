@@ -61,7 +61,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         const repo =
             typeof __APP_REPO_URL__ !== 'undefined'
                 ? __APP_REPO_URL__
-                : 'https://github.com/itsmeadarsh2008/monochrome-plus';
+                : 'https://github.com/itsmeadarsh2008/wesper';
         const text = typeof __APP_COMMIT_SHORT__ !== 'undefined' ? __APP_COMMIT_SHORT__ : sha;
         const source = typeof __APP_COMMIT_SOURCE__ !== 'undefined' ? __APP_COMMIT_SOURCE__ : 'git';
         if (sha !== 'unknown') {
@@ -3476,7 +3476,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `monochrome-plus-settings-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `wesper-settings-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {

@@ -3020,7 +3020,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setMeta('meta[property="og:url"]', 'content', canonical);
         setMeta('link[rel="canonical"]', 'href', canonical);
         // og:title and og:description are best-effort from the current document title
-        setMeta('meta[property="og:title"]', 'content', document.title || 'Monochrome+');
+        setMeta('meta[property="og:title"]', 'content', document.title || 'Wesper');
         setMeta('meta[property="og:description"]', 'content', 'Hi-Res lossless music. Beyond Apple Music.');
     };
 
@@ -3480,7 +3480,7 @@ function showUpdateNotification(updateCallback) {
     notification.innerHTML = `
         <div>
             <strong>Update Available</strong>
-            <p>A new version of Monochrome+ is available.</p>
+            <p>A new version of Wesper is available.</p>
         </div>
         <div class="update-notification-actions">
             <button class="btn-primary" id="update-now-btn">Update Now</button>

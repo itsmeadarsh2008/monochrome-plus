@@ -4238,7 +4238,7 @@ export class UIRenderer {
                     <div class="profile-card-content" style="padding: 2rem;">
                         <div style="font-size: 4rem; margin-bottom: 2rem; filter: saturate(0.5); opacity: 0.8;">👤</div>
                         <h2 style="margin-bottom: 1rem; font-weight: 800; letter-spacing: -0.02em;">Not Signed In</h2>
-                        <p style="color: var(--muted-foreground); margin-bottom: 2.5rem; line-height: 1.6;">Join the Monochrome+ community to sync your library, follow friends, and personalize your experience.</p>
+                        <p style="color: var(--muted-foreground); margin-bottom: 2.5rem; line-height: 1.6;">Join the Wesper community to sync your library, follow friends, and personalize your experience.</p>
                         <button class="btn-primary" style="width: 100%; padding: 1rem;" onclick="window.navigate('/account')">Create or Link Account</button>
                         <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--muted-foreground); opacity: 0.7;">
                             If you've just signed in, we're currently synchronizing your session.
@@ -7251,7 +7251,7 @@ export class UIRenderer {
                     recentActivityManager.addPlaylist(userPlaylistRecentData);
                 };
 
-                document.title = `${playlistData.name || playlistData.title} - Monochrome+`;
+                document.title = `${playlistData.name || playlistData.title} - Wesper`;
 
                 // Setup playlist search
                 this.setupTracklistSearch();

@@ -1,6 +1,6 @@
-# Contributing to Monochrome
+# Contributing to Wesper
 
-Thank you for your interest in contributing to Monochrome! This guide will help you get started with development, understand our codebase, and follow our contribution workflow.
+Thank you for your interest in contributing to Wesper! This guide will help you get started with development, understand our codebase, and follow our contribution workflow.
 
 ---
 
@@ -299,4 +299,4 @@ bun run build
 - Focus on constructive feedback
 - Respect different viewpoints and experiences
 
-Thank you for contributing to Monochrome!
+Thank you for contributing to Wesper!

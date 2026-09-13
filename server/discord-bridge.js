@@ -1,5 +1,5 @@
 /**
- * Discord Rich Presence bridge for Monochrome.
+ * Discord Rich Presence bridge for Wesper.
  *
  * Talks to Discord Desktop's local IPC socket (no origin whitelist needed —
  * IPC connections are implicitly authenticated) and exposes a tiny HTTP API

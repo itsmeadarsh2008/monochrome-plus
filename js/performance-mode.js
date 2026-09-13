@@ -1,5 +1,5 @@
 // js/performance-mode.js
-// Performance Mode Manager for Monochrome music player
+// Performance Mode Manager for Wesper music player
 // Controls animations, visual effects, and audio processing based on user preferences
 
 import { audioContextManager } from './audio-context.js';
