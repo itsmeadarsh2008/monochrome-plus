@@ -59,9 +59,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
     if (commitEl) {
         const sha = typeof __APP_COMMIT__ !== 'undefined' ? __APP_COMMIT__ : 'unknown';
         const repo =
-            typeof __APP_REPO_URL__ !== 'undefined'
-                ? __APP_REPO_URL__
-                : 'https://github.com/itsmeadarsh2008/wesper';
+            typeof __APP_REPO_URL__ !== 'undefined' ? __APP_REPO_URL__ : 'https://github.com/itsmeadarsh2008/wesper';
         const text = typeof __APP_COMMIT_SHORT__ !== 'undefined' ? __APP_COMMIT_SHORT__ : sha;
         const source = typeof __APP_COMMIT_SOURCE__ !== 'undefined' ? __APP_COMMIT_SOURCE__ : 'git';
         if (sha !== 'unknown') {
@@ -3469,7 +3467,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
             const payload = {
                 version: 1,
                 exportedAt: new Date().toISOString(),
-                app: 'monochrome-plus',
+                app: 'wesper',
                 localStorage: Object.fromEntries(Object.entries(localStorage)),
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });

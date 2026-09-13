@@ -5,7 +5,7 @@ import { authManager } from './auth.js';
 import { ID, Permission, Query, Role } from 'appwrite';
 import { getShareUrl, getTrackArtists } from '../utils.js';
 
-const DATABASE_ID = 'monochrome-plus';
+const DATABASE_ID = 'wesper';
 const USERS_COLLECTION = 'DB_users';
 const PUBLIC_PLAYLISTS_COLLECTION = 'DB_public_playlists';
 const COLLABORATIVE_PLAYLISTS_COLLECTION = 'DB_collaborative_playlists';
@@ -1201,7 +1201,10 @@ const syncManager = {
         try {
             const [userCount, activeUsers] = await Promise.all([
                 databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.limit(1)]),
-                databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [Query.notEqual('status', ''), Query.limit(500)]),
+                databases.listDocuments(DATABASE_ID, USERS_COLLECTION, [
+                    Query.notEqual('status', ''),
+                    Query.limit(500),
+                ]),
             ]);
 
             const now = Date.now();

@@ -366,7 +366,7 @@ async function uploadCoverImage(file) {
 
         // Construct the view URL
         const endpoint = 'https://sgp.cloud.appwrite.io/v1';
-        const projectId = 'monochrome-plus';
+        const projectId = 'wesper';
         const publicUrl = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${result.$id}/view?project=${projectId}`;
 
         console.log('[App] Upload successful! URL:', publicUrl);
