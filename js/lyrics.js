@@ -34,7 +34,7 @@ const LYRICS_PROXY_HOSTS = new Set([
     'lyricsplus-seven.vercel.app',
     'lyrics-plus-backend.vercel.app',
     'storage.lyrics-api.binimum.org',
-    'api.wesper.tf',
+    'api.monochrome.tf',
     'tidal.kinoplus.online',
 ]);
 
@@ -49,7 +49,7 @@ function shouldProxyLyricsUrl(urlObj) {
     if (!LYRICS_PROXY_HOSTS.has(urlObj.hostname.toLowerCase())) return false;
 
     // Keep this host scoped to lyrics endpoint only.
-    if (urlObj.hostname.toLowerCase() === 'api.wesper.tf') {
+    if (urlObj.hostname.toLowerCase() === 'api.monochrome.tf') {
         return urlObj.pathname.startsWith('/lyrics/');
     }
 

@@ -1,5 +1,5 @@
 // js/animation-utils.js
-// Animation Manager for Wesper music player
+// Animation Manager for Monochrome music player
 // Provides optimized, hardware-accelerated animations with accessibility support
 
 class AnimationManager {

@@ -61,7 +61,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         const repo =
             typeof __APP_REPO_URL__ !== 'undefined'
                 ? __APP_REPO_URL__
-                : 'https://github.com/itsmeadarsh2008/wesper';
+                : 'https://github.com/itsmeadarsh2008/monochrome-plus';
         const text = typeof __APP_COMMIT_SHORT__ !== 'undefined' ? __APP_COMMIT_SHORT__ : sha;
         const source = typeof __APP_COMMIT_SOURCE__ !== 'undefined' ? __APP_COMMIT_SOURCE__ : 'git';
         if (sha !== 'unknown') {
@@ -3416,7 +3416,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `wesper-library-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `monochrome-library-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
     });
@@ -3469,14 +3469,14 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
             const payload = {
                 version: 1,
                 exportedAt: new Date().toISOString(),
-                app: 'wesper',
+                app: 'monochrome-plus',
                 localStorage: Object.fromEntries(Object.entries(localStorage)),
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `wesper-settings-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `monochrome-plus-settings-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
         } catch (error) {
@@ -3562,7 +3562,7 @@ export function initializeSettings(scrobbler, player, api, ui, discord) {
                         console.log('Could not clear IndexedDB stores:', dbError);
                         // Try to delete the entire database as fallback
                         try {
-                            const deleteRequest = indexedDB.deleteDatabase('wesperDB');
+                            const deleteRequest = indexedDB.deleteDatabase('monochromeDB');
                             await new Promise((resolve, reject) => {
                                 deleteRequest.onsuccess = resolve;
                                 deleteRequest.onerror = reject;

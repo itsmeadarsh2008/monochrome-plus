@@ -1,13 +1,13 @@
 // cors-proxy-worker.js
 //
-// Self-hosted CORS proxy for Wesper. Deploy it on your own
+// Self-hosted CORS proxy for Monochrome+. Deploy it on your own
 // workers.dev domain (or a custom domain) and point the app at it:
 //
 //   1. Deploy this file as a Cloudflare Worker:
 //      npx wrangler deploy cors-proxy-worker.js
 //      (or paste it into the Cloudflare dashboard → Workers & Pages)
 //
-//   2. Tell Wesper to use it (run this once in the browser console
+//   2. Tell Monochrome+ to use it (run this once in the browser console
 //      on the deployed site):
 //      localStorage.setItem(
 //          'mono-cors-proxy-custom',
@@ -39,7 +39,7 @@ export default {
         }
 
         if (url.pathname === '/') {
-            return new Response('Wesper CORS proxy is running.', {
+            return new Response('Monochrome+ CORS proxy is running.', {
                 headers: { 'Access-Control-Allow-Origin': '*' },
             });
         }

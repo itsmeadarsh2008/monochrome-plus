@@ -1,6 +1,6 @@
-# Wesper Design System
+# Monochrome Design System
 
-A comprehensive design language for consistent UI/UX across the Wesper music streaming application.
+A comprehensive design language for consistent UI/UX across the Monochrome music streaming application.
 
 ## Design Tokens
 
@@ -266,7 +266,7 @@ The design system supports multiple themes. Each theme defines color variables w
 
 Available themes:
 
-- `wesper` (default)
+- `monochrome` (default)
 - `dark`
 - `ocean`
 - `purple`

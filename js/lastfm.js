@@ -398,7 +398,7 @@ function setCachedMetadata(key, data, miss) {
 function enqueueMusicBrainz(path) {
     const run = metadataQueue.then(async () => {
         const response = await fetch(`${MUSICBRAINZ_API}${path}`, {
-            headers: { 'User-Agent': 'WesperPlus/1.0 (https://github.com/itsmeadarsh2008/wesper)' },
+            headers: { 'User-Agent': 'MonochromePlus/1.0 (https://github.com/itsmeadarsh2008/monochrome-plus)' },
         });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         return response;

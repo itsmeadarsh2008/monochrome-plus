@@ -9,7 +9,7 @@ export const recentActivityManager = {
             const recents = await db.getRecentActivity(type, this.LIMIT);
 
             // Legacy migration check
-            const legacyData = localStorage.getItem('wesper-recent-activity');
+            const legacyData = localStorage.getItem('monochrome-recent-activity');
             if (legacyData && (!recents || recents.length === 0)) {
                 try {
                     const parsed = JSON.parse(legacyData);
@@ -21,7 +21,7 @@ export const recentActivityManager = {
                             }
                         }
                     }
-                    localStorage.removeItem('wesper-recent-activity');
+                    localStorage.removeItem('monochrome-recent-activity');
                     return await this.getRecents(type);
                 } catch (e) {
                     console.warn('Failed to migrate legacy recent activity:', e);
@@ -72,13 +72,13 @@ export const recentActivityManager = {
 };
 
 export const themeManager = {
-    STORAGE_KEY: 'wesper-theme',
-    CUSTOM_THEME_KEY: 'wesper-custom-theme',
+    STORAGE_KEY: 'monochrome-theme',
+    CUSTOM_THEME_KEY: 'monochrome-custom-theme',
 
     defaultThemes: {
         light: {},
         dark: {},
-        wesper: {},
+        monochrome: {},
         ocean: {},
         purple: {},
         forest: {},
@@ -102,7 +102,7 @@ export const themeManager = {
 
         if (theme === 'system') {
             const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            document.documentElement.setAttribute('data-theme', isDark ? 'wesper' : 'white');
+            document.documentElement.setAttribute('data-theme', isDark ? 'monochrome' : 'white');
         } else {
             document.documentElement.setAttribute('data-theme', theme);
         }
@@ -1432,7 +1432,7 @@ export const settingsUiState = {
 };
 
 export const queueManager = {
-    STORAGE_KEY: 'wesper-queue',
+    STORAGE_KEY: 'monochrome-queue',
 
     getQueue() {
         try {
@@ -1462,7 +1462,7 @@ export const queueManager = {
 };
 
 export const sidebarSettings = {
-    STORAGE_KEY: 'wesper-sidebar-collapsed',
+    STORAGE_KEY: 'monochrome-sidebar-collapsed',
 
     isCollapsed() {
         try {
@@ -1895,17 +1895,17 @@ export const sidebarSectionSettings = {
 if (typeof window !== 'undefined' && window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
         if (themeManager.getTheme() === 'system') {
-            document.documentElement.setAttribute('data-theme', e.matches ? 'wesper' : 'white');
+            document.documentElement.setAttribute('data-theme', e.matches ? 'monochrome' : 'white');
         }
     });
 }
 
 export const fontSettings = {
-    STORAGE_KEY: 'wesper-font-config-v2',
-    CUSTOM_FONTS_KEY: 'wesper-custom-fonts',
-    FONT_SIZE_KEY: 'wesper-font-size',
-    FONT_LINK_ID: 'wesper-dynamic-font',
-    FONT_FACE_ID: 'wesper-dynamic-fontface',
+    STORAGE_KEY: 'monochrome-font-config-v2',
+    CUSTOM_FONTS_KEY: 'monochrome-custom-fonts',
+    FONT_SIZE_KEY: 'monochrome-font-size',
+    FONT_LINK_ID: 'monochrome-dynamic-font',
+    FONT_FACE_ID: 'monochrome-dynamic-fontface',
 
     getDefaultConfig() {
         return {
@@ -2171,7 +2171,7 @@ export const fontSettings = {
     },
 
     loadAppleMusicFont() {
-        const APPLE_FONT_LINK_ID = 'wesper-apple-font';
+        const APPLE_FONT_LINK_ID = 'monochrome-apple-font';
 
         // Remove any existing dynamic font links
         let existingLink = document.getElementById(this.FONT_LINK_ID);

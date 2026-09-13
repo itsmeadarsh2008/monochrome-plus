@@ -1,7 +1,7 @@
 /* stylelint-disable no-descending-specificity */
 
 /* ==========================================================================
-   DESIGN SYSTEM - Wesper
+   DESIGN SYSTEM - Monochrome
    A comprehensive design language for consistent UI/UX
    ========================================================================== */
 
@@ -418,7 +418,7 @@
     transition-timing-function: ease;
 }
 
-:root[data-theme='wesper'] {
+:root[data-theme='monochrome'] {
     color-scheme: dark;
 
     --background: #0a0a0a;
@@ -15735,7 +15735,7 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 /* ==========================================================================
-   AESTHETIC DESIGN SYSTEM - Wesper
+   AESTHETIC DESIGN SYSTEM - Monochrome+
    Modern glassmorphism aesthetics with enhanced visual hierarchy
    ========================================================================== */
 

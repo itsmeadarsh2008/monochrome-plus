@@ -5,7 +5,7 @@ import { authManager } from './auth.js';
 import { ID, Permission, Query, Role } from 'appwrite';
 import { getShareUrl, getTrackArtists } from '../utils.js';
 
-const DATABASE_ID = 'wesper';
+const DATABASE_ID = 'monochrome-plus';
 const USERS_COLLECTION = 'DB_users';
 const PUBLIC_PLAYLISTS_COLLECTION = 'DB_public_playlists';
 const COLLABORATIVE_PLAYLISTS_COLLECTION = 'DB_collaborative_playlists';
@@ -26,7 +26,7 @@ const PLAYLIST_TRACK_CHUNK_ESTIMATE_TOTAL = 999999;
 const PLAYLIST_SYNC_BATCH_SIZE = 6;
 const MAX_COLLAB_PLAYLIST_TRACKS = 700;
 const MAX_COLLAB_PLAYLIST_TRACKS_PAYLOAD_CHARS = 62000;
-const PENDING_LIBRARY_OPS_STORAGE_KEY = 'wesper.sync.pendingLibraryOps.v1';
+const PENDING_LIBRARY_OPS_STORAGE_KEY = 'monochrome.sync.pendingLibraryOps.v1';
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

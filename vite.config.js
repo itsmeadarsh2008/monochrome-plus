@@ -5,8 +5,8 @@ import authGatePlugin from './vite-plugin-auth-gate.js';
 import nodeFetch from './vite-plugin-proxy-fetch.js';
 import discordBridgePlugin from './vite-plugin-discord-bridge.js';
 
-const APP_REPO_URL = 'https://github.com/itsmeadarsh2008/wesper';
-const APP_REPO_API = 'https://api.github.com/repos/itsmeadarsh2008/wesper';
+const APP_REPO_URL = 'https://github.com/itsmeadarsh2008/monochrome-plus';
+const APP_REPO_API = 'https://api.github.com/repos/itsmeadarsh2008/monochrome-plus';
 
 // Prefer the local git HEAD. When building from a GitHub ZIP (no .git folder)
 // fall back to the branch tip reported by the GitHub API, so the About section
@@ -22,7 +22,7 @@ function getLocalGitCommit() {
 async function getGitHubCommit() {
     try {
         const res = await fetch(`${APP_REPO_API}/commits/master`, {
-            headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wesper-build' },
+            headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'monochrome-plus-build' },
             signal: AbortSignal.timeout(8000),
         });
         if (!res.ok) return null;

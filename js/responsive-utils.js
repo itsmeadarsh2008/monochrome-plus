@@ -1,5 +1,5 @@
 // js/responsive-utils.js
-// Responsive Manager for Wesper music player
+// Responsive Manager for Monochrome music player
 // Provides algorithmic UI calculations based on viewport and container sizes
 
 class ResponsiveManager {

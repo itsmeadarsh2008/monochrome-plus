@@ -366,7 +366,7 @@ async function uploadCoverImage(file) {
 
         // Construct the view URL
         const endpoint = 'https://sgp.cloud.appwrite.io/v1';
-        const projectId = 'wesper';
+        const projectId = 'monochrome-plus';
         const publicUrl = `${endpoint}/storage/buckets/${BUCKET_ID}/files/${result.$id}/view?project=${projectId}`;
 
         console.log('[App] Upload successful! URL:', publicUrl);
@@ -488,7 +488,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const currentQuality = localStorage.getItem('playback-quality') || 'HI_RES_LOSSLESS';
     const player = new Player(audioPlayer, api, currentQuality);
-    window.wesperPlayer = player;
+    window.monochromePlayer = player;
 
     // Centralized cover image fallback helper. Used by img onerror and as a safety net via window error capture.
     window.handleCoverImageFallback = (img) => {
@@ -582,7 +582,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const controller = new AbortController();
         bgWebLock = controller;
         navigator.locks
-            .request('wesper-audio-playback', { signal: controller.signal }, () => {
+            .request('monochrome-audio-playback', { signal: controller.signal }, () => {
                 // Hold the lock until released – return a promise that never resolves
                 return new Promise(() => {});
             })
@@ -3020,7 +3020,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setMeta('meta[property="og:url"]', 'content', canonical);
         setMeta('link[rel="canonical"]', 'href', canonical);
         // og:title and og:description are best-effort from the current document title
-        setMeta('meta[property="og:title"]', 'content', document.title || 'Wesper');
+        setMeta('meta[property="og:title"]', 'content', document.title || 'Monochrome+');
         setMeta('meta[property="og:description"]', 'content', 'Hi-Res lossless music. Beyond Apple Music.');
     };
 
@@ -3168,14 +3168,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Font Settings
     const fontSelect = document.getElementById('font-select');
     if (fontSelect) {
-        const savedFont = localStorage.getItem('wesper-font');
+        const savedFont = localStorage.getItem('monochrome-font');
         if (savedFont) {
             fontSelect.value = savedFont;
         }
         fontSelect.addEventListener('change', (e) => {
             const font = e.target.value;
             document.documentElement.style.setProperty('--font-family', font);
-            localStorage.setItem('wesper-font', font);
+            localStorage.setItem('monochrome-font', font);
         });
     }
 
@@ -3480,7 +3480,7 @@ function showUpdateNotification(updateCallback) {
     notification.innerHTML = `
         <div>
             <strong>Update Available</strong>
-            <p>A new version of Wesper is available.</p>
+            <p>A new version of Monochrome+ is available.</p>
         </div>
         <div class="update-notification-actions">
             <button class="btn-primary" id="update-now-btn">Update Now</button>

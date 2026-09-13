@@ -39,7 +39,7 @@ export default function authGatePlugin() {
 
             // Parse Firebase config once (used for injection + auth verification)
             let parsedFirebaseConfig = null;
-            let PROJECT_ID = env.FIREBASE_PROJECT_ID || 'wesper-database';
+            let PROJECT_ID = env.FIREBASE_PROJECT_ID || 'monochrome-database';
             if (FIREBASE_CONFIG) {
                 try {
                     parsedFirebaseConfig = JSON.parse(FIREBASE_CONFIG);

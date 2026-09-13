@@ -3,7 +3,7 @@ Ensure all the filetypes are played at pure level. Complete Raw Sound.
 Ultra Super High Quality Playback.
 Enable rpm and deb for Linux Tauri,
 Rebuild the discord rpc from scratch, I want it to be better, it crashes.
-Do one thing, instead of building a new Discord RPC, make a discord-rpc that shows current playing music, that is independent of the Wesper, it will stay apart, you know you know it will more easier.
+Do one thing, instead of building a new Discord RPC, make a discord-rpc that shows current playing music, that is independent of the Monochrome+, it will stay apart, you know you know it will more easier.
 Use Gapless Playback with reliable track-end blending and preloading for consistent uninterrupted playback.
 
 # hifi-api

@@ -1,6 +1,6 @@
 export class MusicDatabase {
     constructor() {
-        this.dbName = 'WesperDB';
+        this.dbName = 'MonochromeDB';
         this.version = 10;
         this.db = null;
         this.recentHistoryWrites = new Map();

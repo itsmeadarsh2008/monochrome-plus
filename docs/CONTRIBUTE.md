@@ -1,6 +1,6 @@
-# Contributing to Wesper
+# Contributing to Monochrome
 
-Thank you for your interest in contributing to Wesper! This guide will help you get started with development, understand our codebase, and follow our contribution workflow.
+Thank you for your interest in contributing to Monochrome! This guide will help you get started with development, understand our codebase, and follow our contribution workflow.
 
 ---
 
@@ -28,8 +28,8 @@ Thank you for your interest in contributing to Wesper! This guide will help you 
 1. **Fork and clone the repository:**
 
     ```bash
-    git clone https://github.com/YOUR_USERNAME/wesper.git
-    cd wesper
+    git clone https://github.com/YOUR_USERNAME/monochrome.git
+    cd monochrome
     ```
 
 2. **Install dependencies:**
@@ -96,7 +96,7 @@ bun run lint:css
 ## Project Structure
 
 ```
-wesper/
+monochrome/
 ├── 📁 js/                    # Application source code
 │   ├── components/          # UI components
 │   ├── utils/               # Utility functions
@@ -267,7 +267,7 @@ Deployment is fully automated via **Cloudflare Pages**.
 The project uses a **relative base path** (`./`) in `vite.config.js`. This allows the same build artifact to work on both:
 
 - **Cloudflare Pages** (served from root)
-- **GitHub Pages** (served from `/wesper/`)
+- **GitHub Pages** (served from `/monochrome/`)
 
 Hash routing is used to ensure compatibility across all hosting platforms.
 
@@ -299,4 +299,4 @@ bun run build
 - Focus on constructive feedback
 - Respect different viewpoints and experiences
 
-Thank you for contributing to Wesper!
+Thank you for contributing to Monochrome!

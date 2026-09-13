@@ -12,7 +12,7 @@ const isProxyEndpoint = typeof configuredEndpoint === 'string' && configuredEndp
 const appwriteEndpoint =
     !isHttpsContext && isProxyEndpoint ? DEFAULT_APPWRITE_ENDPOINT : configuredEndpoint || DEFAULT_APPWRITE_ENDPOINT;
 
-const client = new Client().setEndpoint(appwriteEndpoint).setProject('wesper');
+const client = new Client().setEndpoint(appwriteEndpoint).setProject('monochrome-plus');
 
 const account = new Account(client);
 const databases = new Databases(client);

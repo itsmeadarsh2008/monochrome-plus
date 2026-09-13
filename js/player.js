@@ -1216,7 +1216,7 @@ export class Player {
 
                     // Notify listeners (e.g. Discord Rich Presence) that the
                     // track's real quality metadata is now available.
-                    document.dispatchEvent(new CustomEvent('wesper:track-quality-updated'));
+                    document.dispatchEvent(new CustomEvent('monochrome:track-quality-updated'));
                 }
             } else if (track.isLocal && track.file) {
                 streamUrl = URL.createObjectURL(track.file);
@@ -1312,7 +1312,7 @@ export class Player {
                         if (fullscreenQuality) {
                             fullscreenQuality.innerHTML = createFullscreenQualityHTML(inspectedTrack);
                         }
-                        document.dispatchEvent(new CustomEvent('wesper:track-quality-updated'));
+                        document.dispatchEvent(new CustomEvent('monochrome:track-quality-updated'));
                     })
                     .catch(() => {
                         /* inspection is best-effort */

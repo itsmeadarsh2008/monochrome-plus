@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-### Wesper Only
+### Monochrome Only
 
 ```bash
 docker compose up -d
@@ -18,7 +18,7 @@ cp .env.example .env
 docker compose --profile pocketbase up -d
 ```
 
-- Wesper: `http://localhost:3000`
+- Monochrome: `http://localhost:3000`
 - PocketBase admin: `http://localhost:8090/_/`
 
 Configure PocketBase collections per [self-hosted-database.md](self-hosted-database.md).
@@ -41,21 +41,21 @@ Docker Compose [profiles](https://docs.docker.com/compose/how-tos/profiles/) con
 
 | Command                                                   | What starts                          |
 | --------------------------------------------------------- | ------------------------------------ |
-| `docker compose up -d`                                    | Wesper                           |
-| `docker compose --profile pocketbase up -d`               | Wesper + PocketBase              |
-| `docker compose --profile dev up -d`                      | Wesper + Dev server              |
-| `docker compose --profile dev --profile pocketbase up -d` | Wesper + Dev server + PocketBase |
+| `docker compose up -d`                                    | Monochrome                           |
+| `docker compose --profile pocketbase up -d`               | Monochrome + PocketBase              |
+| `docker compose --profile dev up -d`                      | Monochrome + Dev server              |
+| `docker compose --profile dev --profile pocketbase up -d` | Monochrome + Dev server + PocketBase |
 
 In `docker-compose.yml`, it looks like this:
 
 ```yaml
 services:
-    wesper: # no profile -- always starts
+    monochrome: # no profile -- always starts
 
     pocketbase:
         profiles: ['pocketbase'] # opt-in
 
-    wesper-dev:
+    monochrome-dev:
         profiles: ['dev'] # opt-in
 ```
 
@@ -98,7 +98,7 @@ services:
         ports:
             - '4000:4000'
         networks:
-            - wesper-network
+            - monochrome-network
 ```
 
 Override files can extend existing services (add labels, env vars, networks) and define entirely new services. See the [Docker docs](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) for the full merge behavior.

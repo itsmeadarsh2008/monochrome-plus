@@ -65,7 +65,7 @@ const NEEDS_PROXY_HOSTS = new Set([
     'katze.qqdl.site',
     'hund.qqdl.site',
     'wolf.qqdl.site',
-    'wesper-api.samidy.com',
+    'monochrome-api.samidy.com',
     'tidal.kinoplus.online',
     'lyricsplus.binimum.org',
     'lyricsplus.atomix.one',
@@ -91,10 +91,10 @@ const CORS_SUPPORTED_HOSTS = new Set([
     'api.tidal.com',
     'openapi.tidal.com',
     'triton.squid.wtf',
-    'arran.wesper.tf',
-    'eu-central.wesper.tf',
-    'ohio-1.wesper.tf',
-    'us-west.wesper.tf',
+    'arran.monochrome.tf',
+    'eu-central.monochrome.tf',
+    'ohio-1.monochrome.tf',
+    'us-west.monochrome.tf',
     'manifest.tidal.com',
 ]);
 
@@ -243,7 +243,7 @@ function needsProxy(hostname) {
     if (CORS_SUPPORTED_HOSTS.has(host)) return false;
     if (isTidalManifestHost(host)) return false;
     if (host.endsWith('.cloud.appwrite.io')) return false;
-    if (host.endsWith('.wesper.tf')) return false;
+    if (host.endsWith('.monochrome.tf')) return false;
     if (NEEDS_PROXY_HOSTS.has(host)) return true;
     return false;
 }

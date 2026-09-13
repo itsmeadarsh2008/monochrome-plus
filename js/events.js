@@ -313,7 +313,7 @@ export function initializePlayerEvents(player, audioPlayer, scrobbler, ui, disco
         syncMiniPlayPauseIcon();
     });
 
-    document.addEventListener('wesper:track-quality-updated', () => {
+    document.addEventListener('monochrome:track-quality-updated', () => {
         updateDiscordPresence();
 
         const fullscreenOverlay = document.getElementById('fullscreen-cover-overlay');
@@ -2235,8 +2235,8 @@ export function initializeTrackInteractions(player, api, mainContent, contextMen
                 navigate(`/unreleased/${trackerSheetId}`);
             } else if (artistId) {
                 if (artistName) {
-                    window.__wesperArtistCache ||= new Map();
-                    window.__wesperArtistCache.set(String(artistId), { id: artistId, name: artistName });
+                    window.__monochromeArtistCache ||= new Map();
+                    window.__monochromeArtistCache.set(String(artistId), { id: artistId, name: artistName });
                 }
                 navigate(`/artist/${artistId}`);
             } else {

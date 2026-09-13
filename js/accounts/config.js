@@ -8,13 +8,13 @@ let auth = null;
 let database = null;
 let provider = null;
 
-const STORAGE_KEY = 'wesper-firebase-config';
+const STORAGE_KEY = 'monochrome-firebase-config';
 
 const DEFAULT_CONFIG = {
     apiKey: 'AIzaSyDPU-unAjuLtQJt4IkGS5faG50UCF7lYyA',
-    authDomain: 'wesper-database.firebaseapp.com',
-    projectId: 'wesper-database',
-    storageBucket: 'wesper-database.firebasestorage.app',
+    authDomain: 'monochrome-database.firebaseapp.com',
+    projectId: 'monochrome-database',
+    storageBucket: 'monochrome-database.firebasestorage.app',
     messagingSenderId: '895657412760',
     appId: '1:895657412760:web:e81c5044c7f4e9b799e8ed',
 };
